@@ -15,16 +15,46 @@
 package log
 
 import (
-	"fmt"
 	l "log"
+	"strings"
 )
 
-// Log is the global logger
-var Log Logger = &defaultLogger{}
+// Level is a level of logging
+type Level int
 
-// init() {
-// 	Logger = defaultLogger{}
-// }
+const (
+	// Error log level
+	Error Level = iota
+	// Warn log level
+	Warn
+	// Info log level
+	Info
+	// Debug log level
+	Debug
+)
+
+var levels = [...]Level{Error, Warn, Info, Debug}
+var stringLevels = [...]string{"ERROR", "WARN", "INFO", "DEBUG"}
+
+func (l Level) String() string {
+	return stringLevels[l]
+}
+
+// ParseLevel parses the log level, returns Info level if not found
+func ParseLevel(lvl string) Level {
+	lvl = strings.ToUpper(lvl)
+	for i, l := range stringLevels {
+		if l == lvl {
+			return levels[i]
+		}
+	}
+	return Info
+}
+
+// Log is the global logger
+var Log Logger = &defaultLogger{
+	level: Info,
+}
 
 // Infof logs at the info level
 func Infof(format string, args ...interface{}) {
@@ -83,7 +113,7 @@ type Logger interface {
 	// Warnf logs suspect situations and recoverable errors
 	Warnf(format string, args ...interface{})
 	// Errorf logs error conditions.
-	Errorf(format string, args ...interface{}) 
+	Errorf(format string, args ...interface{})
 
 	// DebugEnabled returns whether output of messages at the debug level is currently enabled.
 	DebugEnabled() bool
@@ -96,51 +126,70 @@ type Logger interface {
 }
 
 type defaultLogger struct {
+	level Level
 }
 
 func (d *defaultLogger) Infof(format string, args ...interface{}) {
 	if d.InfoEnabled() {
-		l.Printf(format, args...)
+		d.printf(format, args...)
 	}
 }
 
 // Warnf logs suspect situations and recoverable errors
 func (d *defaultLogger) Warnf(format string, args ...interface{}) {
 	if d.WarnEnabled() {
-		l.Printf(format, args...)
+		d.printf(format, args...)
 	}
 }
 
 // Errorf logs error conditions.
 func (d *defaultLogger) Errorf(format string, args ...interface{}) {
 	if d.ErrorEnabled() {
-		fmt.Errorf(format, args...)
+		d.printf(format, args...)
 	}
 }
 
 // Debugf logs potentially verbose debug-time data
 func (d *defaultLogger) Debugf(format string, args ...interface{}) {
 	if d.DebugEnabled() {
-		l.Printf(format, args...)
+		d.printf(format, args...)
 	}
+}
+
+// formatted logging
+func (d *defaultLogger) printf(format string, args ...interface{}) {
+	format = d.level.String() + " " + format
+	l.Printf(format, args...)
 }
 
 // InfoEnabled returns whether output of messages at the info level is currently enabled.
 func (d *defaultLogger) InfoEnabled() bool {
-	return true
+	return d.level >= Info
 }
 
 // InfoEnabled returns whether output of messages at the warn level is currently enabled.
 func (d *defaultLogger) WarnEnabled() bool {
-	return true
+	return d.level >= Warn
 }
 
 // ErrorEnabled returns whether output of messages at the wanr level is currently enabled.
 func (d *defaultLogger) ErrorEnabled() bool {
-	return true
+	return d.level >= Error
 }
 
 // DebugEnabled returns whether output of messages at the debug level is currently enabled.
 func (d *defaultLogger) DebugEnabled() bool {
-	return true
+	return d.level >= Debug
 }
+
+// DebugEnabled returns whether output of messages at the debug level is currently enabled.
+func (d *defaultLogger) SetLevel(level Level) {
+	d.level = level
+}
+
+// DebugEnabled returns whether output of messages at the debug level is currently enabled.
+func (d *defaultLogger) Level() Level {
+	return d.level
+}
+
+// 2020-03-10T20:51:11.261002Z	error
