@@ -100,5 +100,8 @@ func TestLogger(t *testing.T) {
 		t.Errorf("ERROR should be enabled")
 	}
 
-	l.Errorf("wazzup?")
+	l.SetLevel(Info)
+	if l.Level() != Info {
+		t.Errorf("Default log level should be info")
+	}
 }

@@ -115,6 +115,11 @@ type Logger interface {
 	// Errorf logs error conditions.
 	Errorf(format string, args ...interface{})
 
+	// Level gets the current logging level
+	Level() Level
+	// SetLevel set the current logging level
+	SetLevel(level Level)
+
 	// DebugEnabled returns whether output of messages at the debug level is currently enabled.
 	DebugEnabled() bool
 	// InfoEnabled returns whether output of messages at the info level is currently enabled.
