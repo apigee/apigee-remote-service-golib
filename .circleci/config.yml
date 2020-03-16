@@ -1,4 +1,7 @@
 version: 2 # use CircleCI 2.0
+orbs:
+  codecov: codecov/codecov@1.0.2
+
 jobs: # basic units of work in a run
   build: # runs not using Workflows must have a `build` job as entry point
     docker: # run the steps with Docker
@@ -20,10 +23,11 @@ jobs: # basic units of work in a run
 
       - run:
           name: Run unit tests
-          # store the results of our tests in the $TEST_RESULTS directory
-          command: |
-            PACKAGE_NAMES=$(go list ./... | circleci tests split --split-by=timings --timings-type=classname)
-            gotestsum --junitfile ${TEST_RESULTS}/gotestsum-report.xml -- $PACKAGE_NAMES
+          command: go test -coverprofile=${TEST_RESULTS}/coverage.txt ./...
+
+      - run:
+          name: Upload codecov
+          command: (cd ${TEST_RESULTS}; bash <(curl -s https://codecov.io/bash))
 
       - save_cache:
           key: go-mod-v4-{{ checksum "go.sum" }}
