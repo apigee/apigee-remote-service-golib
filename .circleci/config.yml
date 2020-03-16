@@ -23,11 +23,11 @@ jobs: # basic units of work in a run
 
       - run:
           name: Run unit tests
-          command: go test -coverprofile=${TEST_RESULTS}/coverage.txt ./...
+          command: go test -coverprofile=coverage.txt ./...; cp coverage.txt ${TEST_RESULTS}
 
       - run:
           name: Upload codecov
-          command: (cd ${TEST_RESULTS}; bash <(curl -s https://codecov.io/bash))
+          command: bash <(curl -s https://codecov.io/bash)
 
       - save_cache:
           key: go-mod-v4-{{ checksum "go.sum" }}
