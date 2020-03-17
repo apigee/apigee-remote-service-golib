@@ -22,9 +22,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/apigee/apigee-proxy-go/context"
-	"github.com/apigee/apigee-proxy-go/log"
-	"github.com/apigee/apigee-proxy-go/util"
+	"github.com/apigee/apigee-remote-service-golib/context"
+	"github.com/apigee/apigee-remote-service-golib/log"
+	"github.com/apigee/apigee-remote-service-golib/util"
 	"github.com/pkg/errors"
 )
 

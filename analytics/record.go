@@ -18,7 +18,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/apigee/apigee-proxy-go/auth"
+	"github.com/apigee/apigee-remote-service-golib/auth"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
 )

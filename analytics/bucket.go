@@ -22,7 +22,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/apigee/apigee-proxy-go/log"
+	"github.com/apigee/apigee-remote-service-golib/log"
 )
 
 func newBucket(m *manager, up uploader, tenant, dir string) (*bucket, error) {

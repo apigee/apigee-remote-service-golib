@@ -19,8 +19,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apigee/apigee-proxy-go/authtest"
-	"github.com/apigee/apigee-proxy-go/context"
+	"github.com/apigee/apigee-remote-service-golib/authtest"
+	"github.com/apigee/apigee-remote-service-golib/context"
 )
 
 type testVerifier struct {

@@ -25,9 +25,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apigee/apigee-proxy-go/auth"
-	"github.com/apigee/apigee-proxy-go/log"
-	"github.com/apigee/apigee-proxy-go/util"
+	"github.com/apigee/apigee-remote-service-golib/auth"
+	"github.com/apigee/apigee-remote-service-golib/log"
+	"github.com/apigee/apigee-remote-service-golib/util"
 )
 
 // A Manager wraps all things related to analytics processing

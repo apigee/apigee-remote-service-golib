@@ -20,7 +20,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/apigee/apigee-proxy-go/context"
+	"github.com/apigee/apigee-remote-service-golib/context"
 	"github.com/pkg/errors"
 )
 

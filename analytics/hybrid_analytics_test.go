@@ -26,8 +26,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apigee/apigee-proxy-go/auth"
-	"github.com/apigee/apigee-proxy-go/util"
+	"github.com/apigee/apigee-remote-service-golib/auth"
+	"github.com/apigee/apigee-remote-service-golib/util"
 )
 
 func TestHybridAnalyticsSubmit(t *testing.T) {

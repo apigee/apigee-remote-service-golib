@@ -18,7 +18,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/apigee/apigee-proxy-go/log"
+	"github.com/apigee/apigee-remote-service-golib/log"
 )
 
 // Looper provides for Backoff and cancellation

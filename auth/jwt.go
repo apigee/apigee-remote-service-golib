@@ -21,9 +21,9 @@ import (
 	"sync"
 	"time"
 
-	adapterContext "github.com/apigee/apigee-proxy-go/context"
-	"github.com/apigee/apigee-proxy-go/log"
-	"github.com/apigee/apigee-proxy-go/util"
+	adapterContext "github.com/apigee/apigee-remote-service-golib/context"
+	"github.com/apigee/apigee-remote-service-golib/log"
+	"github.com/apigee/apigee-remote-service-golib/util"
 	"github.com/lestrrat/go-jwx/jwk"
 	"github.com/lestrrat/go-jwx/jws"
 	"github.com/lestrrat/go-jwx/jwt"

@@ -1,4 +1,4 @@
-module github.com/apigee/apigee-proxy-go
+module github.com/apigee/apigee-remote-service-golib
 
 go 1.13
 

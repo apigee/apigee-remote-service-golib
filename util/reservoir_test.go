@@ -18,7 +18,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/apigee/apigee-proxy-go/util"
+	"github.com/apigee/apigee-remote-service-golib/util"
 )
 
 func TestReservoirStream(t *testing.T) {

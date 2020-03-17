@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apigee/apigee-proxy-go/log"
+	"github.com/apigee/apigee-remote-service-golib/log"
 )
 
 // bucket tracks a specific quota instance

@@ -21,7 +21,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/apigee/apigee-proxy-go/log"
+	"github.com/apigee/apigee-remote-service-golib/log"
 	"github.com/hashicorp/go-multierror"
 )
 

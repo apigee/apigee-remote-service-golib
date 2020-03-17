@@ -21,9 +21,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apigee/apigee-proxy-go/auth"
-	"github.com/apigee/apigee-proxy-go/log"
-	"github.com/apigee/apigee-proxy-go/product"
+	"github.com/apigee/apigee-remote-service-golib/auth"
+	"github.com/apigee/apigee-remote-service-golib/log"
+	"github.com/apigee/apigee-remote-service-golib/product"
 )
 
 const (

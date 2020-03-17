@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apigee/apigee-proxy-go/authtest"
+	"github.com/apigee/apigee-remote-service-golib/authtest"
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/lestrrat/go-jwx/jwk"
 )
