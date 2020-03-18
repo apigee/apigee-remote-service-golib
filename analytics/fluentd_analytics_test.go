@@ -85,7 +85,7 @@ func TestHybridAnalyticsSubmit(t *testing.T) {
 		Key:                "x",
 		Secret:             "x",
 		Client:             http.DefaultClient,
-		HybridConfigFile:   tf.Name(), // key to creating a hybrid manager
+		FluentdConfigFile:   tf.Name(), // key to creating a hybrid manager
 		now:                now,
 		CollectionInterval: time.Minute,
 	}

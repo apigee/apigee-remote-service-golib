@@ -52,9 +52,9 @@ func NewManager(opts Options) (Manager, error) {
 	}
 
 	var uploader uploader
-	if opts.HybridConfigFile != "" { // Hybrid
+	if opts.FluentdConfigFile != "" {
 		var err error
-		uploader, err = newHybridUploader(opts)
+		uploader, err = newFluentdUploader(opts)
 		if err != nil {
 			return nil, err
 		}
@@ -141,8 +141,8 @@ type Options struct {
 	Client *http.Client
 	// SendChannelSize is the size of the records channel
 	SendChannelSize int
-	// IsHybrid is populated for Apigee hybrid deployment
-	HybridConfigFile string
+	// FluentdConfigFile is populated for Apigee fluentd deployment
+	FluentdConfigFile string
 	// collection interval
 	CollectionInterval time.Duration
 	// now is for testing

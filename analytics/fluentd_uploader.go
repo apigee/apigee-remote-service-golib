@@ -43,8 +43,8 @@ const (
 	fluentdFormat = "[\"%s\", %d, %s]\n" // tag, unix timestamp, record json
 )
 
-func newHybridUploader(opts Options) (*hybridUploader, error) {
-	props, err := util.ReadPropertiesFile(opts.HybridConfigFile)
+func newFluentdUploader(opts Options) (*hybridUploader, error) {
+	props, err := util.ReadPropertiesFile(opts.FluentdConfigFile)
 	if err != nil {
 		return nil, err
 	}
