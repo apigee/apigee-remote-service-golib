@@ -21,8 +21,8 @@ import (
 	"time"
 )
 
-// ServicesAttr is the name of the Product attribute that lists the Istio services it binds to (comma delim)
-const ServicesAttr = "istio-services"
+// TargetsAttr is the name of the Product attribute that lists the targets it binds to (comma delim)
+const TargetsAttr = "apigee-remote-service-targets"
 
 // NewManager creates a new product.Manager. Call Close() when done.
 func NewManager(options Options) (*Manager, error) {

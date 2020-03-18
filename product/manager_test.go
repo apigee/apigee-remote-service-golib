@@ -31,7 +31,7 @@ func TestManager(t *testing.T) {
 	apiProducts := []APIProduct{
 		{
 			Attributes: []Attribute{
-				{Name: ServicesAttr, Value: "attr value"},
+				{Name: TargetsAttr, Value: "attr value"},
 			},
 			Description:    "product 1",
 			DisplayName:    "APIProduct 1",
@@ -46,7 +46,7 @@ func TestManager(t *testing.T) {
 		},
 		{
 			Attributes: []Attribute{
-				{Name: ServicesAttr, Value: "attr value"},
+				{Name: TargetsAttr, Value: "attr value"},
 			},
 			CreatedBy:      "test2@apigee.com",
 			Description:    "product 2",
@@ -62,7 +62,7 @@ func TestManager(t *testing.T) {
 		},
 		{
 			Attributes: []Attribute{
-				{Name: ServicesAttr, Value: "attr value"},
+				{Name: TargetsAttr, Value: "attr value"},
 			},
 			Description:   "product 3",
 			DisplayName:   "APIProduct 3",
@@ -133,7 +133,7 @@ func TestManagerPolling(t *testing.T) {
 		apiProducts = append(apiProducts, APIProduct{
 			Name: fmt.Sprintf("Name %d", count),
 			Attributes: []Attribute{
-				{Name: ServicesAttr, Value: "attr value"},
+				{Name: TargetsAttr, Value: "attr value"},
 			},
 		})
 

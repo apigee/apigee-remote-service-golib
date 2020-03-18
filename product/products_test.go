@@ -78,32 +78,32 @@ func TestResolve(t *testing.T) {
 	productsMap := map[string]*APIProduct{
 		"Name 1": {
 			Attributes: []Attribute{
-				{Name: ServicesAttr, Value: "service1.istio, shared.istio"},
+				{Name: TargetsAttr, Value: "service1.test, shared.test"},
 			},
 			Name:      "Name 1",
 			Resources: []string{"/"},
 			Scopes:    []string{"scope1"},
-			Targets:   []string{"service1.istio", "shared.istio"},
+			Targets:   []string{"service1.test", "shared.test"},
 		},
 		"Name 2": {
 			Attributes: []Attribute{
-				{Name: ServicesAttr, Value: "service2.istio,shared.istio"},
+				{Name: TargetsAttr, Value: "service2.test,shared.test"},
 			},
 			Environments: []string{"prod"},
 			Name:         "Name 2",
 			Resources:    []string{"/**"},
 			Scopes:       []string{"scope2"},
-			Targets:      []string{"service2.istio", "shared.istio"},
+			Targets:      []string{"service2.test", "shared.test"},
 		},
 		"Name 3": {
 			Attributes: []Attribute{
-				{Name: ServicesAttr, Value: "shared.istio"},
+				{Name: TargetsAttr, Value: "shared.test"},
 			},
 			Environments: []string{"prod"},
 			Name:         "Name 3",
 			Resources:    []string{"/"},
 			Scopes:       []string{},
-			Targets:      []string{"shared.istio"},
+			Targets:      []string{"shared.test"},
 		},
 	}
 
@@ -112,7 +112,7 @@ func TestResolve(t *testing.T) {
 		pMan.resolveResourceMatchers(p)
 	}
 
-	api := "shared.istio"
+	api := "shared.test"
 	path := "/"
 
 	ac := &auth.Context{

@@ -93,11 +93,11 @@ func generateAPIKeyJWT(privateKey *rsa.PrivateKey) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
 		"api_product_list": []string{
-			"IstioTestProduct",
+			"TestProduct",
 		},
-		"audience":         "istio",
+		"audience":         "remote-service-client",
 		"jti":              "29e2320b-787c-4625-8599-acc5e05c68d0",
-		"iss":              "https://theganyo1-eval-test.apigee.net/istio-auth/token",
+		"iss":              "https://theganyo1-eval-test.apigee.net/remote-service/token",
 		"access_token":     "8E7Az3ZgPHKrgzcQA54qAzXT3Z1G",
 		"client_id":        "yBQ5eXZA8rSoipYEi1Rmn0Z8RKtkGI4H",
 		"application_name": "61cd4d83-06b5-4270-a9ee-cf9255ef45c3",

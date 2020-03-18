@@ -104,7 +104,7 @@ func newManager(uploader uploader, opts Options) (*manager, error) {
 	}, nil
 }
 
-// A manager is a way for Istio to interact with Apigee's analytics platform.
+// A manager is a way for a Remote Service client to interact with Apigee's analytics platform.
 type manager struct {
 	closeStaging       chan bool
 	now                func() time.Time
@@ -172,7 +172,7 @@ const (
 	errApigeeDown = "code 50"          // Internal Apigee issue.
 
 	// collection interval is not configurable at the moment because UAP can
-	// become unstable if all the Istio adapters are spamming it faster than
+	// become unstable if all the remote services are spamming it faster than
 	// that. Hard code for now.
 	defaultCollectionInterval = 1 * time.Minute
 

@@ -174,7 +174,7 @@ func (p *Manager) getProductsMap(ctx context.Context, res APIResponse) ProductsM
 				log.Debugf("product polling canceled, exiting")
 				return nil
 			}
-			if attr.Name == ServicesAttr {
+			if attr.Name == TargetsAttr {
 				var err error
 				targets := strings.Split(attr.Value, ",")
 				for _, t := range targets {
@@ -308,7 +308,7 @@ func (p *APIProduct) isValidScopes(scopes []string) bool {
 // GetServicesAttribute returns a pointer the services attribute or nil
 func (p *APIProduct) GetServicesAttribute() *Attribute {
 	for _, attr := range p.Attributes {
-		if attr.Name == ServicesAttr {
+		if attr.Name == TargetsAttr {
 			return &attr
 		}
 	}
