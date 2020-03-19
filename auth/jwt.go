@@ -91,7 +91,7 @@ func (a *jwtManager) refresh(ctx context.Context) error {
 }
 
 func (a *jwtManager) jwkSet(ctx adapterContext.Context) (*jwk.Set, error) {
-	jwksURL := *ctx.CustomerBase()
+	jwksURL := *ctx.ManagementAPI()
 	jwksURL.Path = path.Join(jwksURL.Path, certsPath)
 	url := jwksURL.String()
 	if _, ok := a.jwkSets.Load(url); !ok {

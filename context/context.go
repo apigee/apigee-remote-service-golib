@@ -25,6 +25,6 @@ type Context interface {
 	Key() string
 	Secret() string
 
-	ApigeeBase() *url.URL
-	CustomerBase() *url.URL
+	ManagementAPI() *url.URL
+	RemoteServiceAPI() *url.URL
 }

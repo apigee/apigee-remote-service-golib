@@ -38,7 +38,7 @@ func NewManager(options Options) (*Manager, error) {
 type Options struct {
 	// Client is a configured HTTPClient
 	Client *http.Client
-	// BaseURL of the Apigee customer proxy
+	// BaseURL of the Apigee runtime service proxy
 	BaseURL *url.URL
 	// RefreshRate determines how often the products are refreshed
 	RefreshRate time.Duration

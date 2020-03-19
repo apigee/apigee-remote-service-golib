@@ -60,8 +60,8 @@ func TestAnalyticsSubmit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	context.apigeeBase = baseURL
-	context.customerBase = baseURL
+	context.managementAPI = baseURL
+	context.remoteServiceAPI = baseURL
 	ab := &legacyAnalytics{client: http.DefaultClient}
 	err = ab.SendRecords(authContext, []Record{axRecord})
 	if err != nil {
@@ -98,8 +98,8 @@ func TestMissingOrg(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	context.apigeeBase = baseURL
-	context.customerBase = baseURL
+	context.managementAPI = baseURL
+	context.remoteServiceAPI = baseURL
 	ab := &legacyAnalytics{client: http.DefaultClient}
 	err = ab.SendRecords(authContext, []Record{axRecord})
 	if err == nil || !strings.Contains(err.Error(), "organization") {
@@ -127,8 +127,8 @@ func TestMissingEnv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	context.apigeeBase = baseURL
-	context.customerBase = baseURL
+	context.managementAPI = baseURL
+	context.remoteServiceAPI = baseURL
 	ab := &legacyAnalytics{client: http.DefaultClient}
 	err = ab.SendRecords(authContext, []Record{axRecord})
 	if err == nil || !strings.Contains(err.Error(), "environment") {
@@ -184,19 +184,19 @@ func makeTestServer(auth *auth.Context, rec Record, t *testing.T) *testServer {
 }
 
 type TestContext struct {
-	apigeeBase   *url.URL
-	customerBase *url.URL
-	orgName      string
-	envName      string
-	key          string
-	secret       string
+	managementAPI    *url.URL
+	remoteServiceAPI *url.URL
+	orgName          string
+	envName          string
+	key              string
+	secret           string
 }
 
-func (h *TestContext) ApigeeBase() *url.URL {
-	return h.apigeeBase
+func (h *TestContext) ManagementAPI() *url.URL {
+	return h.managementAPI
 }
-func (h *TestContext) CustomerBase() *url.URL {
-	return h.customerBase
+func (h *TestContext) RemoteServiceAPI() *url.URL {
+	return h.remoteServiceAPI
 }
 func (h *TestContext) Organization() string {
 	return h.orgName

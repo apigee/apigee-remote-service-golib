@@ -21,12 +21,12 @@ import (
 
 // Context implements the context.Context interface and is to be used in tests.
 type Context struct {
-	apigeeBase   *url.URL
-	customerBase *url.URL
-	orgName      string
-	envName      string
-	key          string
-	secret       string
+	managementAPI    *url.URL
+	remoteServiceAPI *url.URL
+	orgName          string
+	envName          string
+	key              string
+	secret           string
 }
 
 // NewContext constructs a new test context.
@@ -36,16 +36,16 @@ func NewContext(base string) *Context {
 		panic(fmt.Sprintf("Could not parse URL: %s", base))
 	}
 	return &Context{
-		apigeeBase:   u,
-		customerBase: u,
+		managementAPI:    u,
+		remoteServiceAPI: u,
 	}
 }
 
-// ApigeeBase gets a URL base to send HTTP requests to.
-func (c *Context) ApigeeBase() *url.URL { return c.apigeeBase }
+// ManagementAPI gets a URL base to send HTTP requests to.
+func (c *Context) ManagementAPI() *url.URL { return c.managementAPI }
 
-// CustomerBase gets a URL base to send HTTP requests to.
-func (c *Context) CustomerBase() *url.URL { return c.customerBase }
+// RemoteServiceAPI gets a URL base to send HTTP requests to.
+func (c *Context) RemoteServiceAPI() *url.URL { return c.remoteServiceAPI }
 
 // Organization gets this context's organization.
 func (c *Context) Organization() string { return c.orgName }
