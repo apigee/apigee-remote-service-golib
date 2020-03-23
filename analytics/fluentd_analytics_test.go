@@ -30,7 +30,7 @@ import (
 	"github.com/apigee/apigee-remote-service-golib/util"
 )
 
-func TestHybridAnalyticsSubmit(t *testing.T) {
+func TestFluentdAnalyticsSubmit(t *testing.T) {
 	t.Parallel()
 	ts := int64(1521221450) // This timestamp is roughly 11:30 MST on Mar. 16, 2018
 	now := func() time.Time { return time.Unix(ts, 0) }
@@ -85,7 +85,7 @@ func TestHybridAnalyticsSubmit(t *testing.T) {
 		Key:                "x",
 		Secret:             "x",
 		Client:             http.DefaultClient,
-		FluentdConfigFile:   tf.Name(), // key to creating a hybrid manager
+		FluentdConfigFile:  tf.Name(), // key to creating a fluentd manager
 		now:                now,
 		CollectionInterval: time.Minute,
 	}
@@ -129,7 +129,7 @@ func TestHybridAnalyticsSubmit(t *testing.T) {
 	got := scanner.Text()
 
 	up := mgr.(*manager).uploader
-	uuid := up.(*hybridUploader).clientUUID
+	uuid := up.(*fluentdUploader).clientUUID
 
 	tag := fmt.Sprintf(tagFormat, recType, context.Organization(), context.Environment(), uuid)
 	axRecord = axRecord.ensureFields(authContext)

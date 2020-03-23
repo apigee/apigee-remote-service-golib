@@ -43,7 +43,7 @@ const (
 	fluentdFormat = "[\"%s\", %d, %s]\n" // tag, unix timestamp, record json
 )
 
-func newFluentdUploader(opts Options) (*hybridUploader, error) {
+func newFluentdUploader(opts Options) (*fluentdUploader, error) {
 	props, err := util.ReadPropertiesFile(opts.FluentdConfigFile)
 	if err != nil {
 		return nil, err
@@ -55,7 +55,7 @@ func newFluentdUploader(opts Options) (*hybridUploader, error) {
 		return nil, err
 	}
 
-	return &hybridUploader{
+	return &fluentdUploader{
 		network:    "tcp",
 		addr:       addr,
 		tlsConfig:  tlsConfig,
@@ -64,7 +64,7 @@ func newFluentdUploader(opts Options) (*hybridUploader, error) {
 	}, nil
 }
 
-type hybridUploader struct {
+type fluentdUploader struct {
 	network    string
 	addr       string
 	tlsConfig  *tls.Config
@@ -72,11 +72,11 @@ type hybridUploader struct {
 	clientUUID string
 }
 
-func (h *hybridUploader) isGzipped() bool {
+func (h *fluentdUploader) isGzipped() bool {
 	return false
 }
 
-func (h *hybridUploader) workFunc(tenant, fileName string) util.WorkFunc {
+func (h *fluentdUploader) workFunc(tenant, fileName string) util.WorkFunc {
 	return func(ctx context.Context) error {
 		if ctx.Err() == nil {
 			return h.upload(fileName)
@@ -91,7 +91,7 @@ func (h *hybridUploader) workFunc(tenant, fileName string) util.WorkFunc {
 }
 
 // format and write records
-func (h *hybridUploader) write(incoming []Record, writer io.Writer) error {
+func (h *fluentdUploader) write(incoming []Record, writer io.Writer) error {
 
 	now := h.now()
 	for _, record := range incoming {
@@ -114,7 +114,7 @@ func (h *hybridUploader) write(incoming []Record, writer io.Writer) error {
 }
 
 // upload sends a file to UDCA
-func (h *hybridUploader) upload(fileName string) error {
+func (h *fluentdUploader) upload(fileName string) error {
 
 	client, err := tls.Dial(h.network, h.addr, h.tlsConfig)
 	if err != nil {
