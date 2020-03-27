@@ -136,34 +136,34 @@ type defaultLogger struct {
 
 func (d *defaultLogger) Infof(format string, args ...interface{}) {
 	if d.InfoEnabled() {
-		d.printf(format, args...)
+		d.printf(Info, format, args...)
 	}
 }
 
 // Warnf logs suspect situations and recoverable errors
 func (d *defaultLogger) Warnf(format string, args ...interface{}) {
 	if d.WarnEnabled() {
-		d.printf(format, args...)
+		d.printf(Warn, format, args...)
 	}
 }
 
 // Errorf logs error conditions.
 func (d *defaultLogger) Errorf(format string, args ...interface{}) {
 	if d.ErrorEnabled() {
-		d.printf(format, args...)
+		d.printf(Error, format, args...)
 	}
 }
 
 // Debugf logs potentially verbose debug-time data
 func (d *defaultLogger) Debugf(format string, args ...interface{}) {
 	if d.DebugEnabled() {
-		d.printf(format, args...)
+		d.printf(Debug, format, args...)
 	}
 }
 
 // formatted logging
-func (d *defaultLogger) printf(format string, args ...interface{}) {
-	format = d.level.String() + " " + format
+func (d *defaultLogger) printf(lvl Level, format string, args ...interface{}) {
+	format = lvl.String() + " " + format
 	l.Printf(format, args...)
 }
 
@@ -196,5 +196,3 @@ func (d *defaultLogger) SetLevel(level Level) {
 func (d *defaultLogger) Level() Level {
 	return d.level
 }
-
-// 2020-03-10T20:51:11.261002Z	error
