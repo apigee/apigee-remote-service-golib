@@ -27,7 +27,7 @@ import (
 
 	"github.com/apigee/apigee-remote-service-golib/authtest"
 	"github.com/dgrijalva/jwt-go"
-	"github.com/lestrrat/go-jwx/jwk"
+	"github.com/lestrrat-go/jwx/jwk"
 )
 
 func goodJWTRequest(privateKey *rsa.PrivateKey, t *testing.T) http.HandlerFunc {

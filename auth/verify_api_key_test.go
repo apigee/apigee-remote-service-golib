@@ -26,7 +26,7 @@ import (
 
 	"github.com/apigee/apigee-remote-service-golib/authtest"
 	jwt "github.com/dgrijalva/jwt-go"
-	"github.com/lestrrat/go-jwx/jwk"
+	"github.com/lestrrat-go/jwx/jwk"
 )
 
 var (
