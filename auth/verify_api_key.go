@@ -192,6 +192,7 @@ func (kv *keyVerifierImpl) Verify(ctx context.Context, apiKey string) (claims ma
 				work := func(c contex.Context) error {
 					claims, err = kv.singleFetchToken(ctx, apiKey)
 					if err != nil && err != ErrBadAuth {
+						log.Debugf("fetchToken error: %s", err)
 						return err
 					}
 					cancel()
