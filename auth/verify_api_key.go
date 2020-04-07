@@ -103,7 +103,7 @@ func (kv *keyVerifierImpl) fetchToken(ctx context.Context, apiKey string) (map[s
 		APIKey: apiKey,
 	}
 
-	apiURL := *ctx.ManagementAPI()
+	apiURL := *ctx.RemoteServiceAPI()
 	apiURL.Path = path.Join(apiURL.Path, verifyAPIKeyURL)
 
 	body := new(bytes.Buffer)
