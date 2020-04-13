@@ -108,12 +108,12 @@ func TestManager(t *testing.T) {
 			t.Errorf("targets not created: %v", got)
 		}
 
-		services := got.GetBoundServices()
-		if len(services) != len(want.Attributes) {
-			t.Errorf("num services want: %d, got: %d", len(services), len(want.Attributes))
+		targets := got.GetBoundTargets()
+		if len(targets) != len(want.Attributes) {
+			t.Errorf("num targets want: %d, got: %d", len(targets), len(want.Attributes))
 		}
-		if services[0] != want.Attributes[0].Value {
-			t.Errorf("get service: %s want: %s", services[0], want.Attributes[0].Value)
+		if targets[0] != want.Attributes[0].Value {
+			t.Errorf("get target: %s want: %s", targets[0], want.Attributes[0].Value)
 		}
 	}
 
