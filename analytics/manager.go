@@ -52,7 +52,7 @@ func NewManager(opts Options) (Manager, error) {
 	}
 
 	var uploader uploader
-	if opts.FluentdConfigFile != "" {
+	if opts.FluentdEndpoint != "" {
 		var err error
 		uploader, err = newFluentdUploader(opts)
 		if err != nil {
@@ -124,29 +124,35 @@ type manager struct {
 
 // Options allows us to specify options for how this analytics manager will run.
 type Options struct {
-	// LegacyEndpoint is true if using older direct-submit protocol
+	// LegacyEndpoint is true if using older direct-submit protocol (opdk)
 	LegacyEndpoint bool
 	// BufferPath is the directory where the adapter will buffer analytics records.
 	BufferPath string
 	// StagingFileLimit is the maximum number of files stored in the staging directory.
 	// Once this is reached, the oldest files will start being removed.
 	StagingFileLimit int
-	// Base Apigee URL
+	// Base Apigee URL (legacy saas)
 	BaseURL *url.URL
-	// Key for submit auth
+	// Key for submit auth (legacy saas)
 	Key string
-	// Secret for submit auth
+	// Secret for submit auth (legacy saas)
 	Secret string
 	// Client is a configured HTTPClient
 	Client *http.Client
 	// SendChannelSize is the size of the records channel
 	SendChannelSize int
-	// FluentdConfigFile is populated for Apigee fluentd deployment
-	FluentdConfigFile string
 	// collection interval
 	CollectionInterval time.Duration
 	// now is for testing
 	now func() time.Time
+	// Fluentd endpoint
+	FluentdEndpoint string
+	// Fluentd mtls ca file
+	TLSCAFile string
+	// Fluentd mtls key file
+	TLSKeyFile string
+	// Fluentd mtls cert file
+	TLSCertFile string
 }
 
 func (o *Options) validate() error {

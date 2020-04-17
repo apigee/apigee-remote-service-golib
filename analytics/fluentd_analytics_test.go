@@ -66,12 +66,6 @@ func TestFluentdAnalyticsSubmit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tf, err := createPropsFile(port, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tf.Name())
-
 	d, err := ioutil.TempDir("", "")
 	if err != nil {
 		t.Fatalf("ioutil.TempDir: %s", err)
@@ -85,9 +79,12 @@ func TestFluentdAnalyticsSubmit(t *testing.T) {
 		Key:                "x",
 		Secret:             "x",
 		Client:             http.DefaultClient,
-		FluentdConfigFile:  tf.Name(), // key to creating a fluentd manager
 		now:                now,
 		CollectionInterval: time.Minute,
+		FluentdEndpoint:    fmt.Sprintf("localhost:%d", port),
+		TLSCAFile:          "testdata/cert.pem",
+		TLSCertFile:        "testdata/cert.pem",
+		TLSKeyFile:         "testdata/key.pem",
 	}
 	mgr, err := NewManager(opts)
 	if err != nil {
@@ -143,30 +140,4 @@ func TestFluentdAnalyticsSubmit(t *testing.T) {
 	if got[:len(got)-40] != want[:len(want)-40] {
 		t.Errorf("got record: %s, want: %s", got, want)
 	}
-}
-
-func createPropsFile(port int, useMTLS bool) (*os.File, error) {
-
-	propsData := fmt.Sprintf(`
-	conf_datadispatcher_destination.batch=localhost:%d
-	conf_datadispatcher_use.mtls=true
-	conf_datadispatcher_ca.pem.location=testdata/cert.pem
-	conf_datadispatcher_certificate.pem.location=testdata/cert.pem
-	conf_datadispatcher_key.pem.location=testdata/key.pem
-	`, port)
-
-	tf, err := ioutil.TempFile("", "test.props")
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := tf.WriteString(propsData); err != nil {
-		return nil, err
-	}
-
-	if err := tf.Close(); err != nil {
-		return nil, err
-	}
-
-	return tf, nil
 }

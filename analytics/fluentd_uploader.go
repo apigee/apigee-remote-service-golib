@@ -31,33 +31,20 @@ import (
 )
 
 const (
-	tagFormat = "%s.%s.%s.%s" // recType, org, env, clientUUID
-	recType   = "api"
-
-	useMTLSKey      = "conf_datadispatcher_use.mtls"
-	caCertLocKey    = "conf_datadispatcher_ca.pem.location"
-	tlsCertLocKey   = "conf_datadispatcher_certificate.pem.location"
-	tlsKeyLocKey    = "conf_datadispatcher_key.pem.location"
-	udcaEndpointKey = "conf_datadispatcher_destination.batch"
-
+	tagFormat     = "%s.%s.%s.%s" // recType, org, env, clientUUID
+	recType       = "api"
 	fluentdFormat = "[\"%s\", %d, %s]\n" // tag, unix timestamp, record json
 )
 
 func newFluentdUploader(opts Options) (*fluentdUploader, error) {
-	props, err := util.ReadPropertiesFile(opts.FluentdConfigFile)
-	if err != nil {
-		return nil, err
-	}
-	addr := props[udcaEndpointKey]
-
-	tlsConfig, err := loadTLSConfig(props)
+	tlsConfig, err := loadTLSConfig(opts)
 	if err != nil {
 		return nil, err
 	}
 
 	return &fluentdUploader{
 		network:    "tcp",
-		addr:       addr,
+		addr:       opts.FluentdEndpoint,
 		tlsConfig:  tlsConfig,
 		now:        opts.now,
 		clientUUID: uuid.New().String(),
@@ -134,14 +121,14 @@ func (h *fluentdUploader) upload(fileName string) error {
 	return err
 }
 
-func loadTLSConfig(props map[string]string) (*tls.Config, error) {
+func loadTLSConfig(opts Options) (*tls.Config, error) {
 
-	if props[useMTLSKey] != "true" {
+	if opts.TLSCAFile == "" {
 		return nil, nil
 	}
 
 	// ca cert pool
-	caCert, err := ioutil.ReadFile(props[caCertLocKey])
+	caCert, err := ioutil.ReadFile(opts.TLSCAFile)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +139,7 @@ func loadTLSConfig(props map[string]string) (*tls.Config, error) {
 	}
 
 	//  tls key pair
-	cert, err := tls.LoadX509KeyPair(props[tlsCertLocKey], props[tlsKeyLocKey])
+	cert, err := tls.LoadX509KeyPair(opts.TLSCertFile, opts.TLSKeyFile)
 	if err != nil {
 		return nil, err
 	}
