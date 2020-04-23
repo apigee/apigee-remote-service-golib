@@ -171,6 +171,48 @@ func TestManagerPolling(t *testing.T) {
 	}
 }
 
+func TestResources(t *testing.T) {
+	matchTests := []struct {
+		spec  string
+		path  string
+		match bool
+	}{
+		{spec: "/", path: "/", match: true},
+		{spec: "/", path: "/foo", match: true},
+		{spec: "/", path: "/foo/bar", match: true},
+		{spec: "/", path: "/foo/bar/baz", match: true},
+		{spec: "/**", path: "/", match: true},
+		{spec: "/**", path: "/foo", match: true},
+		{spec: "/**", path: "/foo/bar", match: true},
+		{spec: "/**", path: "/foo/bar/baz", match: true},
+		{spec: "/*", path: "/", match: true},
+		{spec: "/*", path: "/foo", match: true},
+		{spec: "/*", path: "/foo/bar", match: false},
+		{spec: "/foo", path: "/", match: false},
+		{spec: "/foo", path: "/foo", match: true},
+		{spec: "/foo", path: "/foo/bar", match: false},
+		{spec: "/foo/*", path: "/foo/bar", match: true},
+		{spec: "/foo/*", path: "/foo/bar/baz", match: false},
+		{spec: "/foo/**", path: "/foo/bar/baz", match: true},
+		{spec: "/*/bar", path: "/foo/bar", match: true},
+		{spec: "/*/bar", path: "/foo/bar/baz", match: false},
+		{spec: "/*/*/baz", path: "/foo/bar/baz", match: true},
+	}
+	for _, m := range matchTests {
+		r, e := makeResourceRegex(m.spec)
+		if e != nil {
+			t.Fatalf("invalid resource: %s", m.spec)
+		}
+		if r.MatchString(m.path) != m.match {
+			if m.match {
+				t.Errorf("spec %s should match path %s (regexp: %s)", m.spec, m.path, r)
+			} else {
+				t.Errorf("spec %s should not match path %s (regexp: %s)", m.spec, m.path, r)
+			}
+		}
+	}
+}
+
 func TestBadResource(t *testing.T) {
 	if _, e := makeResourceRegex("/**/bad"); e == nil {
 		t.Errorf("expected error for resource: %s", "/**/bad")
