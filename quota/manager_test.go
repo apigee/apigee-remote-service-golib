@@ -60,7 +60,7 @@ func TestQuota(t *testing.T) {
 
 	var err error
 	m, err = NewManager(Options{
-		BaseURL: context.ManagementAPI(),
+		BaseURL: context.InternalAPI(),
 		Client:  http.DefaultClient,
 		Key:     "key",
 		Secret:  "secret",
@@ -172,7 +172,7 @@ func TestSync(t *testing.T) {
 		now:            now,
 		syncRate:       2 * time.Millisecond,
 		syncQueue:      make(chan *bucket, 10),
-		baseURL:        context.ManagementAPI(),
+		baseURL:        context.InternalAPI(),
 		numSyncWorkers: 1,
 		syncingBuckets: map[*bucket]struct{}{},
 		key:            "key",
@@ -274,7 +274,7 @@ func TestDisconnected(t *testing.T) {
 		now:            now,
 		syncRate:       2 * time.Millisecond,
 		syncQueue:      make(chan *bucket, 10),
-		baseURL:        context.ManagementAPI(),
+		baseURL:        context.InternalAPI(),
 		numSyncWorkers: 1,
 		buckets:        map[string]*bucket{},
 		syncingBuckets: map[*bucket]struct{}{},
@@ -357,7 +357,7 @@ func TestWindowExpired(t *testing.T) {
 		now:            now,
 		syncRate:       2 * time.Millisecond,
 		syncQueue:      make(chan *bucket, 10),
-		baseURL:        context.ManagementAPI(),
+		baseURL:        context.InternalAPI(),
 		numSyncWorkers: 1,
 		buckets:        map[string]*bucket{},
 		syncingBuckets: map[*bucket]struct{}{},

@@ -37,7 +37,7 @@ func (oa *legacyAnalytics) Start() error { return nil }
 func (oa *legacyAnalytics) Close()       {}
 
 func (oa *legacyAnalytics) SendRecords(auth *auth.Context, records []Record) error {
-	axURL := *auth.ManagementAPI()
+	axURL := *auth.InternalAPI()
 	axURL.Path = path.Join(axURL.Path, fmt.Sprintf(axPath, auth.Organization(), auth.Environment()))
 
 	request, err := buildRequest(auth, records)

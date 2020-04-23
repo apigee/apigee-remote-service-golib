@@ -21,7 +21,7 @@ import (
 
 // Context implements the context.Context interface and is to be used in tests.
 type Context struct {
-	managementAPI    *url.URL
+	internalAPI      *url.URL
 	remoteServiceAPI *url.URL
 	orgName          string
 	envName          string
@@ -36,13 +36,13 @@ func NewContext(base string) *Context {
 		panic(fmt.Sprintf("Could not parse URL: %s", base))
 	}
 	return &Context{
-		managementAPI:    u,
+		internalAPI:      u,
 		remoteServiceAPI: u,
 	}
 }
 
-// ManagementAPI gets a URL base to send HTTP requests to.
-func (c *Context) ManagementAPI() *url.URL { return c.managementAPI }
+// InternalAPI gets a URL base to send HTTP requests to.
+func (c *Context) InternalAPI() *url.URL { return c.internalAPI }
 
 // RemoteServiceAPI gets a URL base to send HTTP requests to.
 func (c *Context) RemoteServiceAPI() *url.URL { return c.remoteServiceAPI }

@@ -60,7 +60,7 @@ func TestAnalyticsSubmit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	context.managementAPI = baseURL
+	context.internalAPI = baseURL
 	context.remoteServiceAPI = baseURL
 	ab := &legacyAnalytics{client: http.DefaultClient}
 	err = ab.SendRecords(authContext, []Record{axRecord})
@@ -98,7 +98,7 @@ func TestMissingOrg(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	context.managementAPI = baseURL
+	context.internalAPI = baseURL
 	context.remoteServiceAPI = baseURL
 	ab := &legacyAnalytics{client: http.DefaultClient}
 	err = ab.SendRecords(authContext, []Record{axRecord})
@@ -127,7 +127,7 @@ func TestMissingEnv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	context.managementAPI = baseURL
+	context.internalAPI = baseURL
 	context.remoteServiceAPI = baseURL
 	ab := &legacyAnalytics{client: http.DefaultClient}
 	err = ab.SendRecords(authContext, []Record{axRecord})
@@ -184,7 +184,7 @@ func makeTestServer(auth *auth.Context, rec Record, t *testing.T) *testServer {
 }
 
 type TestContext struct {
-	managementAPI    *url.URL
+	internalAPI      *url.URL
 	remoteServiceAPI *url.URL
 	orgName          string
 	envName          string
@@ -192,8 +192,8 @@ type TestContext struct {
 	secret           string
 }
 
-func (h *TestContext) ManagementAPI() *url.URL {
-	return h.managementAPI
+func (h *TestContext) InternalAPI() *url.URL {
+	return h.internalAPI
 }
 func (h *TestContext) RemoteServiceAPI() *url.URL {
 	return h.remoteServiceAPI

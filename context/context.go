@@ -25,6 +25,6 @@ type Context interface {
 	Key() string
 	Secret() string
 
-	ManagementAPI() *url.URL
+	InternalAPI() *url.URL
 	RemoteServiceAPI() *url.URL
 }
