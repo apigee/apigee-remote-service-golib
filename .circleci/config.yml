@@ -37,8 +37,39 @@ jobs:
       - store_test_results: # upload test results for display in Test Summary
           path: /tmp/test-results
 
+  release:
+
+    docker:
+      - image: circleci/golang:1.14
+
+    steps:
+      - checkout
+      - restore_cache: # restores saved cache if no changes are detected since last run
+          keys:
+            - go-mod-v4-{{ checksum "go.sum" }}
+      
+      - run:
+          name: Set GoReleaser Version
+          command: |
+            echo "export VERSION=v0.128.0" >> $BASH_ENV
+
+      - run: 
+          name: "Run GoReleaser"
+          command: curl -sL https://git.io/goreleaser | bash
+
 workflows:
   version: 2
-  build-workflow:
+  build-and-release:
     jobs:
-      - build
+      - build:
+          filters:  # required since `release` has tag filters AND requires `build`
+            tags:
+              only: /.*/
+      - release:
+          requires:
+            - build
+          filters: # Only run on git tag pushes
+            branches:
+              ignore: /.*/
+            tags:
+              only: /v[0-9]+(\.[0-9]+)*(-.*)*/
