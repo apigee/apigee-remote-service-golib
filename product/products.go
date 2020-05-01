@@ -25,7 +25,7 @@ import (
 const TargetsAttr = "apigee-remote-service-targets"
 
 // NewManager creates a new product.Manager. Call Close() when done.
-func NewManager(options Options) (*Manager, error) {
+func NewManager(options Options) (Manager, error) {
 	if err := options.validate(); err != nil {
 		return nil, err
 	}

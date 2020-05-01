@@ -50,10 +50,11 @@ func TestNewManager(t *testing.T) {
 		PollInterval: time.Hour,
 		Client:       &http.Client{},
 	}
-	man, err := NewManager(opts)
+	m, err := NewManager(opts)
 	if err != nil {
 		t.Fatalf("create and start manager: %v", err)
 	}
+	man := m.(*manager)
 	if opts.PollInterval != man.jwtMan.pollInterval {
 		t.Errorf("pollInterval want: %v, got: %v", opts.PollInterval, man.jwtMan.pollInterval)
 	}
@@ -106,7 +107,7 @@ func TestAuthenticate(t *testing.T) {
 				errAPIKey:  ErrInternalError,
 			},
 		}
-		authMan := &Manager{
+		authMan := &manager{
 			jwtMan:   jwtMan,
 			verifier: tv,
 		}

@@ -37,7 +37,13 @@ const (
 )
 
 // A Manager tracks multiple Apigee quotas
-type Manager struct {
+type Manager interface {
+	Start()
+	Apply(auth *auth.Context, p *product.APIProduct, args Args) (*Result, error)
+	Close()
+}
+
+type manager struct {
 	baseURL            *url.URL
 	close              chan bool
 	closed             chan bool
@@ -56,7 +62,7 @@ type Manager struct {
 }
 
 // NewManager constructs and starts a new Manager. Call Close when done.
-func NewManager(options Options) (*Manager, error) {
+func NewManager(options Options) (Manager, error) {
 	if err := options.validate(); err != nil {
 		return nil, err
 	}
@@ -66,8 +72,8 @@ func NewManager(options Options) (*Manager, error) {
 }
 
 // newManager constructs a new Manager
-func newManager(baseURL *url.URL, client *http.Client, key, secret string) *Manager {
-	return &Manager{
+func newManager(baseURL *url.URL, client *http.Client, key, secret string) *manager {
+	return &manager{
 		close:          make(chan bool),
 		closed:         make(chan bool),
 		client:         client,
@@ -85,7 +91,7 @@ func newManager(baseURL *url.URL, client *http.Client, key, secret string) *Mana
 }
 
 // Start starts the manager.
-func (m *Manager) Start() {
+func (m *manager) Start() {
 	log.Infof("starting quota manager")
 
 	go m.syncLoop()
@@ -97,7 +103,7 @@ func (m *Manager) Start() {
 }
 
 // Close shuts down the manager.
-func (m *Manager) Close() {
+func (m *manager) Close() {
 	if m == nil {
 		return
 	}
@@ -115,7 +121,7 @@ func getQuotaID(auth *auth.Context, p *product.APIProduct) string {
 }
 
 // Apply a quota request to the local quota bucket and schedule for sync
-func (m *Manager) Apply(auth *auth.Context, p *product.APIProduct, args Args) (*Result, error) {
+func (m *manager) Apply(auth *auth.Context, p *product.APIProduct, args Args) (*Result, error) {
 
 	if result := m.dupCache.Get(args.DeduplicationID); result != nil {
 		return result, nil
@@ -158,7 +164,7 @@ func (m *Manager) Apply(auth *auth.Context, p *product.APIProduct, args Args) (*
 }
 
 // loop to sync active buckets and deletes old buckets
-func (m *Manager) syncLoop() {
+func (m *manager) syncLoop() {
 	t := time.NewTicker(m.syncRate)
 	for {
 		select {
@@ -192,7 +198,7 @@ func (m *Manager) syncLoop() {
 }
 
 // worker routine for syncing a bucket with the server
-func (m *Manager) syncBucketWorker() {
+func (m *manager) syncBucketWorker() {
 	for {
 		bucket, ok := <-m.syncQueue
 		if ok {

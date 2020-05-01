@@ -28,7 +28,7 @@ import (
 
 // bucket tracks a specific quota instance
 type bucket struct {
-	manager      *Manager
+	manager      *manager
 	quotaURL     string
 	request      *Request // accumulated for sync
 	result       *Result
@@ -41,7 +41,7 @@ type bucket struct {
 	invalidAfter time.Time     // result window is no longer valid after this
 }
 
-func newBucket(req Request, m *Manager) *bucket {
+func newBucket(req Request, m *manager) *bucket {
 	quotaURL := *m.baseURL
 	quotaURL.Path = path.Join(quotaURL.Path, quotaPath)
 	return &bucket{

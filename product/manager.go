@@ -43,8 +43,15 @@ Usage:
 	pp.close() // when done
 */
 
-func createManager(options Options) *Manager {
-	return &Manager{
+// A Manager wraps all things related to a set of API products.
+type Manager interface {
+	Products() ProductsMap
+	Resolve(ac *auth.Context, api, path string) []*APIProduct
+	Close()
+}
+
+func createManager(options Options) *manager {
+	return &manager{
 		baseURL:     options.BaseURL,
 		closedChan:  make(chan bool),
 		returnChan:  make(chan map[string]*APIProduct),
@@ -56,8 +63,7 @@ func createManager(options Options) *Manager {
 	}
 }
 
-// A Manager wraps all things related to a set of API products.
-type Manager struct {
+type manager struct {
 	baseURL          *url.URL
 	closed           *util.AtomicBool
 	closedChan       chan bool
@@ -71,7 +77,7 @@ type Manager struct {
 	cancelPolling    context.CancelFunc
 }
 
-func (p *Manager) start() {
+func (p *manager) start() {
 	log.Infof("starting product manager")
 	p.productsMux = productsMux{
 		setChan:   make(chan ProductsMap),
@@ -97,7 +103,7 @@ func (p *Manager) start() {
 }
 
 // Products atomically gets a mapping of name => APIProduct.
-func (p *Manager) Products() ProductsMap {
+func (p *manager) Products() ProductsMap {
 	if p.closed.IsTrue() {
 		return nil
 	}
@@ -105,7 +111,7 @@ func (p *Manager) Products() ProductsMap {
 }
 
 // Close shuts down the manager.
-func (p *Manager) Close() {
+func (p *manager) Close() {
 	if p == nil || p.closed.SetTrue() {
 		return
 	}
@@ -115,7 +121,7 @@ func (p *Manager) Close() {
 	log.Infof("closed product manager")
 }
 
-func (p *Manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error {
+func (p *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 
 		req, err := http.NewRequest(http.MethodGet, apiURL.String(), nil)
@@ -164,7 +170,7 @@ func (p *Manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error
 	}
 }
 
-func (p *Manager) getProductsMap(ctx context.Context, res APIResponse) ProductsMap {
+func (p *manager) getProductsMap(ctx context.Context, res APIResponse) ProductsMap {
 	pm := ProductsMap{}
 	for _, v := range res.APIProducts {
 		product := v
@@ -218,7 +224,7 @@ func (p *Manager) getProductsMap(ctx context.Context, res APIResponse) ProductsM
 }
 
 // generate matchers for resources (path)
-func (p *Manager) resolveResourceMatchers(product *APIProduct) {
+func (p *manager) resolveResourceMatchers(product *APIProduct) {
 	for _, resource := range product.Resources {
 		reg, err := makeResourceRegex(resource)
 		if err != nil {
@@ -230,7 +236,7 @@ func (p *Manager) resolveResourceMatchers(product *APIProduct) {
 }
 
 // Resolve determines the valid products for a given API.
-func (p *Manager) Resolve(ac *auth.Context, api, path string) []*APIProduct {
+func (p *manager) Resolve(ac *auth.Context, api, path string) []*APIProduct {
 	validProducts, failHints := resolve(ac, p.Products(), api, path)
 	var selected []string
 	for _, p := range validProducts {

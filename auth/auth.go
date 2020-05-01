@@ -28,6 +28,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+// A Manager wraps all things related to auth processing
+type Manager interface {
+	Close()
+	Authenticate(ctx context.Context, apiKey string, claims map[string]interface{}, apiKeyClaimKey string) (*Context, error)
+}
+
 // ErrNoAuth is an error because of missing auth
 var ErrNoAuth = errors.New("missing authentication")
 
@@ -40,7 +46,7 @@ var ErrInternalError = errors.New("internal error")
 // NewManager constructs a new Manager and begins an update loop to
 // periodically refresh JWT credentials if options.pollInterval > 0.
 // Call Close() when done.
-func NewManager(options Options) (*Manager, error) {
+func NewManager(options Options) (Manager, error) {
 	if err := options.validate(); err != nil {
 		return nil, err
 	}
@@ -49,7 +55,7 @@ func NewManager(options Options) (*Manager, error) {
 		Client:   options.Client,
 		CacheTTL: options.APIKeyCacheDuration,
 	})
-	am := &Manager{
+	am := &manager{
 		jwtMan:   jwtMan,
 		verifier: v,
 	}
@@ -58,13 +64,13 @@ func NewManager(options Options) (*Manager, error) {
 }
 
 // An Manager handles all things related to authentication.
-type Manager struct {
+type manager struct {
 	jwtMan   *jwtManager
 	verifier keyVerifier
 }
 
 // Close shuts down the Manager.
-func (m *Manager) Close() {
+func (m *manager) Close() {
 	if m != nil {
 		m.jwtMan.stop()
 	}
@@ -78,7 +84,7 @@ func (m *Manager) Close() {
 // 3. Has JWT token - use JWT claims
 // If any method is provided but fails, the next available one(s) will be attempted. If all provided methods fail,
 // the request will be rejected.
-func (m *Manager) Authenticate(ctx context.Context, apiKey string,
+func (m *manager) Authenticate(ctx context.Context, apiKey string,
 	claims map[string]interface{}, apiKeyClaimKey string) (*Context, error) {
 	if log.DebugEnabled() {
 		redacts := []interface{}{
@@ -155,7 +161,7 @@ func (m *Manager) Authenticate(ctx context.Context, apiKey string,
 	return authContext, authenticationError
 }
 
-func (m *Manager) start() {
+func (m *manager) start() {
 	m.jwtMan.start()
 }
 

@@ -23,7 +23,7 @@ import (
 
 func TestBucket(t *testing.T) {
 	now := func() time.Time { return time.Unix(1521221450, 0) }
-	m := &Manager{now: now}
+	m := &manager{now: now}
 
 	cases := map[string]struct {
 		priorRequest *Request
@@ -131,7 +131,7 @@ func TestBucket(t *testing.T) {
 
 func TestNeedToDelete(t *testing.T) {
 	now := func() time.Time { return time.Unix(1521221450, 0) }
-	m := &Manager{now: now}
+	m := &manager{now: now}
 
 	cases := map[string]struct {
 		request *Request
@@ -175,7 +175,7 @@ func TestNeedToDelete(t *testing.T) {
 
 func TestNeedToSync(t *testing.T) {
 	now := func() time.Time { return time.Unix(1521221450, 0) }
-	m := &Manager{now: now}
+	m := &manager{now: now}
 
 	cases := map[string]struct {
 		request *Request

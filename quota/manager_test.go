@@ -36,9 +36,6 @@ func TestQuota(t *testing.T) {
 		want    Result
 	}
 
-	var m *Manager
-	m.Close() // just to verify it doesn't die here
-
 	serverResult := Result{}
 	ts := testServer(&serverResult, time.Now, nil)
 
@@ -58,8 +55,7 @@ func TestQuota(t *testing.T) {
 		BestEffort:  true,
 	}
 
-	var err error
-	m, err = NewManager(Options{
+	m, err := NewManager(Options{
 		BaseURL: context.InternalAPI(),
 		Client:  http.DefaultClient,
 		Key:     "key",
@@ -165,7 +161,7 @@ func TestSync(t *testing.T) {
 		Used: 1,
 	}
 
-	m := &Manager{
+	m := &manager{
 		close:          make(chan bool),
 		closed:         make(chan bool),
 		client:         http.DefaultClient,
@@ -267,7 +263,7 @@ func TestDisconnected(t *testing.T) {
 		ClientID:       "clientId",
 	}
 
-	m := &Manager{
+	m := &manager{
 		close:          make(chan bool),
 		closed:         make(chan bool),
 		client:         http.DefaultClient,
@@ -350,7 +346,7 @@ func TestWindowExpired(t *testing.T) {
 		ClientID:       "clientId",
 	}
 
-	m := &Manager{
+	m := &manager{
 		close:          make(chan bool),
 		closed:         make(chan bool),
 		client:         http.DefaultClient,
@@ -450,7 +446,7 @@ func testServer(serverResult *Result, now func() time.Time, errC *errControl) *h
 }
 
 // ignores if no matching quota bucket
-func (m *Manager) forceSync(quotaID string) error {
+func (m *manager) forceSync(quotaID string) error {
 	m.bucketsLock.RLock()
 	b, ok := m.buckets[quotaID]
 	if !ok {
