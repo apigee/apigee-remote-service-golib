@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/context"
@@ -29,7 +30,7 @@ const (
 	audienceClaim        = "audience"
 	clientIDClaim        = "client_id"
 	applicationNameClaim = "application_name"
-	scopesClaim          = "scopes"
+	scopeClaim           = "scope"
 	expClaim             = "exp"
 	developerEmailClaim  = "developer_email"
 	accessTokenClaim     = "access_token"
@@ -39,7 +40,7 @@ var (
 	// AllValidClaims is a list of the claims expected from a JWT token
 	AllValidClaims = []string{
 		apiProductListClaim, audienceClaim, clientIDClaim, applicationNameClaim,
-		scopesClaim, expClaim, developerEmailClaim,
+		scopeClaim, expClaim, developerEmailClaim,
 	}
 )
 
@@ -85,22 +86,25 @@ func (a *Context) setClaims(claims map[string]interface{}) error {
 		return errors.Wrapf(err, "unable to interpret api_product_list: %v", claims[apiProductListClaim])
 	}
 
-	scopes, err := parseArrayOfStrings(claims[scopesClaim])
-	if err != nil {
-		return errors.Wrapf(err, "unable to interpret scopes: %v", claims[scopesClaim])
+	if _, ok := claims[scopeClaim].(string); !ok {
+		if claims[scopeClaim] == nil { // nil is ok
+			claims[scopeClaim] = ""
+		} else {
+			return fmt.Errorf("unable to interpret %s: %v", scopeClaim, claims[scopeClaim])
+		}
 	}
+	scopes := strings.Split(claims[scopeClaim].(string), " ")
 
 	exp, err := parseExp(claims)
 	if err != nil {
 		return err
 	}
 
-	var ok bool
-	if _, ok = claims[clientIDClaim].(string); !ok {
-		return errors.Wrapf(err, "unable to interpret %s: %v", clientIDClaim, claims[clientIDClaim])
+	if _, ok := claims[clientIDClaim].(string); !ok {
+		return fmt.Errorf("unable to interpret %s: %v", clientIDClaim, claims[clientIDClaim])
 	}
-	if _, ok = claims[applicationNameClaim].(string); !ok {
-		return errors.Wrapf(err, "unable to interpret %s: %v", applicationNameClaim, claims[applicationNameClaim])
+	if _, ok := claims[applicationNameClaim].(string); !ok {
+		return fmt.Errorf("unable to interpret %s: %v", applicationNameClaim, claims[applicationNameClaim])
 	}
 	a.ClientID = claims[clientIDClaim].(string)
 	a.Application = claims[applicationNameClaim].(string)

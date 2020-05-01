@@ -33,7 +33,7 @@ var testJWTClaims = map[string]interface{}{
 	"application_name": "taco",
 	"exp":              14.0,
 	"api_product_list": []string{"superapp"},
-	"scopes":           []string{"scope"},
+	"scope":            "scope",
 }
 
 func (tv *testVerifier) Verify(ctx context.Context, apiKey string) (map[string]interface{}, error) {

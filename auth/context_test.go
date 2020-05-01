@@ -55,55 +55,38 @@ func TestSetClaims(t *testing.T) {
 	c := Context{}
 	now := time.Unix(time.Now().Unix(), 0)
 	claims := map[string]interface{}{
-		apiProductListClaim: time.Now(),
-		audienceClaim:       "aud",
-		//clientIDClaim:        nil,
+		apiProductListClaim:  time.Now(),
+		audienceClaim:        "aud",
+		clientIDClaim:        nil,
 		applicationNameClaim: "app",
-		scopesClaim:          nil,
+		scopeClaim:           nil,
 		expClaim:             float64(now.Unix()),
 		developerEmailClaim:  "email",
 	}
-	err := c.setClaims(claims)
-	if err == nil {
+	if err := c.setClaims(claims); err == nil {
 		t.Errorf("setClaims without client_id should get error")
 	}
 
 	claims[clientIDClaim] = "clientID"
-	err = c.setClaims(claims)
-	if err == nil {
+	if err := c.setClaims(claims); err == nil {
 		t.Errorf("bad product list should error")
 	}
 
 	productsWant := []string{"product 1", "product 2"}
 	claims[apiProductListClaim] = `["product 1", "product 2"]`
-	err = c.setClaims(claims)
-	if err != nil {
-		t.Fatalf("valid setClaims, got: %v", err)
+	if err := c.setClaims(claims); err != nil {
+		t.Errorf("valid setClaims, got: %v", err)
 	}
 	if !reflect.DeepEqual(c.APIProducts, productsWant) {
 		t.Errorf("apiProducts want: %s, got: %v", productsWant, c.APIProducts)
 	}
 
 	claimsWant := []string{"scope1", "scope2"}
-	claims[scopesClaim] = []interface{}{"scope1", "scope2"}
-	err = c.setClaims(claims)
-	if err != nil {
-		t.Fatalf("valid setClaims, got: %v", err)
+	claims[scopeClaim] = "scope1 scope2"
+	if err := c.setClaims(claims); err != nil {
+		t.Errorf("valid setClaims, got: %v", err)
 	}
 	if !reflect.DeepEqual(claimsWant, c.Scopes) {
-		t.Errorf("claims want: %s, got: %v", claimsWant, claims[scopesClaim])
+		t.Errorf("claims want: %s, got: %v", claimsWant, claims[scopeClaim])
 	}
-
-	//if c.A != "" {
-	//	t.Errorf("nil ClientID should be empty, got: %v", c.ClientID)
-	//}
-
-	//ClientID       string
-	//AccessToken    string
-	//Application    string
-	//APIProducts    []string
-	//Expires        time.Time
-	//DeveloperEmail string
-	//Scopes         []string
-	//APIKey         string
 }
