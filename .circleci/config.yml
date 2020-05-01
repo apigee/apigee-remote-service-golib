@@ -51,7 +51,7 @@ jobs:
       - run:
           name: Set GoReleaser Version
           command: |
-            echo "export VERSION=v0.128.0" >> $BASH_ENV
+            echo "export VERSION=v0.132.1" >> $BASH_ENV
 
       - run: 
           name: "Run GoReleaser"
