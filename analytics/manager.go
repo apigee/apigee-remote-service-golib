@@ -147,12 +147,14 @@ type Options struct {
 	now func() time.Time
 	// Fluentd endpoint
 	FluentdEndpoint string
-	// Fluentd mtls ca file
+	// TLSCAFile is fluentd mtls ca file
 	TLSCAFile string
-	// Fluentd mtls key file
+	// TLSKeyFile is fluentd mtls key file
 	TLSKeyFile string
-	// Fluentd mtls cert file
+	// TLSCertFile is fluentd mtls cert file
 	TLSCertFile string
+	// TLSSkipVerify skips cert verify for fluentd
+	TLSSkipVerify bool
 }
 
 func (o *Options) validate() error {

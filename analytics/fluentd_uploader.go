@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"os"
 	"time"
 
@@ -103,7 +104,13 @@ func (h *fluentdUploader) write(incoming []Record, writer io.Writer) error {
 // upload sends a file to UDCA
 func (h *fluentdUploader) upload(fileName string) error {
 
-	client, err := tls.Dial(h.network, h.addr, h.tlsConfig)
+	var client net.Conn
+	var err error
+	if h.tlsConfig == nil {
+		client, err = net.Dial(h.network, h.addr)
+	} else {
+		client, err = tls.Dial(h.network, h.addr, h.tlsConfig)
+	}
 	if err != nil {
 		log.Errorf("dial: %s", err)
 		return err
@@ -123,29 +130,36 @@ func (h *fluentdUploader) upload(fileName string) error {
 
 func loadTLSConfig(opts Options) (*tls.Config, error) {
 
-	if opts.TLSCAFile == "" {
+	if !opts.TLSSkipVerify && opts.TLSCAFile == "" {
 		return nil, nil
 	}
 
-	// ca cert pool
-	caCert, err := ioutil.ReadFile(opts.TLSCAFile)
-	if err != nil {
-		return nil, err
-	}
-	caCertPool := x509.NewCertPool()
-	ok := caCertPool.AppendCertsFromPEM(caCert)
-	if !ok {
-		return nil, err
+	config := &tls.Config{}
+
+	if opts.TLSSkipVerify {
+		config.InsecureSkipVerify = true
 	}
 
-	//  tls key pair
-	cert, err := tls.LoadX509KeyPair(opts.TLSCertFile, opts.TLSKeyFile)
-	if err != nil {
-		return nil, err
+	if opts.TLSCAFile != "" {
+		// ca cert pool
+		caCert, err := ioutil.ReadFile(opts.TLSCAFile)
+		if err != nil {
+			return nil, err
+		}
+		caCertPool := x509.NewCertPool()
+		ok := caCertPool.AppendCertsFromPEM(caCert)
+		if !ok {
+			return nil, err
+		}
+		config.RootCAs = caCertPool
+
+		//  tls key pair
+		cert, err := tls.LoadX509KeyPair(opts.TLSCertFile, opts.TLSKeyFile)
+		if err != nil {
+			return nil, err
+		}
+		config.Certificates = []tls.Certificate{cert}
 	}
 
-	return &tls.Config{
-		RootCAs:      caCertPool,
-		Certificates: []tls.Certificate{cert},
-	}, nil
+	return config, nil
 }

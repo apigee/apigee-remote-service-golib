@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -30,37 +31,14 @@ import (
 	"github.com/apigee/apigee-remote-service-golib/util"
 )
 
-func TestFluentdAnalyticsSubmit(t *testing.T) {
+func TestFluentdAnalyticsMTLS(t *testing.T) {
 	t.Parallel()
 	ts := int64(1521221450) // This timestamp is roughly 11:30 MST on Mar. 16, 2018
 	now := func() time.Time { return time.Unix(ts, 0) }
 	startTime := now()
 
-	context := &TestContext{
-		orgName: "org",
-		envName: "env",
-	}
-	authContext := &auth.Context{
-		Context:        context,
-		DeveloperEmail: "email",
-		Application:    "app",
-		AccessToken:    "token",
-		ClientID:       "clientId",
-	}
-	axRecord := Record{
-		ResponseStatusCode:           201,
-		RequestVerb:                  "PATCH",
-		RequestPath:                  "/test",
-		UserAgent:                    "007",
-		ClientReceivedStartTimestamp: timeToUnix(startTime),
-		ClientReceivedEndTimestamp:   timeToUnix(startTime),
-		ClientSentStartTimestamp:     timeToUnix(startTime),
-		ClientSentEndTimestamp:       timeToUnix(startTime),
-		TargetSentStartTimestamp:     timeToUnix(startTime),
-		TargetSentEndTimestamp:       timeToUnix(startTime),
-		TargetReceivedStartTimestamp: timeToUnix(startTime),
-		TargetReceivedEndTimestamp:   timeToUnix(startTime),
-	}
+	authContext := makeAuthContext()
+	axRecord := makeRecord(startTime)
 
 	port, err := util.FreePort()
 	if err != nil {
@@ -85,27 +63,202 @@ func TestFluentdAnalyticsSubmit(t *testing.T) {
 		TLSCAFile:          "testdata/cert.pem",
 		TLSCertFile:        "testdata/cert.pem",
 		TLSKeyFile:         "testdata/key.pem",
+		TLSSkipVerify:      false,
 	}
 	mgr, err := NewManager(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	go func() {
-		if err := mgr.SendRecords(authContext, []Record{axRecord}); err != nil {
-			panic(err)
-		}
-		mgr.Close() // force write
-	}()
-	endpoint := fmt.Sprintf("localhost:%d", port)
+	go sendRecord(mgr, authContext, axRecord)
 
 	cert, err := tls.LoadX509KeyPair("testdata/cert.pem", "testdata/key.pem")
 	if err != nil {
 		t.Fatal(err)
 	}
+	got := fluentdReceive(t, port, cert)
 
-	tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
-	listener, err := tls.Listen("tcp", endpoint, tlsConfig)
+	up := mgr.(*manager).uploader
+	uuid := up.(*fluentdUploader).clientUUID
+
+	tag := fmt.Sprintf(tagFormat, recType, authContext.Organization(), authContext.Environment(), uuid)
+	axRecord = axRecord.ensureFields(authContext)
+	axJSON, err := json.Marshal(axRecord)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := fmt.Sprintf("[\"%s\", %d, %s]", tag, ts, axJSON)
+
+	// the gatewayFlowID value is variable, just trim it off
+	if got[:len(got)-40] != want[:len(want)-40] {
+		t.Errorf("got record: %s, want: %s", got, want)
+	}
+}
+
+func TestFluentdAnalyticsTLSSkipVerify(t *testing.T) {
+	t.Parallel()
+	ts := int64(1521221450) // This timestamp is roughly 11:30 MST on Mar. 16, 2018
+	now := func() time.Time { return time.Unix(ts, 0) }
+	startTime := now()
+
+	authContext := makeAuthContext()
+	axRecord := makeRecord(startTime)
+
+	port, err := util.FreePort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("ioutil.TempDir: %s", err)
+	}
+	defer os.RemoveAll(d)
+
+	opts := Options{
+		BufferPath:         d,
+		StagingFileLimit:   1,
+		BaseURL:            &url.URL{},
+		Key:                "x",
+		Secret:             "x",
+		Client:             http.DefaultClient,
+		now:                now,
+		CollectionInterval: time.Minute,
+		FluentdEndpoint:    fmt.Sprintf("localhost:%d", port),
+		TLSSkipVerify:      true,
+	}
+	mgr, err := NewManager(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	go sendRecord(mgr, authContext, axRecord)
+
+	cert, err := tls.LoadX509KeyPair("testdata/cert.pem", "testdata/key.pem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := fluentdReceive(t, port, cert)
+
+	up := mgr.(*manager).uploader
+	uuid := up.(*fluentdUploader).clientUUID
+
+	tag := fmt.Sprintf(tagFormat, recType, authContext.Organization(), authContext.Environment(), uuid)
+	axRecord = axRecord.ensureFields(authContext)
+	axJSON, err := json.Marshal(axRecord)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := fmt.Sprintf("[\"%s\", %d, %s]", tag, ts, axJSON)
+
+	// the gatewayFlowID value is variable, just trim it off
+	if got[:len(got)-40] != want[:len(want)-40] {
+		t.Errorf("got record: %s, want: %s", got, want)
+	}
+}
+
+func TestFluentdAnalyticsNoTLS(t *testing.T) {
+	t.Parallel()
+	ts := int64(1521221450) // This timestamp is roughly 11:30 MST on Mar. 16, 2018
+	now := func() time.Time { return time.Unix(ts, 0) }
+	startTime := now()
+
+	authContext := makeAuthContext()
+	axRecord := makeRecord(startTime)
+
+	port, err := util.FreePort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("ioutil.TempDir: %s", err)
+	}
+	defer os.RemoveAll(d)
+
+	opts := Options{
+		BufferPath:         d,
+		StagingFileLimit:   1,
+		BaseURL:            &url.URL{},
+		Key:                "x",
+		Secret:             "x",
+		Client:             http.DefaultClient,
+		now:                now,
+		CollectionInterval: time.Minute,
+		FluentdEndpoint:    fmt.Sprintf("localhost:%d", port),
+	}
+	mgr, err := NewManager(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	go sendRecord(mgr, authContext, axRecord)
+	got := fluentdReceive(t, port, tls.Certificate{})
+
+	up := mgr.(*manager).uploader
+	uuid := up.(*fluentdUploader).clientUUID
+
+	tag := fmt.Sprintf(tagFormat, recType, authContext.Organization(), authContext.Environment(), uuid)
+	axRecord = axRecord.ensureFields(authContext)
+	axJSON, err := json.Marshal(axRecord)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := fmt.Sprintf("[\"%s\", %d, %s]", tag, ts, axJSON)
+
+	// the gatewayFlowID value is variable, just trim it off
+	if got[:len(got)-40] != want[:len(want)-40] {
+		t.Errorf("got record: %s, want: %s", got, want)
+	}
+}
+
+func makeAuthContext() *auth.Context {
+	return &auth.Context{
+		Context: &TestContext{
+			orgName: "org",
+			envName: "env",
+		},
+		DeveloperEmail: "email",
+		Application:    "app",
+		AccessToken:    "token",
+		ClientID:       "clientId",
+	}
+}
+
+func makeRecord(startTime time.Time) Record {
+	return Record{
+		ResponseStatusCode:           201,
+		RequestVerb:                  "PATCH",
+		RequestPath:                  "/test",
+		UserAgent:                    "007",
+		ClientReceivedStartTimestamp: timeToUnix(startTime),
+		ClientReceivedEndTimestamp:   timeToUnix(startTime),
+		ClientSentStartTimestamp:     timeToUnix(startTime),
+		ClientSentEndTimestamp:       timeToUnix(startTime),
+		TargetSentStartTimestamp:     timeToUnix(startTime),
+		TargetSentEndTimestamp:       timeToUnix(startTime),
+		TargetReceivedStartTimestamp: timeToUnix(startTime),
+		TargetReceivedEndTimestamp:   timeToUnix(startTime),
+	}
+}
+
+func sendRecord(mgr Manager, authContext *auth.Context, axRecord Record) {
+	if err := mgr.SendRecords(authContext, []Record{axRecord}); err != nil {
+		panic(err)
+	}
+	mgr.Close() // force write
+}
+
+func fluentdReceive(t *testing.T, port int, cert tls.Certificate) string {
+	endpoint := fmt.Sprintf("localhost:%d", port)
+
+	var err error
+	var listener net.Listener
+	if cert.Certificate != nil {
+		tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
+		listener, err = tls.Listen("tcp", endpoint, tlsConfig)
+	} else {
+		listener, err = net.Listen("tcp", endpoint)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,21 +276,8 @@ func TestFluentdAnalyticsSubmit(t *testing.T) {
 	if err := scanner.Err(); err != nil {
 		t.Fatal(err)
 	}
-	got := scanner.Text()
 
-	up := mgr.(*manager).uploader
-	uuid := up.(*fluentdUploader).clientUUID
-
-	tag := fmt.Sprintf(tagFormat, recType, context.Organization(), context.Environment(), uuid)
-	axRecord = axRecord.ensureFields(authContext)
-	axJSON, err := json.Marshal(axRecord)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := fmt.Sprintf("[\"%s\", %d, %s]", tag, ts, axJSON)
-
-	// the gatewayFlowID value is variable, just trim it off
-	if got[:len(got)-40] != want[:len(want)-40] {
-		t.Errorf("got record: %s, want: %s", got, want)
-	}
+	txt := scanner.Text()
+	t.Logf("scanned: %s\n", txt)
+	return txt
 }
