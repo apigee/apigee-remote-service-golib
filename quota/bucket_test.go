@@ -254,8 +254,8 @@ func TestCalcLocalExpiry(t *testing.T) {
 
 	for _, tst := range tests {
 		got := calcLocalExpiry(now, tst.interval, tst.quotaLength)
-		if got != tst.want {
-			t.Errorf("%d %s got: %v, want: %v", tst.interval, tst.quotaLength, got, tst.want)
+		if got.Unix() != tst.want.Unix() {
+			t.Errorf("%d %s got: %v (%d), want: %v (%d)", tst.interval, tst.quotaLength, got, got.Unix(), tst.want, tst.want.Unix())
 		}
 	}
 }
