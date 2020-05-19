@@ -47,7 +47,7 @@ func TestQuota(t *testing.T) {
 	p := &product.APIProduct{
 		QuotaLimitInt:    1,
 		QuotaIntervalInt: 1,
-		QuotaTimeUnit:    "second",
+		QuotaTimeUnit:    quotaMonth,
 	}
 
 	args := Args{
@@ -113,7 +113,7 @@ func TestQuota(t *testing.T) {
 	p2 := &product.APIProduct{
 		QuotaLimitInt:    1,
 		QuotaIntervalInt: 2,
-		QuotaTimeUnit:    "second",
+		QuotaTimeUnit:    quotaSecond,
 	}
 	c := testcase{
 		name:    "incompatible",
@@ -153,7 +153,7 @@ func TestSync(t *testing.T) {
 	request := &Request{
 		Identifier: quotaID,
 		Interval:   1,
-		TimeUnit:   "seconds",
+		TimeUnit:   quotaSecond,
 		Allow:      1,
 		Weight:     3,
 	}
@@ -207,7 +207,7 @@ func TestSync(t *testing.T) {
 	req := &Request{
 		Identifier: quotaID,
 		Interval:   1,
-		TimeUnit:   "seconds",
+		TimeUnit:   quotaSecond,
 		Allow:      1,
 		Weight:     2,
 	}
@@ -243,7 +243,8 @@ func TestSync(t *testing.T) {
 }
 
 func TestDisconnected(t *testing.T) {
-	now := func() time.Time { return time.Unix(1521221450, 0) }
+	fakeTime := int64(1521221450)
+	now := func() time.Time { return time.Unix(fakeTime, 0) }
 
 	errC := &errControl{
 		send: 404,
@@ -268,7 +269,6 @@ func TestDisconnected(t *testing.T) {
 		closed:         make(chan bool),
 		client:         http.DefaultClient,
 		now:            now,
-		syncRate:       2 * time.Millisecond,
 		syncQueue:      make(chan *bucket, 10),
 		baseURL:        context.InternalAPI(),
 		numSyncWorkers: 1,
@@ -281,7 +281,7 @@ func TestDisconnected(t *testing.T) {
 	p := &product.APIProduct{
 		QuotaLimitInt:    1,
 		QuotaIntervalInt: 1,
-		QuotaTimeUnit:    "second",
+		QuotaTimeUnit:    quotaMinute,
 	}
 
 	args := Args{
@@ -322,6 +322,23 @@ func TestDisconnected(t *testing.T) {
 	if !reflect.DeepEqual(*res, wantResult) {
 		t.Errorf("result got: %#v, want: %#v", *res, wantResult)
 	}
+
+	// next window
+	fakeTime = fakeTime + 60
+	res, err = m.Apply(authContext, p, args)
+	if err != nil {
+		t.Fatalf("got error: %s", err)
+	}
+	wantResult = Result{
+		Allowed:    1,
+		Used:       1,
+		Exceeded:   0,
+		ExpiryTime: now().Unix(),
+		Timestamp:  now().Unix(),
+	}
+	if !reflect.DeepEqual(*res, wantResult) {
+		t.Errorf("result got: %#v, want: %#v", *res, wantResult)
+	}
 }
 
 func TestWindowExpired(t *testing.T) {
@@ -351,7 +368,7 @@ func TestWindowExpired(t *testing.T) {
 		closed:         make(chan bool),
 		client:         http.DefaultClient,
 		now:            now,
-		syncRate:       2 * time.Millisecond,
+		syncRate:       time.Minute,
 		syncQueue:      make(chan *bucket, 10),
 		baseURL:        context.InternalAPI(),
 		numSyncWorkers: 1,
@@ -364,7 +381,7 @@ func TestWindowExpired(t *testing.T) {
 	p := &product.APIProduct{
 		QuotaLimitInt:    1,
 		QuotaIntervalInt: 1,
-		QuotaTimeUnit:    "second",
+		QuotaTimeUnit:    quotaSecond,
 	}
 
 	args := Args{
@@ -372,19 +389,23 @@ func TestWindowExpired(t *testing.T) {
 		BestEffort:  true,
 	}
 
+	// apply and force a sync
 	res, err := m.Apply(authContext, p, args)
 	m.forceSync(getQuotaID(authContext, p))
 
 	quotaID := fmt.Sprintf("%s-%s", authContext.Application, p.Name)
 	bucket := m.buckets[quotaID]
-
-	if bucket.request.Weight != 0 {
-		t.Errorf("got: %d, want: %d", bucket.request.Weight, 0)
-	}
 	if res.Used != 1 {
 		t.Errorf("got: %d, want: %d", res.Used, 1)
 	}
+	if res.Exceeded != 0 {
+		t.Errorf("got: %d, want: %d", res.Exceeded, 0)
+	}
 
+	// move to the next window
+	if bucket.windowExpired() {
+		t.Errorf("should not be expired")
+	}
 	fakeTime++
 	if !bucket.windowExpired() {
 		t.Errorf("should be expired")
@@ -394,20 +415,53 @@ func TestWindowExpired(t *testing.T) {
 	if err != nil {
 		t.Errorf("got error: %v", err)
 	}
-	if bucket.request.Weight != 1 {
-		t.Errorf("got: %d, want: %d", bucket.request.Weight, 1)
+	if res.Used != 1 {
+		t.Errorf("got: %d, want: %d", res.Used, 1)
+	}
+	if res.Exceeded != 0 {
+		t.Errorf("got: %d, want: %d", res.Exceeded, 0)
 	}
 
-	err = bucket.sync() // after window expiration, should reset
+	res, err = m.Apply(authContext, p, args)
 	if err != nil {
 		t.Errorf("got error: %v", err)
 	}
-	if bucket.result.Used != 1 {
-		t.Errorf("got: %d, want: %d", bucket.result.Used, 1)
+	if res.Used != 1 {
+		t.Errorf("got: %d, want: %d", res.Used, 1)
 	}
-	if bucket.result.Exceeded != 0 {
-		t.Errorf("got: %d, want: %d", bucket.result.Exceeded, 0)
+	if res.Exceeded != 1 {
+		t.Errorf("got: %d, want: %d", res.Exceeded, 1)
 	}
+
+	// move to the next window
+	fakeTime++
+	if !bucket.windowExpired() {
+		t.Errorf("should be expired")
+	}
+
+	res, err = m.Apply(authContext, p, args)
+	if err != nil {
+		t.Errorf("got error: %v", err)
+	}
+	if res.Used != 1 {
+		t.Errorf("got: %d, want: %d", res.Used, 1)
+	}
+	if res.Exceeded != 0 {
+		t.Errorf("got: %d, want: %d", res.Exceeded, 0)
+	}
+
+	// res, err = m.Apply(authContext, p, args)
+	// bucket = m.buckets[quotaID]
+	// err = bucket.sync() // after window expiration, should reset
+	// if err != nil {
+	// 	t.Errorf("got error: %v", err)
+	// }
+	// if bucket.result.Used != 1 {
+	// 	t.Errorf("got: %d, want: %d", bucket.result.Used, 1)
+	// }
+	// if bucket.result.Exceeded != 0 {
+	// 	t.Errorf("got: %d, want: %d", bucket.result.Exceeded, 0)
+	// }
 }
 
 type errControl struct {
@@ -450,8 +504,10 @@ func (m *manager) forceSync(quotaID string) error {
 	m.bucketsLock.RLock()
 	b, ok := m.buckets[quotaID]
 	if !ok {
+		m.bucketsLock.RUnlock()
 		return nil
 	}
+	m.bucketsLock.RUnlock()
 	m.syncingBucketsLock.Lock()
 	m.syncingBuckets[b] = struct{}{}
 	m.syncingBucketsLock.Unlock()

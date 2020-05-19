@@ -53,7 +53,10 @@ func TestBucket(t *testing.T) {
 				Allow:  4,
 				Weight: 1,
 			},
-			&Result{Used: 2},
+			&Result{
+				Used:       2,
+				ExpiryTime: now().Unix(),
+			},
 			&Request{
 				Allow:  4,
 				Weight: 1,
@@ -71,7 +74,10 @@ func TestBucket(t *testing.T) {
 				Allow:  7,
 				Weight: 3,
 			},
-			&Result{Used: 3},
+			&Result{
+				Used:       3,
+				ExpiryTime: now().Unix(),
+			},
 			&Request{
 				Allow:  7,
 				Weight: 2,
@@ -89,8 +95,9 @@ func TestBucket(t *testing.T) {
 				Allow: 3,
 			},
 			&Result{
-				Used:     3,
-				Exceeded: 1,
+				Used:       3,
+				Exceeded:   1,
+				ExpiryTime: now().Unix(),
 			},
 			&Request{
 				Allow:  3,
@@ -213,6 +220,42 @@ func TestNeedToSync(t *testing.T) {
 		}
 		if c.want != b.needToSync() {
 			t.Errorf("want: %v got: %v", c.want, b.needToDelete())
+		}
+	}
+}
+
+func TestCalcLocalExpiry(t *testing.T) {
+
+	now, _ := time.Parse(time.RFC1123, "Mon, 31 Mar 2006 23:59:59 PST")
+	nowStartMinute, _ := time.Parse(time.RFC1123, "Mon, 31 Mar 2006 23:59:00 PST")
+	nowStartHour, _ := time.Parse(time.RFC1123, "Mon, 31 Mar 2006 23:00:00 PST")
+	nowStartDay, _ := time.Parse(time.RFC1123, "Mon, 31 Mar 2006 00:00:00 PST")
+	nowStartMonth, err := time.Parse(time.RFC1123, "Mon, 01 Mar 2006 00:00:00 PST")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		interval    int64
+		quotaLength string
+		want        time.Time
+	}{
+		{1, quotaSecond, now},
+		{2, quotaSecond, now.Add(time.Second)},
+		{1, quotaMinute, nowStartMinute.Add(time.Minute).Add(-time.Second)},
+		{2, quotaMinute, nowStartMinute.Add(2 * time.Minute).Add(-time.Second)},
+		{1, quotaHour, nowStartHour.Add(time.Hour).Add(-time.Second)},
+		{2, quotaHour, nowStartHour.Add(2 * time.Hour).Add(-time.Second)},
+		{1, quotaDay, nowStartDay.AddDate(0, 0, 1).Add(-time.Second)},
+		{2, quotaDay, nowStartDay.AddDate(0, 0, 2).Add(-time.Second)},
+		{1, quotaMonth, nowStartMonth.AddDate(0, 1, 0).Add(-time.Second)},
+		{2, quotaMonth, nowStartMonth.AddDate(0, 2, 0).Add(-time.Second)},
+	}
+
+	for _, tst := range tests {
+		got := calcLocalExpiry(now, tst.interval, tst.quotaLength)
+		if got != tst.want {
+			t.Errorf("%d %s got: %v, want: %v", tst.interval, tst.quotaLength, got, tst.want)
 		}
 	}
 }

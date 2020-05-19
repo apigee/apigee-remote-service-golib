@@ -206,6 +206,7 @@ func (m *manager) syncBucketWorker() {
 			if _, ok := m.syncingBuckets[bucket]; !ok {
 				m.syncingBuckets[bucket] = struct{}{}
 				m.syncingBucketsLock.Unlock()
+				// TODO: ideally, this should have a backoff on it
 				bucket.sync()
 				m.syncingBucketsLock.Lock()
 				delete(m.syncingBuckets, bucket)

@@ -20,10 +20,19 @@ import (
 	"fmt"
 	"net/http"
 	"path"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/log"
+)
+
+const (
+	quotaSecond = "second"
+	quotaMinute = "minute"
+	quotaHour   = "hour"
+	quotaDay    = "day"
+	quotaMonth  = "month"
 )
 
 // bucket tracks a specific quota instance
@@ -38,23 +47,26 @@ type bucket struct {
 	checked      time.Time     // last apply time
 	refreshAfter time.Duration // duration after synced
 	deleteAfter  time.Duration // duration after checked
-	invalidAfter time.Time     // result window is no longer valid after this
 }
 
 func newBucket(req Request, m *manager) *bucket {
+	req.TimeUnit = strings.ToLower(req.TimeUnit)
 	quotaURL := *m.baseURL
 	quotaURL.Path = path.Join(quotaURL.Path, quotaPath)
-	return &bucket{
+	b := &bucket{
 		request:      &req,
 		manager:      m,
 		quotaURL:     quotaURL.String(),
-		result:       nil,
 		created:      m.now(),
 		checked:      m.now(),
 		lock:         sync.RWMutex{},
 		deleteAfter:  defaultDeleteAfter,
 		refreshAfter: defaultRefreshAfter,
 	}
+	b.result = &Result{
+		ExpiryTime: calcLocalExpiry(b.now(), req.Interval, req.TimeUnit).Unix(),
+	}
+	return b
 }
 
 func (b *bucket) now() time.Time {
@@ -76,6 +88,14 @@ func (b *bucket) apply(req *Request) (*Result, error) {
 		ExpiryTime: b.checked.Unix(),
 		Timestamp:  b.checked.Unix(),
 	}
+
+	if b.windowExpired() {
+		b.result.Used = 0
+		b.result.Exceeded = 0
+		b.result.ExpiryTime = calcLocalExpiry(b.now(), req.Interval, req.TimeUnit).Unix()
+		b.request.Weight = 0
+	}
+
 	if b.result != nil {
 		res.Used = b.result.Used // start from last result
 		res.Used += b.result.Exceeded
@@ -190,4 +210,28 @@ func (b *bucket) windowExpired() bool {
 		return b.now().After(time.Unix(b.result.ExpiryTime, 0))
 	}
 	return false
+}
+
+func calcLocalExpiry(now time.Time, interval int64, timeUnit string) time.Time {
+
+	var expiry time.Time
+	switch timeUnit {
+	case quotaSecond:
+		start := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), now.Minute(), now.Second(), 0, now.Location())
+		expiry = start.Add(time.Duration(interval) * time.Second)
+	case quotaMinute:
+		start := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), now.Minute(), 0, 0, now.Location())
+		expiry = start.Add(time.Duration(interval) * time.Minute)
+	case quotaHour:
+		start := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), 0, 0, 0, now.Location())
+		expiry = start.Add(time.Duration(interval) * time.Hour)
+	case quotaDay:
+		start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		expiry = start.AddDate(0, 0, int(interval))
+	case quotaMonth:
+		start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		expiry = start.AddDate(0, int(interval), 0)
+	}
+
+	return expiry.Add(-time.Second)
 }
