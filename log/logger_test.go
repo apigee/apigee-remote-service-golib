@@ -18,90 +18,102 @@ import (
 	"testing"
 )
 
-func TestLogger(t *testing.T) {
-	if Log.(*defaultLogger).Level() != Info {
-		t.Errorf("Default log level should be info")
+func TestLevels(t *testing.T) {
+
+	checkLevel := func(lvl Level) {
+		t.Logf("checking level: %s", lvl)
+		l := &defaultLogger{level: lvl}
+		checkLogLevel(t, l, lvl)
+		l = &defaultLogger{}
+		l.SetLevel(lvl)
+		checkLogLevel(t, l, lvl)
+		lw := &LevelWrapper{Log, lvl}
+		checkLogLevel(t, lw, lvl)
 	}
 
-	if ParseLevel("DEBUG") != Debug {
-		t.Errorf("DEBUG level not parsed correctly")
-	}
-	if ParseLevel("INFO") != Info {
-		t.Errorf("INFO level not parsed correctly")
-	}
-	if ParseLevel("WARN") != Warn {
-		t.Errorf("WARN level not parsed correctly")
-	}
-	if ParseLevel("ERROR") != Error {
-		t.Errorf("ERROR level not parsed correctly")
+	checkLevel(Debug)
+	checkLevel(Info)
+	checkLevel(Warn)
+	checkLevel(Error)
+}
+
+func checkLogLevel(t *testing.T, l LoggerWithLevel, lvl Level) {
+
+	if lvl != l.Level() {
+		t.Errorf("bad level. want: %v, got: %v", lvl, l.Level())
 	}
 
-	l := defaultLogger{
-		level: Debug,
+	// tests global passthrough
+	tl := &testLogger{}
+	Log = &LevelWrapper{tl, lvl}
+	Debugf("debug")
+	Infof("info")
+	Warnf("warn")
+	Errorf("error")
+
+	if lvl == Debug {
+		if !l.DebugEnabled() {
+			t.Errorf("DEBUG should be enabled")
+		}
+		if len(tl.prints) < 4 {
+			t.Errorf("expected %d prints for %s got: %v", 4, lvl, tl.prints)
+		}
 	}
-	if !l.DebugEnabled() {
-		t.Errorf("DEBUG should be enabled")
+	if lvl == Info {
+		if !l.InfoEnabled() {
+			t.Errorf("INFO should be enabled")
+		}
+		if len(tl.prints) != 3 {
+			t.Errorf("expected %d prints for %s got: %v", 3, lvl, tl.prints)
+		}
 	}
-	if !l.InfoEnabled() {
-		t.Errorf("INFO should be enabled")
+	if lvl == Warn {
+		if !l.WarnEnabled() {
+			t.Errorf("WARN should be enabled")
+		}
+		if len(tl.prints) != 2 {
+			t.Errorf("expected %d prints for %s got: %v", 2, lvl, tl.prints)
+		}
 	}
-	if !l.WarnEnabled() {
-		t.Errorf("WARN should be enabled")
-	}
-	if !l.ErrorEnabled() {
-		t.Errorf("ERROR should be enabled")
+	if lvl == Error {
+		if !l.ErrorEnabled() {
+			t.Errorf("ERROR should be enabled")
+		}
+		if len(tl.prints) != 1 {
+			t.Errorf("expected %d prints for %s got: %v", 1, lvl, tl.prints)
+		}
 	}
 
-	l = defaultLogger{
-		level: Info,
+	if lvl < Error && l.ErrorEnabled() {
+		t.Errorf("ERROR should not be enabled")
 	}
-	if l.DebugEnabled() {
-		t.Errorf("DEBUG should not be enabled")
-	}
-	if !l.InfoEnabled() {
-		t.Errorf("INFO should be enabled")
-	}
-	if !l.WarnEnabled() {
-		t.Errorf("WARN should be enabled")
-	}
-	if !l.ErrorEnabled() {
-		t.Errorf("ERROR should be enabled")
-	}
-
-	l = defaultLogger{
-		level: Warn,
-	}
-	if l.DebugEnabled() {
-		t.Errorf("DEBUG should not be enabled")
-	}
-	if l.InfoEnabled() {
-		t.Errorf("INFO should not be enabled")
-	}
-	if !l.WarnEnabled() {
-		t.Errorf("WARN should be enabled")
-	}
-	if !l.ErrorEnabled() {
-		t.Errorf("ERROR should be enabled")
-	}
-
-	l = defaultLogger{
-		level: Error,
-	}
-	if l.DebugEnabled() {
-		t.Errorf("DEBUG should not be enabled")
-	}
-	if l.InfoEnabled() {
-		t.Errorf("INFO should not be enabled")
-	}
-	if l.WarnEnabled() {
+	if lvl < Warn && l.WarnEnabled() {
 		t.Errorf("WARN should not be enabled")
 	}
-	if !l.ErrorEnabled() {
-		t.Errorf("ERROR should be enabled")
+	if lvl < Info && l.InfoEnabled() {
+		t.Errorf("INFO should not be enabled")
 	}
+	if lvl < Debug && l.DebugEnabled() {
+		t.Errorf("DEBUG should not be enabled")
+	}
+}
 
-	l.SetLevel(Info)
-	if l.Level() != Info {
-		t.Errorf("Default log level should be info")
-	}
+type testLogger struct {
+	prints []string
+}
+
+func (d *testLogger) Debugf(format string, args ...interface{}) {
+	d.prints = append(d.prints, format)
+}
+
+func (d *testLogger) Infof(format string, args ...interface{}) {
+	d.prints = append(d.prints, format)
+}
+
+func (d *testLogger) Warnf(format string, args ...interface{}) {
+	d.prints = append(d.prints, format)
+}
+
+func (d *testLogger) Errorf(format string, args ...interface{}) {
+	d.prints = append(d.prints, format)
 }
