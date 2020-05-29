@@ -27,12 +27,12 @@ import (
 type Record struct {
 	ClientReceivedStartTimestamp int64  `json:"client_received_start_timestamp"`
 	ClientReceivedEndTimestamp   int64  `json:"client_received_end_timestamp"`
-	ClientSentStartTimestamp     int64  `json:"client_sent_start_timestamp"`
-	ClientSentEndTimestamp       int64  `json:"client_sent_end_timestamp"`
-	TargetReceivedStartTimestamp int64  `json:"target_received_start_timestamp,omitempty"`
-	TargetReceivedEndTimestamp   int64  `json:"target_received_end_timestamp,omitempty"`
 	TargetSentStartTimestamp     int64  `json:"target_sent_start_timestamp,omitempty"`
 	TargetSentEndTimestamp       int64  `json:"target_sent_end_timestamp,omitempty"`
+	TargetReceivedStartTimestamp int64  `json:"target_received_start_timestamp,omitempty"`
+	TargetReceivedEndTimestamp   int64  `json:"target_received_end_timestamp,omitempty"`
+	ClientSentStartTimestamp     int64  `json:"client_sent_start_timestamp"`
+	ClientSentEndTimestamp       int64  `json:"client_sent_end_timestamp"`
 	RecordType                   string `json:"recordType"`
 	APIProxy                     string `json:"apiproxy"`
 	RequestURI                   string `json:"request_uri"`
