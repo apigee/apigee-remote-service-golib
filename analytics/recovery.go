@@ -83,7 +83,7 @@ func (m *manager) crashRecovery() error {
 
 // recoverFile recovers gzipped data in a file and puts it into a new file.
 func (m *manager) recoverFile(oldName string, newFile *os.File) error {
-	log.Warnf("recover file: %s", oldName)
+	log.Infof("recover file: %s", oldName)
 	in, err := os.Open(oldName)
 	if err != nil {
 		return fmt.Errorf("open %s: %s", oldName, err)
