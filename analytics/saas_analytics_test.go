@@ -176,8 +176,6 @@ func (fs *fakeServer) uploadedRecords(tenant string) []Record {
 }
 
 func TestPushAnalytics(t *testing.T) {
-	t.Parallel()
-
 	fs := newFakeServer(t)
 	defer fs.close()
 
@@ -186,7 +184,7 @@ func TestPushAnalytics(t *testing.T) {
 	ts := int64(1521221450) // This timestamp is roughly 11:30 MST on Mar. 16, 2018.
 	now := func() time.Time { return time.Unix(ts, 0) }
 
-	testDir, err := ioutil.TempDir("", "")
+	testDir, err := ioutil.TempDir("", "TestPushAnalytics")
 	if err != nil {
 		t.Fatalf("ioutil.TempDir(): %s", err)
 	}
@@ -352,8 +350,6 @@ func TestPushAnalytics(t *testing.T) {
 }
 
 func TestPushAnalyticsMultipleRecords(t *testing.T) {
-	t.Parallel()
-
 	fs := newFakeServer(t)
 	defer fs.close()
 
@@ -362,7 +358,7 @@ func TestPushAnalyticsMultipleRecords(t *testing.T) {
 	ts := int64(1521221450) // This timestamp is roughly 11:30 MST on Mar. 16, 2018.
 	now := func() time.Time { return time.Unix(ts, 0) }
 
-	testDir, err := ioutil.TempDir("", "")
+	testDir, err := ioutil.TempDir("", "TestPushAnalyticsMultipleRecords")
 	if err != nil {
 		t.Fatalf("ioutil.TempDir(): %s", err)
 	}
@@ -502,8 +498,6 @@ func TestPushAnalyticsMultipleRecords(t *testing.T) {
 }
 
 func TestLoad(t *testing.T) {
-	t.Parallel()
-
 	const SendRecs = 100
 
 	fs := newFakeServer(t)
@@ -513,7 +507,7 @@ func TestLoad(t *testing.T) {
 	ts := int64(1521221450) // This timestamp is roughly 11:30 MST on Mar. 16, 2018.
 	now := func() time.Time { return time.Unix(ts, 0) }
 
-	testDir, err := ioutil.TempDir("", "")
+	testDir, err := ioutil.TempDir("", "TestLoad")
 	if err != nil {
 		t.Fatalf("ioutil.TempDir(): %s", err)
 	}
@@ -626,15 +620,13 @@ func checkAndClearGatewayFlowIDs(fs *fakeServer, t *testing.T) {
 }
 
 func TestUploadFailure(t *testing.T) {
-	t.Parallel()
-
 	fs := newFakeServer(t)
 	fs.failUpload = http.StatusInternalServerError
 	defer fs.close()
 
 	ts := int64(1521221450) // This timestamp is roughly 11:30 MST on Mar. 16, 2018.
 
-	d, err := ioutil.TempDir("", "")
+	d, err := ioutil.TempDir("", "TestUploadFailure")
 	if err != nil {
 		t.Fatalf("ioutil.TempDir(): %s", err)
 	}

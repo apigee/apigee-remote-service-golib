@@ -28,8 +28,6 @@ import (
 )
 
 func TestStagingSizeCap(t *testing.T) {
-	t.Parallel()
-
 	fs := newFakeServer(t)
 	fs.failUpload = http.StatusInternalServerError
 	defer fs.close()
@@ -37,7 +35,7 @@ func TestStagingSizeCap(t *testing.T) {
 	ts := int64(1521221450) // This timestamp is roughly 11:30 MST on Mar. 16, 2018.
 	now := func() time.Time { return time.Unix(ts, 0) }
 
-	workDir, err := ioutil.TempDir("", "")
+	workDir, err := ioutil.TempDir("", "TestStagingSizeCap")
 	if err != nil {
 		t.Fatalf("ioutil.TempDir(): %s", err)
 	}

@@ -32,7 +32,6 @@ import (
 )
 
 func TestFluentdAnalyticsMTLS(t *testing.T) {
-	t.Parallel()
 	ts := int64(1521221450) // This timestamp is roughly 11:30 MST on Mar. 16, 2018
 	now := func() time.Time { return time.Unix(ts, 0) }
 	startTime := now()
@@ -44,7 +43,8 @@ func TestFluentdAnalyticsMTLS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := ioutil.TempDir("", "")
+	t.Logf("port: %d", port)
+	d, err := ioutil.TempDir("", "TestFluentdAnalyticsMTLS")
 	if err != nil {
 		t.Fatalf("ioutil.TempDir: %s", err)
 	}
@@ -70,12 +70,12 @@ func TestFluentdAnalyticsMTLS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	go sendRecord(mgr, authContext, axRecord)
-
 	cert, err := tls.LoadX509KeyPair("testdata/cert.pem", "testdata/key.pem")
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	sendRecord(t, mgr, authContext, axRecord)
 	got := fluentdReceive(t, port, cert)
 
 	up := mgr.(*manager).uploader
@@ -96,7 +96,6 @@ func TestFluentdAnalyticsMTLS(t *testing.T) {
 }
 
 func TestFluentdAnalyticsTLSSkipVerify(t *testing.T) {
-	t.Parallel()
 	ts := int64(1521221450) // This timestamp is roughly 11:30 MST on Mar. 16, 2018
 	now := func() time.Time { return time.Unix(ts, 0) }
 	startTime := now()
@@ -108,7 +107,8 @@ func TestFluentdAnalyticsTLSSkipVerify(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := ioutil.TempDir("", "")
+	t.Logf("port: %d", port)
+	d, err := ioutil.TempDir("", "TestFluentdAnalyticsTLSSkipVerify")
 	if err != nil {
 		t.Fatalf("ioutil.TempDir: %s", err)
 	}
@@ -131,12 +131,12 @@ func TestFluentdAnalyticsTLSSkipVerify(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	go sendRecord(mgr, authContext, axRecord)
-
 	cert, err := tls.LoadX509KeyPair("testdata/cert.pem", "testdata/key.pem")
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	sendRecord(t, mgr, authContext, axRecord)
 	got := fluentdReceive(t, port, cert)
 
 	up := mgr.(*manager).uploader
@@ -157,7 +157,6 @@ func TestFluentdAnalyticsTLSSkipVerify(t *testing.T) {
 }
 
 func TestFluentdAnalyticsNoTLS(t *testing.T) {
-	t.Parallel()
 	ts := int64(1521221450) // This timestamp is roughly 11:30 MST on Mar. 16, 2018
 	now := func() time.Time { return time.Unix(ts, 0) }
 	startTime := now()
@@ -169,7 +168,8 @@ func TestFluentdAnalyticsNoTLS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := ioutil.TempDir("", "")
+	t.Logf("port: %d", port)
+	d, err := ioutil.TempDir("", "TestFluentdAnalyticsNoTLS")
 	if err != nil {
 		t.Fatalf("ioutil.TempDir: %s", err)
 	}
@@ -191,7 +191,7 @@ func TestFluentdAnalyticsNoTLS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	go sendRecord(mgr, authContext, axRecord)
+	sendRecord(t, mgr, authContext, axRecord)
 	got := fluentdReceive(t, port, tls.Certificate{})
 
 	up := mgr.(*manager).uploader
@@ -241,11 +241,11 @@ func makeRecord(startTime time.Time) Record {
 	}
 }
 
-func sendRecord(mgr Manager, authContext *auth.Context, axRecord Record) {
+func sendRecord(t *testing.T, mgr Manager, authContext *auth.Context, axRecord Record) {
 	if err := mgr.SendRecords(authContext, []Record{axRecord}); err != nil {
 		panic(err)
 	}
-	mgr.Close() // force write
+	go mgr.Close() // force write
 }
 
 func fluentdReceive(t *testing.T, port int, cert tls.Certificate) string {

@@ -279,7 +279,7 @@ func (m *manager) Close() {
 	close(m.uploadChan)
 	m.uploadersWait.Wait()
 
-	log.Infof("closed analytics manager")
+	log.Infof("closed analytics manager: %s", m.tempDir)
 }
 
 // stagingLoop periodically closes and sweeps open buckets to staging

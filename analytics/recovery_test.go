@@ -28,8 +28,6 @@ import (
 )
 
 func TestRecoverFile(t *testing.T) {
-	t.Parallel()
-
 	brokeFile, err := ioutil.TempFile("", "")
 	if err != nil {
 		t.Fatalf("ioutil.TempFile(): %v", err)
@@ -97,13 +95,11 @@ func readRecordsFromGZipFile(fileName string) ([]Record, error) {
 }
 
 func TestCrashRecovery(t *testing.T) {
-	t.Parallel()
-
 	fs := newFakeServer(t)
 	fs.failUpload = http.StatusInternalServerError
 	defer fs.close()
 
-	d, err := ioutil.TempDir("", "")
+	d, err := ioutil.TempDir("", "TestCrashRecovery")
 	if err != nil {
 		t.Fatalf("ioutil.TempDir(): %s", err)
 	}

@@ -151,7 +151,7 @@ func makeTestServer(auth *auth.Context, rec Record, t *testing.T) *testServer {
 		}
 		defer r.Body.Close()
 
-		log.Errorf("axRequest: %#v", axRequest)
+		log.Infof("axRequest: %#v", axRequest)
 
 		if axRequest.Organization != auth.Organization() {
 			t.Errorf("bad orgName")

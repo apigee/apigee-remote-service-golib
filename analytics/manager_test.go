@@ -15,8 +15,10 @@
 package analytics
 
 import (
+	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"testing"
 	"time"
 )
@@ -47,8 +49,14 @@ func TestLegacySelect(t *testing.T) {
 
 func TestStandardSelect(t *testing.T) {
 
+	workDir, err := ioutil.TempDir("", "TestStandardSelect")
+	if err != nil {
+		t.Fatalf("ioutil.TempDir(): %s", err)
+	}
+	defer os.RemoveAll(workDir)
+
 	opts := Options{
-		BufferPath:         "/tmp/apigee-ax/buffer/",
+		BufferPath:         workDir,
 		StagingFileLimit:   10,
 		BaseURL:            &url.URL{},
 		Key:                "key",
@@ -71,8 +79,14 @@ func TestStandardSelect(t *testing.T) {
 
 func TestStandardBadOptions(t *testing.T) {
 
+	workDir, err := ioutil.TempDir("", "TestStandardSelect")
+	if err != nil {
+		t.Fatalf("ioutil.TempDir(): %s", err)
+	}
+	defer os.RemoveAll(workDir)
+
 	opts := Options{
-		BufferPath:       "/tmp/apigee-ax/buffer/",
+		BufferPath:       workDir,
 		StagingFileLimit: 0,
 		BaseURL:          &url.URL{},
 		Key:              "",

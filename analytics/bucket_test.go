@@ -29,7 +29,7 @@ import (
 
 func TestBucket(t *testing.T) {
 
-	testDir, err := ioutil.TempDir("", "")
+	testDir, err := ioutil.TempDir("", "TestBucket")
 	if err != nil {
 		t.Fatalf("ioutil.TempDir(): %s", err)
 	}
