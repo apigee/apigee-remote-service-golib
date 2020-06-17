@@ -75,8 +75,9 @@ func TestFluentdAnalyticsMTLS(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	listener := fluentdListener(t, port, cert)
 	sendRecord(t, mgr, authContext, axRecord)
-	got := fluentdReceive(t, port, cert)
+	got := fluentdReceive(t, listener)
 
 	up := mgr.(*manager).uploader
 	uuid := up.(*fluentdUploader).clientUUID
@@ -136,8 +137,9 @@ func TestFluentdAnalyticsTLSSkipVerify(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	listener := fluentdListener(t, port, cert)
 	sendRecord(t, mgr, authContext, axRecord)
-	got := fluentdReceive(t, port, cert)
+	got := fluentdReceive(t, listener)
 
 	up := mgr.(*manager).uploader
 	uuid := up.(*fluentdUploader).clientUUID
@@ -191,8 +193,9 @@ func TestFluentdAnalyticsNoTLS(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	listener := fluentdListener(t, port, tls.Certificate{})
 	sendRecord(t, mgr, authContext, axRecord)
-	got := fluentdReceive(t, port, tls.Certificate{})
+	got := fluentdReceive(t, listener)
 
 	up := mgr.(*manager).uploader
 	uuid := up.(*fluentdUploader).clientUUID
@@ -248,7 +251,7 @@ func sendRecord(t *testing.T, mgr Manager, authContext *auth.Context, axRecord R
 	go mgr.Close() // force write
 }
 
-func fluentdReceive(t *testing.T, port int, cert tls.Certificate) string {
+func fluentdListener(t *testing.T, port int, cert tls.Certificate) net.Listener {
 	endpoint := fmt.Sprintf("localhost:%d", port)
 
 	var err error
@@ -263,6 +266,10 @@ func fluentdReceive(t *testing.T, port int, cert tls.Certificate) string {
 		t.Fatal(err)
 	}
 
+	return listener
+}
+
+func fluentdReceive(t *testing.T, listener net.Listener) string {
 	conn, err := listener.Accept()
 	if err != nil {
 		t.Fatal(err)
