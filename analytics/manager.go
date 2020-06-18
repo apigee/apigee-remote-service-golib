@@ -22,12 +22,15 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/auth"
 	"github.com/apigee/apigee-remote-service-golib/log"
 	"github.com/apigee/apigee-remote-service-golib/util"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 // A Manager wraps all things related to analytics processing
@@ -257,8 +260,23 @@ func (m *manager) startUploader(errHandler util.ErrorFunc) {
 	}()
 }
 
-func (m *manager) upload(tenant, file string) {
-	m.uploadChan <- m.uploader.workFunc(tenant, file)
+func (m *manager) upload(tenant, file string, numRecs int) {
+	promLabels := prometheus.Labels{"file": file}
+	prometheusInstrumentedWork := func(ctx context.Context) error {
+		err := m.uploader.workFunc(tenant, file)(ctx)
+		if err == nil {
+			prometheusRecordsByFile.Delete(promLabels)
+			org, env, err := getOrgAndEnvFromTenant(tenant)
+			if err != nil {
+				log.Warnf("unable to set uploaded status count: %s", err)
+			} else {
+				countLabels := prometheus.Labels{"org": org, "env": env, "status": "uploaded"}
+				prometheusRecordsCount.With(countLabels).Add(float64(numRecs))
+			}
+		}
+		return err
+	}
+	m.uploadChan <- prometheusInstrumentedWork
 }
 
 // Close shuts down the manager
@@ -306,12 +324,16 @@ func (m *manager) SendRecords(ctx *auth.Context, incoming []Record) error {
 	// Validate the records
 	now := m.now()
 	records := make([]Record, 0, len(incoming))
+	promLabels := prometheus.Labels{"org": ctx.Organization(), "env": ctx.Environment()}
+	localRecCount := prometheusRecordsCount.MustCurryWith(promLabels)
 	for _, record := range incoming {
 		record := record.ensureFields(ctx)
 		if err := record.validate(now); err != nil {
 			log.Errorf("invalid record %v: %s", record, err)
+			localRecCount.WithLabelValues("error").Inc()
 			continue
 		}
+		localRecCount.WithLabelValues("accepted").Inc()
 		records = append(records, record)
 	}
 
@@ -322,7 +344,7 @@ func (m *manager) writeToBucket(ctx *auth.Context, records []Record) error {
 	if len(records) == 0 {
 		return nil
 	}
-	tenant := fmt.Sprintf("%s~%s", ctx.Organization(), ctx.Environment())
+	tenant := getTenantName(ctx.Organization(), ctx.Environment())
 
 	m.bucketsLock.RLock()
 	if bucket, ok := m.buckets[tenant]; ok {
@@ -381,3 +403,25 @@ func (m *manager) getStagingDir(tenant string) string {
 func getTenantName(org, env string) string {
 	return fmt.Sprintf("%s~%s", org, env)
 }
+
+func getOrgAndEnvFromTenant(tenant string) (string, string, error) {
+	split := strings.Split(tenant, "~")
+	if len(split) != 2 {
+		return "", "", fmt.Errorf("deriving Org and Env from tenant: %s", tenant)
+	}
+	return split[0], split[1], nil
+}
+
+var (
+	prometheusRecordsCount = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Subsystem: "analytics",
+		Name:      "records_count",
+		Help:      "Analytics record counts by status",
+	}, []string{"org", "env", "status"})
+
+	prometheusRecordsByFile = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Subsystem: "analytics",
+		Name:      "records_staged",
+		Help:      "Analytics record counts by staging file",
+	}, []string{"file"})
+)

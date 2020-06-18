@@ -25,7 +25,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 )
 
-func (m *manager) stageFile(tenant, tempFile string) {
+func (m *manager) stageFile(tenant, tempFile string, numRecs int) {
 
 	stageDir := m.getStagingDir(tenant)
 	stagedFile := filepath.Join(stageDir, filepath.Base(tempFile))
@@ -33,8 +33,9 @@ func (m *manager) stageFile(tenant, tempFile string) {
 		log.Errorf("can't rename file: %s", err)
 		return
 	}
+	prometheusRecordsByFile.WithLabelValues(stagedFile).Set(float64(numRecs))
 
-	m.upload(tenant, stagedFile)
+	m.upload(tenant, stagedFile, numRecs)
 	log.Debugf("staged file: %s", stagedFile)
 }
 

@@ -60,6 +60,8 @@ func TestQuota(t *testing.T) {
 		Client:  http.DefaultClient,
 		Key:     "key",
 		Secret:  "secret",
+		Org:     "org",
+		Env:     "env",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -175,7 +177,7 @@ func TestSync(t *testing.T) {
 		secret:         "secret",
 	}
 
-	b := newBucket(*request, m)
+	b := newBucket(*request, m, m.prometheusLabelsForQuota(quotaID))
 	b.checked = now()
 	b.result = result
 	m.buckets = map[string]*bucket{quotaID: b}

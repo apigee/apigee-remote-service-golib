@@ -23,6 +23,7 @@ import (
 	"sync"
 
 	"github.com/apigee/apigee-remote-service-golib/log"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func newBucket(m *manager, up uploader, tenant, dir string) (*bucket, error) {
@@ -87,15 +88,20 @@ func (b *bucket) fileName() string {
 }
 
 func (b *bucket) runLoop() {
+	written := 0
+	promLabels := prometheus.Labels{"file": b.fileName()}
+	defer prometheusRecordsByFile.Delete(promLabels)
 	for records := range b.incoming {
 		b.uploader.write(records, b.w.writer)
+		written = written + len(records)
+		prometheusRecordsByFile.With(promLabels).Set(float64(written))
 	}
 
 	if err := b.w.close(); err != nil {
 		log.Errorf("Can't close bucket file: %s", err)
 	}
 
-	b.manager.stageFile(b.tenant, b.fileName())
+	b.manager.stageFile(b.tenant, b.fileName(), written)
 
 	if b.wait != nil {
 		b.wait.Done()

@@ -54,6 +54,8 @@ func NewManager(options Options) (Manager, error) {
 	v := newVerifier(jwtMan, keyVerifierOpts{
 		Client:   options.Client,
 		CacheTTL: options.APIKeyCacheDuration,
+		Org:      options.Org,
+		Env:      options.Env,
 	})
 	am := &manager{
 		jwtMan:   jwtMan,
@@ -173,11 +175,21 @@ type Options struct {
 	Client *http.Client
 	// APIKeyCacheDuration is the length of time APIKeys are cached when unable to refresh
 	APIKeyCacheDuration time.Duration
+	// Org is organization
+	Org string
+	// Env is environment
+	Env string
 }
 
 func (o *Options) validate() error {
 	if o.Client == nil {
 		return fmt.Errorf("client is required")
+	}
+	if o.Org == "" {
+		return fmt.Errorf("org is required")
+	}
+	if o.Env == "" {
+		return fmt.Errorf("env is required")
 	}
 	return nil
 }

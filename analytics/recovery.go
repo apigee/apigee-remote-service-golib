@@ -50,7 +50,7 @@ func (m *manager) crashRecovery() error {
 		// put staged files in upload queue
 		stagedFiles, err := m.getFilesInStaging()
 		for _, fi := range stagedFiles {
-			m.upload(tenant, fi)
+			m.upload(tenant, fi, 0)
 		}
 
 		// recover temp to staging and upload
@@ -75,7 +75,7 @@ func (m *manager) crashRecovery() error {
 				log.Warnf("unable to remove temp file: %s", tempFile)
 			}
 
-			m.upload(tenant, stageFile)
+			m.upload(tenant, stageFile, 0)
 		}
 	}
 	return errs

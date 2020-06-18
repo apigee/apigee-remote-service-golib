@@ -24,6 +24,8 @@ import (
 	"github.com/apigee/apigee-remote-service-golib/auth"
 	"github.com/apigee/apigee-remote-service-golib/log"
 	"github.com/apigee/apigee-remote-service-golib/product"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 const (
@@ -59,6 +61,8 @@ type manager struct {
 	syncingBucketsLock sync.Mutex
 	key                string
 	secret             string
+	org                string
+	env                string
 }
 
 // NewManager constructs and starts a new Manager. Call Close when done.
@@ -66,27 +70,29 @@ func NewManager(options Options) (Manager, error) {
 	if err := options.validate(); err != nil {
 		return nil, err
 	}
-	m := newManager(options.BaseURL, options.Client, options.Key, options.Secret)
+	m := newManager(options)
 	m.Start()
 	return m, nil
 }
 
 // newManager constructs a new Manager
-func newManager(baseURL *url.URL, client *http.Client, key, secret string) *manager {
+func newManager(options Options) *manager {
 	return &manager{
 		close:          make(chan bool),
 		closed:         make(chan bool),
-		client:         client,
+		client:         options.Client,
 		now:            time.Now,
 		syncRate:       defaultSyncRate,
 		buckets:        map[string]*bucket{},
 		syncQueue:      make(chan *bucket, syncQueueSize),
-		baseURL:        baseURL,
+		baseURL:        options.BaseURL,
 		numSyncWorkers: defaultNumSyncWorkers,
 		dupCache:       ResultCache{size: resultCacheBufferSize},
 		syncingBuckets: map[*bucket]struct{}{},
-		key:            key,
-		secret:         secret,
+		key:            options.Key,
+		secret:         options.Secret,
+		org:            options.Org,
+		env:            options.Env,
 	}
 }
 
@@ -146,7 +152,8 @@ func (m *manager) Apply(auth *auth.Context, p *product.APIProduct, args Args) (*
 		m.bucketsLock.Lock()
 		b, ok = m.buckets[quotaID]
 		if !ok || !b.compatible(req) {
-			b = newBucket(*req, m)
+			promLabels := m.prometheusLabelsForQuota(quotaID)
+			b = newBucket(*req, m, promLabels)
 			m.buckets[quotaID] = b
 			log.Debugf("new quota bucket: %s", quotaID)
 		}
@@ -185,6 +192,11 @@ func (m *manager) syncLoop() {
 				m.bucketsLock.Lock()
 				for _, id := range deleteIDs {
 					delete(m.buckets, id)
+					labels := m.prometheusLabelsForQuota(id)
+					prometheusBucketWindowExpires.Delete(labels)
+					prometheusBucketChecked.Delete(labels)
+					prometheusBucketSynced.Delete(labels)
+					prometheusBucketValue.Delete(labels)
 				}
 				m.bucketsLock.Unlock()
 			}
@@ -195,6 +207,10 @@ func (m *manager) syncLoop() {
 			return
 		}
 	}
+}
+
+func (m *manager) prometheusLabelsForQuota(quotaID string) prometheus.Labels {
+	return prometheus.Labels{"org": m.org, "env": m.env, "quota": quotaID}
 }
 
 // worker routine for syncing a bucket with the server
@@ -230,14 +246,46 @@ type Options struct {
 	Key string
 	// Secret is provisioning secret
 	Secret string
+	// Org is organization
+	Org string
+	// Env is environment
+	Env string
 }
 
 func (o *Options) validate() error {
 	if o.Client == nil ||
 		o.BaseURL == nil ||
+		o.Org == "" ||
+		o.Env == "" ||
 		o.Key == "" ||
 		o.Secret == "" {
 		return fmt.Errorf("all quota options are required")
 	}
 	return nil
 }
+
+var (
+	prometheusBucketValue = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Subsystem: "quota",
+		Name:      "value",
+		Help:      "Current value of a quota",
+	}, []string{"org", "env", "quota"})
+
+	prometheusBucketChecked = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Subsystem: "quota",
+		Name:      "checked",
+		Help:      "Time quota was last checked",
+	}, []string{"org", "env", "quota"})
+
+	prometheusBucketSynced = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Subsystem: "quota",
+		Name:      "synced",
+		Help:      "Time quota was last synced",
+	}, []string{"org", "env", "quota"})
+
+	prometheusBucketWindowExpires = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Subsystem: "quota",
+		Name:      "window_expires",
+		Help:      "Time quota window will expire",
+	}, []string{"org", "env", "quota"})
+)

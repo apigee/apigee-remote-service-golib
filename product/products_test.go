@@ -63,6 +63,8 @@ func TestValidate(t *testing.T) {
 		BaseURL:     serverURL,
 		RefreshRate: time.Hour,
 		Client:      http.DefaultClient,
+		Org:         "org",
+		Env:         "env",
 		Key:         "x",
 		Secret:      "x",
 	}

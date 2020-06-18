@@ -35,6 +35,8 @@ import (
 	"github.com/apigee/apigee-remote-service-golib/log"
 	"github.com/apigee/apigee-remote-service-golib/util"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -53,13 +55,14 @@ type keyVerifier interface {
 }
 
 type keyVerifierImpl struct {
-	jwtMan     *jwtManager
-	cache      cache.ExpiringCache
-	now        func() time.Time
-	client     *http.Client
-	herdBuster singleflight.Group
-	knownBad   cache.ExpiringCache
-	checking   sync.Map
+	jwtMan           *jwtManager
+	cache            cache.ExpiringCache
+	now              func() time.Time
+	client           *http.Client
+	herdBuster       singleflight.Group
+	knownBad         cache.ExpiringCache
+	checking         sync.Map
+	prometheusLabels prometheus.Labels
 }
 
 type keyVerifierOpts struct {
@@ -67,6 +70,8 @@ type keyVerifierOpts struct {
 	CacheEvictionInterval time.Duration
 	MaxCachedEntries      int
 	Client                *http.Client
+	Org                   string
+	Env                   string
 }
 
 func newVerifier(jwtMan *jwtManager, opts keyVerifierOpts) keyVerifier {
@@ -80,11 +85,12 @@ func newVerifier(jwtMan *jwtManager, opts keyVerifierOpts) keyVerifier {
 		opts.MaxCachedEntries = defaultMaxCachedEntries
 	}
 	return &keyVerifierImpl{
-		jwtMan:   jwtMan,
-		cache:    cache.NewLRU(opts.CacheTTL, opts.CacheEvictionInterval, int32(opts.MaxCachedEntries)),
-		now:      time.Now,
-		client:   opts.Client,
-		knownBad: cache.NewLRU(defaultBadEntryCacheTTL, opts.CacheEvictionInterval, 100),
+		jwtMan:           jwtMan,
+		cache:            cache.NewLRU(opts.CacheTTL, opts.CacheEvictionInterval, int32(opts.MaxCachedEntries)),
+		now:              time.Now,
+		client:           opts.Client,
+		knownBad:         cache.NewLRU(defaultBadEntryCacheTTL, opts.CacheEvictionInterval, 100),
+		prometheusLabels: prometheus.Labels{"org": opts.Org, "env": opts.Env},
 	}
 }
 
@@ -154,6 +160,10 @@ func (kv *keyVerifierImpl) fetchToken(ctx context.Context, apiKey string) (map[s
 	kv.cache.Set(apiKey, claims)
 	kv.knownBad.Remove(apiKey)
 
+	stats := kv.cache.Stats()
+	prometheusAPIKeysCacheHits.With(kv.prometheusLabels).Set(float64(stats.Hits))
+	prometheusAPIKeysCacheMisses.With(kv.prometheusLabels).Set(float64(stats.Misses))
+
 	return claims, nil
 }
 
@@ -211,3 +221,17 @@ func (kv *keyVerifierImpl) Verify(ctx context.Context, apiKey string) (claims ma
 	// not found, force new request
 	return kv.singleFetchToken(ctx, apiKey)
 }
+
+var (
+	prometheusAPIKeysCacheHits = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Subsystem: "auth",
+		Name:      "apikeys_cache_hit_count",
+		Help:      "Number of apikey cache hits",
+	}, []string{"org", "env"})
+
+	prometheusAPIKeysCacheMisses = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Subsystem: "auth",
+		Name:      "apikeys_cache_miss_count",
+		Help:      "Number of apikey cache misses",
+	}, []string{"org", "env"})
+)

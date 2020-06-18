@@ -117,12 +117,13 @@ func TestBucket(t *testing.T) {
 		t.Logf("** Executing test case '%s' **", id)
 
 		b := &bucket{
-			manager:     m,
-			request:     c.priorRequest,
-			result:      c.priorResult,
-			created:     now(),
-			lock:        sync.RWMutex{},
-			deleteAfter: defaultDeleteAfter,
+			manager:          m,
+			request:          c.priorRequest,
+			result:           c.priorResult,
+			created:          now(),
+			lock:             sync.RWMutex{},
+			deleteAfter:      defaultDeleteAfter,
+			prometheusLabels: m.prometheusLabelsForQuota(id),
 		}
 
 		res, err := b.apply(c.request)

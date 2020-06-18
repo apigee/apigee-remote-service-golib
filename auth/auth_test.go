@@ -49,6 +49,8 @@ func TestNewManager(t *testing.T) {
 	opts := Options{
 		PollInterval: time.Hour,
 		Client:       &http.Client{},
+		Org:          "org",
+		Env:          "env",
 	}
 	m, err := NewManager(opts)
 	if err != nil {

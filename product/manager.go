@@ -30,6 +30,8 @@ import (
 	"github.com/apigee/apigee-remote-service-golib/auth"
 	"github.com/apigee/apigee-remote-service-golib/log"
 	"github.com/apigee/apigee-remote-service-golib/util"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 const productsURL = "/products"
@@ -52,14 +54,15 @@ type Manager interface {
 
 func createManager(options Options) *manager {
 	return &manager{
-		baseURL:     options.BaseURL,
-		closedChan:  make(chan bool),
-		returnChan:  make(chan map[string]*APIProduct),
-		closed:      util.NewAtomicBool(false),
-		refreshRate: options.RefreshRate,
-		client:      options.Client,
-		key:         options.Key,
-		secret:      options.Secret,
+		baseURL:          options.BaseURL,
+		closedChan:       make(chan bool),
+		returnChan:       make(chan map[string]*APIProduct),
+		closed:           util.NewAtomicBool(false),
+		refreshRate:      options.RefreshRate,
+		client:           options.Client,
+		key:              options.Key,
+		secret:           options.Secret,
+		prometheusLabels: prometheus.Labels{"org": options.Org, "env": options.Env},
 	}
 }
 
@@ -75,6 +78,7 @@ type manager struct {
 	secret           string
 	productsMux      productsMux
 	cancelPolling    context.CancelFunc
+	prometheusLabels prometheus.Labels
 }
 
 func (p *manager) start() {
@@ -163,6 +167,8 @@ func (p *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error
 
 		pm := p.getProductsMap(ctx, res)
 		p.productsMux.Set(pm)
+
+		prometheusProductsRecords.With(p.prometheusLabels).Set(float64(len(pm)))
 
 		log.Debugf("retrieved %d products, kept %d", len(res.APIProducts), len(pm))
 
@@ -411,3 +417,11 @@ func (h productsMux) mux() {
 		}
 	}
 }
+
+var (
+	prometheusProductsRecords = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Subsystem: "products",
+		Name:      "cached",
+		Help:      "Number of products cached in memory",
+	}, []string{"org", "env"})
+)

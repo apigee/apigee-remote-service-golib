@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/log"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 const (
@@ -37,31 +38,33 @@ const (
 
 // bucket tracks a specific quota instance
 type bucket struct {
-	manager      *manager
-	quotaURL     string
-	request      *Request // accumulated for sync
-	result       *Result
-	created      time.Time
-	lock         sync.RWMutex
-	synced       time.Time     // last sync time
-	checked      time.Time     // last apply time
-	refreshAfter time.Duration // duration after synced
-	deleteAfter  time.Duration // duration after checked
+	manager          *manager
+	quotaURL         string
+	request          *Request // accumulated for sync
+	result           *Result
+	created          time.Time
+	lock             sync.RWMutex
+	synced           time.Time     // last sync time
+	checked          time.Time     // last apply time
+	refreshAfter     time.Duration // duration after synced
+	deleteAfter      time.Duration // duration after checked
+	prometheusLabels prometheus.Labels
 }
 
-func newBucket(req Request, m *manager) *bucket {
+func newBucket(req Request, m *manager, promLabels prometheus.Labels) *bucket {
 	req.TimeUnit = strings.ToLower(req.TimeUnit)
 	quotaURL := *m.baseURL
 	quotaURL.Path = path.Join(quotaURL.Path, quotaPath)
 	b := &bucket{
-		request:      &req,
-		manager:      m,
-		quotaURL:     quotaURL.String(),
-		created:      m.now(),
-		checked:      m.now(),
-		lock:         sync.RWMutex{},
-		deleteAfter:  defaultDeleteAfter,
-		refreshAfter: defaultRefreshAfter,
+		request:          &req,
+		manager:          m,
+		quotaURL:         quotaURL.String(),
+		created:          m.now(),
+		checked:          m.now(),
+		lock:             sync.RWMutex{},
+		deleteAfter:      defaultDeleteAfter,
+		refreshAfter:     defaultRefreshAfter,
+		prometheusLabels: promLabels,
 	}
 	b.result = &Result{
 		ExpiryTime: calcLocalExpiry(b.now(), req.Interval, req.TimeUnit).Unix(),
@@ -94,6 +97,7 @@ func (b *bucket) apply(req *Request) (*Result, error) {
 		b.result.Exceeded = 0
 		b.result.ExpiryTime = calcLocalExpiry(b.now(), req.Interval, req.TimeUnit).Unix()
 		b.request.Weight = 0
+		prometheusBucketWindowExpires.With(b.prometheusLabels).Set(float64(b.result.ExpiryTime))
 	}
 
 	if b.result != nil {
@@ -108,6 +112,9 @@ func (b *bucket) apply(req *Request) (*Result, error) {
 		res.Exceeded = res.Used - res.Allowed
 		res.Used = res.Allowed
 	}
+
+	prometheusBucketChecked.With(b.prometheusLabels).SetToCurrentTime()
+	prometheusBucketValue.With(b.prometheusLabels).Set(float64(res.Used))
 
 	return res, nil
 }
@@ -175,7 +182,6 @@ func (b *bucket) sync() error {
 			return err
 		}
 
-		log.Debugf("quota synced: %#v", quotaResult)
 		b.lock.Lock()
 		b.synced = b.now()
 		if b.result != nil && b.result.ExpiryTime != quotaResult.ExpiryTime {
@@ -185,6 +191,10 @@ func (b *bucket) sync() error {
 		}
 		b.result = &quotaResult
 		b.lock.Unlock()
+
+		prometheusBucketSynced.With(b.prometheusLabels).SetToCurrentTime()
+
+		log.Debugf("quota synced: %#v", quotaResult)
 		return nil
 
 	default:
