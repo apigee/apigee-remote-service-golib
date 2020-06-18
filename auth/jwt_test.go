@@ -179,7 +179,7 @@ func generateJWT(privateKey *rsa.PrivateKey) (string, error) {
 	token.Set("application_name", "61cd4d83-06b5-4270-a9ee-cf9255ef45c3")
 	token.Set("scope", "scope1 scope2")
 	token.Set("api_product_list", []string{"TestProduct"})
-	payload, err := token.Sign(jwa.RS256, privateKey)
+	payload, err := jwt.Sign(token, jwa.RS256, privateKey)
 
 	return string(payload), err
 }
@@ -192,7 +192,7 @@ func generateExpiredJWT(privateKey *rsa.PrivateKey) (string, error) {
 	token.Set(jwt.NotBeforeKey, (time.Now().Add(-10 * time.Minute)).Unix())
 	token.Set(jwt.IssuedAtKey, (time.Now().Add(-10 * time.Minute)).Unix())
 	token.Set(jwt.ExpirationKey, (time.Now().Add(-1 * time.Minute)).Unix())
-	payload, err := token.Sign(jwa.RS256, privateKey)
+	payload, err := jwt.Sign(token, jwa.RS256, privateKey)
 
 	return string(payload), err
 }
@@ -205,7 +205,7 @@ func generateFutureJWT(privateKey *rsa.PrivateKey) (string, error) {
 	token.Set(jwt.NotBeforeKey, (time.Now().Add(5 * time.Second)).Unix())
 	token.Set(jwt.IssuedAtKey, (time.Now().Add(5 * time.Second)).Unix())
 	token.Set(jwt.ExpirationKey, (time.Now().Add(2 * time.Second)).Unix())
-	payload, err := token.Sign(jwa.RS256, privateKey)
+	payload, err := jwt.Sign(token, jwa.RS256, privateKey)
 
 	return string(payload), err
 }

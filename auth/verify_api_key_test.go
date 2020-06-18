@@ -102,7 +102,7 @@ func generateAPIKeyJWT(privateKey *rsa.PrivateKey) (string, error) {
 	token.Set("client_id", "yBQ5eXZA8rSoipYEi1Rmn0Z8RKtkGI4H")
 	token.Set("application_name", "61cd4d83-06b5-4270-a9ee-cf9255ef45c3")
 	token.Set("api_product_list", []string{"TestProduct"})
-	payload, err := token.Sign(jwa.RS256, privateKey)
+	payload, err := jwt.Sign(token, jwa.RS256, privateKey)
 
 	return string(payload), err
 }

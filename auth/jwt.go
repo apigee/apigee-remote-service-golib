@@ -116,16 +116,14 @@ func (a *jwtManager) parseJWT(ctx adapterContext.Context, raw string, verify boo
 		if err != nil {
 			return nil, err
 		}
-	}
 
-	if verify {
 		// verify fields
 		token, err := jwt.ParseString(raw)
 		if err != nil {
 			return nil, errors.Wrap(err, "invalid jws message")
 		}
 
-		err = token.Verify(jwt.WithAcceptableSkew(acceptableSkew))
+		err = jwt.Verify(token, jwt.WithAcceptableSkew(acceptableSkew))
 		if err != nil {
 			return nil, errors.Wrap(err, "invalid jws message")
 		}
