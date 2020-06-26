@@ -30,8 +30,6 @@ func TestLegacySelect(t *testing.T) {
 		BufferPath:       "",
 		StagingFileLimit: 10,
 		BaseURL:          &url.URL{},
-		Key:              "key",
-		Secret:           "secret",
 		Client:           http.DefaultClient,
 		now:              time.Now,
 	}
@@ -59,8 +57,6 @@ func TestStandardSelect(t *testing.T) {
 		BufferPath:         workDir,
 		StagingFileLimit:   10,
 		BaseURL:            &url.URL{},
-		Key:                "key",
-		Secret:             "secret",
 		Client:             http.DefaultClient,
 		now:                time.Now,
 		CollectionInterval: time.Minute,
@@ -89,8 +85,6 @@ func TestStandardBadOptions(t *testing.T) {
 		BufferPath:       workDir,
 		StagingFileLimit: 0,
 		BaseURL:          &url.URL{},
-		Key:              "",
-		Secret:           "",
 		Client:           http.DefaultClient,
 		now:              time.Now,
 	}

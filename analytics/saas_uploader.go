@@ -40,8 +40,6 @@ type uploader interface {
 type saasUploader struct {
 	client  *http.Client
 	baseURL *url.URL
-	key     string
-	secret  string
 	now     func() time.Time
 }
 
@@ -158,8 +156,6 @@ func (s *saasUploader) signedURL(subdir, fileName string) (string, error) {
 	q.Add("file_content_type", "application/x-gzip")
 	q.Add("encrypt", "true")
 	req.URL.RawQuery = q.Encode()
-
-	req.SetBasicAuth(s.key, s.secret)
 
 	resp, err := s.client.Do(req)
 	if err != nil {

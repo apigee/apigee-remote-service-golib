@@ -60,8 +60,6 @@ func createManager(options Options) *manager {
 		closed:           util.NewAtomicBool(false),
 		refreshRate:      options.RefreshRate,
 		client:           options.Client,
-		key:              options.Key,
-		secret:           options.Secret,
 		prometheusLabels: prometheus.Labels{"org": options.Org, "env": options.Env},
 	}
 }
@@ -74,8 +72,6 @@ type manager struct {
 	refreshRate      time.Duration
 	refreshTimerChan <-chan time.Time
 	client           *http.Client
-	key              string
-	secret           string
 	productsMux      productsMux
 	cancelPolling    context.CancelFunc
 	prometheusLabels prometheus.Labels
@@ -136,7 +132,6 @@ func (p *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error
 
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/json")
-		req.SetBasicAuth(p.key, p.secret)
 
 		log.Debugf("retrieving products from: %s", apiURL.String())
 

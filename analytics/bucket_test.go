@@ -40,8 +40,6 @@ func TestBucket(t *testing.T) {
 	uploader := &saasUploader{
 		client:  http.DefaultClient,
 		baseURL: &url.URL{},
-		key:     "key",
-		secret:  "secret",
 		now:     now,
 	}
 

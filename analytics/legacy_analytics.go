@@ -53,7 +53,6 @@ func (oa *legacyAnalytics) SendRecords(auth *auth.Context, records []Record) err
 		return err
 	}
 
-	req.SetBasicAuth(auth.Key(), auth.Secret())
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
