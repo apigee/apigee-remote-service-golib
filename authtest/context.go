@@ -25,8 +25,6 @@ type Context struct {
 	remoteServiceAPI *url.URL
 	orgName          string
 	envName          string
-	key              string
-	secret           string
 }
 
 // NewContext constructs a new test context.
@@ -52,12 +50,6 @@ func (c *Context) Organization() string { return c.orgName }
 
 // Environment gets this context's environment.
 func (c *Context) Environment() string { return c.envName }
-
-// Key gets this context's API key.
-func (c *Context) Key() string { return c.key }
-
-// Secret gets this context's API secret.
-func (c *Context) Secret() string { return c.secret }
 
 // SetOrganization sets this context's organization.
 func (c *Context) SetOrganization(o string) { c.orgName = o }

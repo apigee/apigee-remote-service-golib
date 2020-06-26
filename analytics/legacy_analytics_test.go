@@ -188,8 +188,6 @@ type TestContext struct {
 	remoteServiceAPI *url.URL
 	orgName          string
 	envName          string
-	key              string
-	secret           string
 }
 
 func (h *TestContext) InternalAPI() *url.URL {
@@ -203,12 +201,6 @@ func (h *TestContext) Organization() string {
 }
 func (h *TestContext) Environment() string {
 	return h.envName
-}
-func (h *TestContext) Key() string {
-	return h.key
-}
-func (h *TestContext) Secret() string {
-	return h.secret
 }
 
 func timeToUnix(t time.Time) int64 {

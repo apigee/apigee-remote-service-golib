@@ -51,8 +51,6 @@ func TestValidate(t *testing.T) {
 		BaseURL:     serverURL,
 		RefreshRate: time.Second,
 		Client:      http.DefaultClient,
-		Key:         "x",
-		Secret:      "x",
 	}
 	p, err = NewManager(opts)
 	if err == nil {
@@ -65,8 +63,6 @@ func TestValidate(t *testing.T) {
 		Client:      http.DefaultClient,
 		Org:         "org",
 		Env:         "env",
-		Key:         "x",
-		Secret:      "x",
 	}
 	p, err = NewManager(opts)
 	if err != nil {

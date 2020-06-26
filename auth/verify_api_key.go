@@ -122,7 +122,6 @@ func (kv *keyVerifierImpl) fetchToken(ctx context.Context, apiKey string) (map[s
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.SetBasicAuth(ctx.Key(), ctx.Secret())
 
 	resp, err := kv.client.Do(req)
 	if err != nil {

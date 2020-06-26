@@ -110,8 +110,6 @@ func TestCrashRecovery(t *testing.T) {
 	uploader := &saasUploader{
 		client:  http.DefaultClient,
 		baseURL: baseURL,
-		key:     "key",
-		secret:  "secret",
 		now:     now,
 	}
 

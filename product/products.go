@@ -42,10 +42,6 @@ type Options struct {
 	BaseURL *url.URL
 	// RefreshRate determines how often the products are refreshed
 	RefreshRate time.Duration
-	// Key is provisioning key
-	Key string
-	// Secret is provisioning secret
-	Secret string
 	// Org is organization
 	Org string
 	// Env is environment
@@ -57,9 +53,7 @@ func (o *Options) validate() error {
 		o.BaseURL == nil ||
 		o.RefreshRate <= 0 ||
 		o.Org == "" ||
-		o.Env == "" ||
-		o.Key == "" ||
-		o.Secret == "" {
+		o.Env == "" {
 		return fmt.Errorf("all products options are required")
 	}
 	if o.RefreshRate < time.Minute {

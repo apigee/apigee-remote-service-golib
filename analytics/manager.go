@@ -65,8 +65,6 @@ func NewManager(opts Options) (Manager, error) {
 		uploader = &saasUploader{
 			client:  opts.Client,
 			baseURL: opts.BaseURL,
-			key:     opts.Key,
-			secret:  opts.Secret,
 			now:     opts.now,
 		}
 	}
@@ -136,10 +134,6 @@ type Options struct {
 	StagingFileLimit int
 	// Base Apigee URL (legacy saas)
 	BaseURL *url.URL
-	// Key for submit auth (legacy saas)
-	Key string
-	// Secret for submit auth (legacy saas)
-	Secret string
 	// Client is a configured HTTPClient
 	Client *http.Client
 	// SendChannelSize is the size of the records channel
@@ -163,9 +157,7 @@ type Options struct {
 func (o *Options) validate() error {
 	if o.BufferPath == "" ||
 		o.StagingFileLimit <= 0 ||
-		o.Key == "" ||
 		o.Client == nil ||
-		o.Secret == "" ||
 		o.now == nil {
 		return fmt.Errorf("all analytics options are required")
 	}

@@ -195,8 +195,6 @@ func TestPushAnalytics(t *testing.T) {
 	uploader := &saasUploader{
 		client:  http.DefaultClient,
 		baseURL: baseURL,
-		key:     "key",
-		secret:  "secret",
 		now:     now,
 	}
 
@@ -369,8 +367,6 @@ func TestPushAnalyticsMultipleRecords(t *testing.T) {
 	uploader := &saasUploader{
 		client:  http.DefaultClient,
 		baseURL: baseURL,
-		key:     "key",
-		secret:  "secret",
 		now:     now,
 	}
 
@@ -518,8 +514,6 @@ func TestLoad(t *testing.T) {
 	uploader := &saasUploader{
 		client:  http.DefaultClient,
 		baseURL: baseURL,
-		key:     "key",
-		secret:  "secret",
 		now:     now,
 	}
 
@@ -638,8 +632,6 @@ func TestUploadFailure(t *testing.T) {
 	uploader := &saasUploader{
 		client:  http.DefaultClient,
 		baseURL: baseURL,
-		key:     "key",
-		secret:  "secret",
 		now:     now,
 	}
 

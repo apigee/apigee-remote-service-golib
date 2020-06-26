@@ -155,7 +155,6 @@ func (b *bucket) sync() error {
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.SetBasicAuth(b.manager.key, b.manager.secret)
 
 	log.Debugf("sending quota: %s", body)
 

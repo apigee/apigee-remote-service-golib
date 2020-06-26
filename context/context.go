@@ -22,9 +22,6 @@ import (
 type Context interface {
 	Organization() string
 	Environment() string
-	Key() string
-	Secret() string
-
 	InternalAPI() *url.URL
 	RemoteServiceAPI() *url.URL
 }

@@ -58,8 +58,6 @@ func TestQuota(t *testing.T) {
 	m, err := NewManager(Options{
 		BaseURL: context.InternalAPI(),
 		Client:  http.DefaultClient,
-		Key:     "key",
-		Secret:  "secret",
 		Org:     "org",
 		Env:     "env",
 	})
@@ -173,8 +171,6 @@ func TestSync(t *testing.T) {
 		baseURL:        context.InternalAPI(),
 		numSyncWorkers: 1,
 		syncingBuckets: map[*bucket]struct{}{},
-		key:            "key",
-		secret:         "secret",
 	}
 
 	b := newBucket(*request, m, m.prometheusLabelsForQuota(quotaID))
@@ -276,8 +272,6 @@ func TestDisconnected(t *testing.T) {
 		numSyncWorkers: 1,
 		buckets:        map[string]*bucket{},
 		syncingBuckets: map[*bucket]struct{}{},
-		key:            "key",
-		secret:         "secret",
 	}
 
 	p := &product.APIProduct{
@@ -376,8 +370,6 @@ func TestWindowExpired(t *testing.T) {
 		numSyncWorkers: 1,
 		buckets:        map[string]*bucket{},
 		syncingBuckets: map[*bucket]struct{}{},
-		key:            "key",
-		secret:         "secret",
 	}
 
 	p := &product.APIProduct{
@@ -451,19 +443,6 @@ func TestWindowExpired(t *testing.T) {
 	if res.Exceeded != 0 {
 		t.Errorf("got: %d, want: %d", res.Exceeded, 0)
 	}
-
-	// res, err = m.Apply(authContext, p, args)
-	// bucket = m.buckets[quotaID]
-	// err = bucket.sync() // after window expiration, should reset
-	// if err != nil {
-	// 	t.Errorf("got error: %v", err)
-	// }
-	// if bucket.result.Used != 1 {
-	// 	t.Errorf("got: %d, want: %d", bucket.result.Used, 1)
-	// }
-	// if bucket.result.Exceeded != 0 {
-	// 	t.Errorf("got: %d, want: %d", bucket.result.Exceeded, 0)
-	// }
 }
 
 type errControl struct {
@@ -476,13 +455,6 @@ func testServer(serverResult *Result, now func() time.Time, errC *errControl) *h
 		if errC != nil && errC.send != 200 {
 			w.WriteHeader(errC.send)
 			w.Write([]byte("error"))
-			return
-		}
-
-		username, password, ok := r.BasicAuth()
-		if !ok || username != "key" || password != "secret" {
-			w.WriteHeader(403)
-			w.Write([]byte("invalid basic auth"))
 			return
 		}
 

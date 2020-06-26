@@ -59,8 +59,6 @@ type manager struct {
 	dupCache           ResultCache
 	syncingBuckets     map[*bucket]struct{}
 	syncingBucketsLock sync.Mutex
-	key                string
-	secret             string
 	org                string
 	env                string
 }
@@ -89,8 +87,6 @@ func newManager(options Options) *manager {
 		numSyncWorkers: defaultNumSyncWorkers,
 		dupCache:       ResultCache{size: resultCacheBufferSize},
 		syncingBuckets: map[*bucket]struct{}{},
-		key:            options.Key,
-		secret:         options.Secret,
 		org:            options.Org,
 		env:            options.Env,
 	}
@@ -242,10 +238,6 @@ type Options struct {
 	Client *http.Client
 	// BaseURL of the Apigee internal proxy
 	BaseURL *url.URL
-	// Key is provisioning key
-	Key string
-	// Secret is provisioning secret
-	Secret string
 	// Org is organization
 	Org string
 	// Env is environment
@@ -256,9 +248,7 @@ func (o *Options) validate() error {
 	if o.Client == nil ||
 		o.BaseURL == nil ||
 		o.Org == "" ||
-		o.Env == "" ||
-		o.Key == "" ||
-		o.Secret == "" {
+		o.Env == "" {
 		return fmt.Errorf("all quota options are required")
 	}
 	return nil
