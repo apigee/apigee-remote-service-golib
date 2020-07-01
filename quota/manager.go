@@ -15,6 +15,7 @@
 package quota
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -24,6 +25,7 @@ import (
 	"github.com/apigee/apigee-remote-service-golib/auth"
 	"github.com/apigee/apigee-remote-service-golib/log"
 	"github.com/apigee/apigee-remote-service-golib/product"
+	"github.com/apigee/apigee-remote-service-golib/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -38,6 +40,16 @@ const (
 	resultCacheBufferSize = 30
 )
 
+/*
+Dispatch basically works like this:
+	every m.syncRate tick do
+		if bucket needs to sync and isn't syncing
+			m.bucketToSyncQueue <- bucket
+	each of m.numSyncWorkers do:
+		bucket <-m.bucketToSyncQueue
+			bucket.sync() with backoff
+*/
+
 // A Manager tracks multiple Apigee quotas
 type Manager interface {
 	Start()
@@ -48,19 +60,21 @@ type Manager interface {
 type manager struct {
 	baseURL            *url.URL
 	close              chan bool
-	closed             chan bool
 	client             *http.Client
 	now                func() time.Time
 	syncRate           time.Duration
 	bucketsLock        sync.RWMutex
 	buckets            map[string]*bucket // Map from ID -> bucket
-	syncQueue          chan *bucket
+	bucketToSyncQueue  chan *bucket
 	numSyncWorkers     int
+	syncWorkerWG       sync.WaitGroup
 	dupCache           ResultCache
-	syncingBuckets     map[*bucket]struct{}
-	syncingBucketsLock sync.Mutex
+	bucketsSyncingLock sync.Mutex
+	bucketsSyncing     map[*bucket]struct{}
 	org                string
 	env                string
+	runningContext     context.Context
+	cancelContext      context.CancelFunc
 }
 
 // NewManager constructs and starts a new Manager. Call Close when done.
@@ -76,19 +90,18 @@ func NewManager(options Options) (Manager, error) {
 // newManager constructs a new Manager
 func newManager(options Options) *manager {
 	return &manager{
-		close:          make(chan bool),
-		closed:         make(chan bool),
-		client:         options.Client,
-		now:            time.Now,
-		syncRate:       defaultSyncRate,
-		buckets:        map[string]*bucket{},
-		syncQueue:      make(chan *bucket, syncQueueSize),
-		baseURL:        options.BaseURL,
-		numSyncWorkers: defaultNumSyncWorkers,
-		dupCache:       ResultCache{size: resultCacheBufferSize},
-		syncingBuckets: map[*bucket]struct{}{},
-		org:            options.Org,
-		env:            options.Env,
+		close:             make(chan bool),
+		client:            options.Client,
+		now:               time.Now,
+		syncRate:          defaultSyncRate,
+		buckets:           map[string]*bucket{},
+		bucketToSyncQueue: make(chan *bucket, syncQueueSize),
+		baseURL:           options.BaseURL,
+		numSyncWorkers:    defaultNumSyncWorkers,
+		dupCache:          ResultCache{size: resultCacheBufferSize},
+		bucketsSyncing:    map[*bucket]struct{}{},
+		org:               options.Org,
+		env:               options.Env,
 	}
 }
 
@@ -96,11 +109,13 @@ func newManager(options Options) *manager {
 func (m *manager) Start() {
 	log.Infof("starting quota manager")
 
-	go m.syncLoop()
+	m.runningContext, m.cancelContext = context.WithCancel(context.Background())
 
+	go m.bucketMaintenanceLoop()
 	for i := 0; i < m.numSyncWorkers; i++ {
-		go m.syncBucketWorker()
+		go m.syncBucketDispatcher()
 	}
+
 	log.Infof("started quota manager with %d workers", m.numSyncWorkers)
 }
 
@@ -110,11 +125,13 @@ func (m *manager) Close() {
 		return
 	}
 	log.Infof("closing quota manager")
+	m.cancelContext()
+	m.runningContext = nil
+
+	m.syncWorkerWG.Add(m.numSyncWorkers)
 	m.close <- true
-	close(m.syncQueue)
-	for i := 0; i <= m.numSyncWorkers; i++ {
-		<-m.closed
-	}
+	close(m.bucketToSyncQueue)
+	m.syncWorkerWG.Wait()
 	log.Infof("closed quota manager")
 }
 
@@ -166,8 +183,8 @@ func (m *manager) Apply(auth *auth.Context, p *product.APIProduct, args Args) (*
 	return result, err
 }
 
-// loop to sync active buckets and deletes old buckets
-func (m *manager) syncLoop() {
+// loop to sync active buckets and delete old buckets
+func (m *manager) bucketMaintenanceLoop() {
 	t := time.NewTicker(m.syncRate)
 	for {
 		select {
@@ -177,12 +194,18 @@ func (m *manager) syncLoop() {
 			for id, b := range m.buckets {
 				if b.needToDelete() {
 					deleteIDs = append(deleteIDs, id)
+
 				} else if b.needToSync() {
-					bucket := b
-					m.syncQueue <- bucket
+					m.bucketsSyncingLock.Lock()
+					if _, ok := m.bucketsSyncing[b]; !ok { // not already scheduled
+						m.bucketsSyncing[b] = struct{}{}
+						m.bucketToSyncQueue <- b
+					}
+					m.bucketsSyncingLock.Unlock()
 				}
 			}
 			m.bucketsLock.RUnlock()
+
 			if deleteIDs != nil {
 				log.Debugf("deleting quota buckets: %v", deleteIDs)
 				m.bucketsLock.Lock()
@@ -196,10 +219,10 @@ func (m *manager) syncLoop() {
 				}
 				m.bucketsLock.Unlock()
 			}
+
 		case <-m.close:
 			log.Debugf("closing quota sync loop")
 			t.Stop()
-			m.closed <- true
 			return
 		}
 	}
@@ -209,27 +232,31 @@ func (m *manager) prometheusLabelsForQuota(quotaID string) prometheus.Labels {
 	return prometheus.Labels{"org": m.org, "env": m.env, "quota": quotaID}
 }
 
-// worker routine for syncing a bucket with the server
-func (m *manager) syncBucketWorker() {
-	for {
-		bucket, ok := <-m.syncQueue
-		if ok {
-			m.syncingBucketsLock.Lock()
-			if _, ok := m.syncingBuckets[bucket]; !ok {
-				m.syncingBuckets[bucket] = struct{}{}
-				m.syncingBucketsLock.Unlock()
-				// TODO: ideally, this should have a backoff on it
-				bucket.sync()
-				m.syncingBucketsLock.Lock()
-				delete(m.syncingBuckets, bucket)
-			}
-			m.syncingBucketsLock.Unlock()
-		} else {
-			log.Debugf("closing quota sync worker")
-			m.closed <- true
-			return
+// routine for dispatching work to sync a bucket with the server
+func (m *manager) syncBucketDispatcher() {
+
+	for bucket := range m.bucketToSyncQueue {
+		looper := util.Looper{
+			Backoff: util.NewExponentialBackoff(time.Millisecond, time.Millisecond, 2, true),
 		}
+		work := func(ctx context.Context) error {
+			return bucket.sync()
+		}
+		errH := func(err error) error {
+			log.Errorf("sync: %s", err)
+			return nil
+		}
+
+		// run until success or canceled with backoff
+		looper.Run(m.runningContext, work, errH)
+
+		m.bucketsSyncingLock.Lock()
+		delete(m.bucketsSyncing, bucket)
+		m.bucketsSyncingLock.Unlock()
 	}
+
+	m.syncWorkerWG.Done()
+	log.Debugf("closing quota sync worker")
 }
 
 // Options allows us to specify options for how this auth manager will run
