@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/log"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -141,16 +142,13 @@ func (b *bucket) sync() error {
 	b.lock.Unlock()
 
 	body := new(bytes.Buffer)
-	err := json.NewEncoder(body).Encode(r)
-	if err != nil {
-		log.Errorf("encode: %v", err)
-		return err
+	if err := json.NewEncoder(body).Encode(r); err != nil {
+		return errors.Wrap(err, "encode")
 	}
 
-	req, err := http.NewRequest(http.MethodPost, b.quotaURL, body)
+	req, err := http.NewRequestWithContext(b.manager.runningContext, http.MethodPost, b.quotaURL, body)
 	if err != nil {
-		log.Errorf("new request: %v", err)
-		return err
+		return errors.Wrap(err, "new request")
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -160,16 +158,13 @@ func (b *bucket) sync() error {
 
 	resp, err := b.manager.client.Do(req)
 	if err != nil {
-		log.Errorf("do request: %v", err)
-		return err
+		return errors.Wrapf(err, "quota request: %s", body)
 	}
 	defer resp.Body.Close()
 
 	buf := bytes.NewBuffer(make([]byte, 0, resp.ContentLength))
-	_, err = buf.ReadFrom(resp.Body)
-	if err != nil {
-		log.Errorf("read body: %v", err)
-		return err
+	if _, err = buf.ReadFrom(resp.Body); err != nil {
+		return errors.Wrap(err, "read body")
 	}
 	respBody := buf.Bytes()
 
@@ -177,8 +172,7 @@ func (b *bucket) sync() error {
 	case 200:
 		var quotaResult Result
 		if err = json.Unmarshal(respBody, &quotaResult); err != nil {
-			log.Errorf("bad response: %s", string(respBody))
-			return err
+			return errors.Wrapf(err, "unmarshal response: %s", respBody)
 		}
 
 		b.lock.Lock()
@@ -197,8 +191,7 @@ func (b *bucket) sync() error {
 		return nil
 
 	default:
-		log.Errorf("bad response (%d): %s", resp.StatusCode, string(respBody))
-		return err
+		return errors.Wrapf(err, "bad response (%d): %s", resp.StatusCode, respBody)
 	}
 }
 

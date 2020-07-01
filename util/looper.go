@@ -118,7 +118,7 @@ func (l *Looper) Chan(ctx context.Context, work <-chan (WorkFunc), errHandler Er
 	}
 }
 
-// NewChannelWithWorkerPool returns an unbuffered channel to send work to and the set of workers.
+// NewChannelWithWorkerPool returns an unbuffered channel to send work to the set of workers.
 // Close the returned channel or cancel the Context and the workers will exit.
 // Passed ctx is passed on to the work function and work should check for cancel if long-running.
 // Beware: If errHandler itself returns an error, the worker will exit.

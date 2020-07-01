@@ -163,14 +163,13 @@ func TestSync(t *testing.T) {
 
 	m := &manager{
 		close:          make(chan bool),
-		closed:         make(chan bool),
 		client:         http.DefaultClient,
 		now:            now,
 		syncRate:       2 * time.Millisecond,
-		syncQueue:      make(chan *bucket, 10),
+		bucketToSyncQueue:      make(chan *bucket, 10),
 		baseURL:        context.InternalAPI(),
 		numSyncWorkers: 1,
-		syncingBuckets: map[*bucket]struct{}{},
+		bucketsSyncing: map[*bucket]struct{}{},
 	}
 
 	b := newBucket(*request, m, m.prometheusLabelsForQuota(quotaID))
@@ -264,14 +263,13 @@ func TestDisconnected(t *testing.T) {
 
 	m := &manager{
 		close:          make(chan bool),
-		closed:         make(chan bool),
 		client:         http.DefaultClient,
 		now:            now,
-		syncQueue:      make(chan *bucket, 10),
+		bucketToSyncQueue:      make(chan *bucket, 10),
 		baseURL:        context.InternalAPI(),
 		numSyncWorkers: 1,
 		buckets:        map[string]*bucket{},
-		syncingBuckets: map[*bucket]struct{}{},
+		bucketsSyncing: map[*bucket]struct{}{},
 	}
 
 	p := &product.APIProduct{
@@ -361,15 +359,14 @@ func TestWindowExpired(t *testing.T) {
 
 	m := &manager{
 		close:          make(chan bool),
-		closed:         make(chan bool),
 		client:         http.DefaultClient,
 		now:            now,
 		syncRate:       time.Minute,
-		syncQueue:      make(chan *bucket, 10),
+		bucketToSyncQueue:      make(chan *bucket, 10),
 		baseURL:        context.InternalAPI(),
 		numSyncWorkers: 1,
 		buckets:        map[string]*bucket{},
-		syncingBuckets: map[*bucket]struct{}{},
+		bucketsSyncing: map[*bucket]struct{}{},
 	}
 
 	p := &product.APIProduct{
@@ -482,13 +479,13 @@ func (m *manager) forceSync(quotaID string) error {
 		return nil
 	}
 	m.bucketsLock.RUnlock()
-	m.syncingBucketsLock.Lock()
-	m.syncingBuckets[b] = struct{}{}
-	m.syncingBucketsLock.Unlock()
+	m.bucketsSyncingLock.Lock()
+	m.bucketsSyncing[b] = struct{}{}
+	m.bucketsSyncingLock.Unlock()
 	defer func() {
-		m.syncingBucketsLock.Lock()
-		delete(m.syncingBuckets, b)
-		m.syncingBucketsLock.Unlock()
+		m.bucketsSyncingLock.Lock()
+		delete(m.bucketsSyncing, b)
+		m.bucketsSyncingLock.Unlock()
 	}()
 	return b.sync()
 }
