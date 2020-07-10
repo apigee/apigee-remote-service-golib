@@ -6,14 +6,14 @@ on:
   
 jobs:
   lint:
-    name: Reviewdog Lint
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - 
         name: Check out code
         uses: actions/checkout@v1
       - 
-        name: golangci-lint
+        name: Reviewdog Lint
         uses: reviewdog/action-golangci-lint@v1
           
   test:
