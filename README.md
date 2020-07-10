@@ -1,4 +1,4 @@
-[![<Build>](https://github.com/apigee/apigee-remote-service-golib/workflows/Build/badge.svg)
+[![Build](https://github.com/apigee/apigee-remote-service-golib/workflows/Build/badge.svg)](https://github.com/apigee/apigee-remote-service-golib/workflows/Build/badge.svg)
 [![Go Report Card](https://goreportcard.com/badge/github.com/apigee/apigee-remote-service-golib)](https://goreportcard.com/report/github.com/apigee/apigee-remote-service-golib)
 [![codecov.io](https://codecov.io/github/apigee/apigee-remote-service-golib/coverage.svg?branch=master)](https://codecov.io/github/apigee/apigee-remote-service-golib?branch=master)
 
