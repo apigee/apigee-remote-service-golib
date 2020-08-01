@@ -191,7 +191,10 @@ func (b *bucket) sync() error {
 		return nil
 
 	default:
-		return errors.Wrapf(err, "bad response (%d): %s", resp.StatusCode, respBody)
+		if err != nil {
+			return errors.Wrapf(err, "bad response (%d): %s", resp.StatusCode, respBody)
+		}
+		return fmt.Errorf("bad response (%d): %s", resp.StatusCode, respBody)
 	}
 }
 
