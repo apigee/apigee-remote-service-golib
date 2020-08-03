@@ -171,7 +171,7 @@ func (b *bucket) sync() error {
 	switch resp.StatusCode {
 	case 200:
 		var quotaResult Result
-		if err = json.Unmarshal(respBody, &quotaResult); err != nil {
+		if err = quotaResult.Unmarshal(respBody); err != nil {
 			return errors.Wrapf(err, "unmarshal response: %s", respBody)
 		}
 

@@ -162,14 +162,14 @@ func TestSync(t *testing.T) {
 	}
 
 	m := &manager{
-		close:          make(chan bool),
-		client:         http.DefaultClient,
-		now:            now,
-		syncRate:       2 * time.Millisecond,
-		bucketToSyncQueue:      make(chan *bucket, 10),
-		baseURL:        context.InternalAPI(),
-		numSyncWorkers: 1,
-		bucketsSyncing: map[*bucket]struct{}{},
+		close:             make(chan bool),
+		client:            http.DefaultClient,
+		now:               now,
+		syncRate:          2 * time.Millisecond,
+		bucketToSyncQueue: make(chan *bucket, 10),
+		baseURL:           context.InternalAPI(),
+		numSyncWorkers:    1,
+		bucketsSyncing:    map[*bucket]struct{}{},
 	}
 
 	b := newBucket(*request, m, m.prometheusLabelsForQuota(quotaID))
@@ -184,6 +184,8 @@ func TestSync(t *testing.T) {
 	fakeTime = fakeTime + 10
 	time.Sleep(10 * time.Millisecond) // allow idle sync
 	b.refreshAfter = time.Hour
+
+	serverResult.ExpiryTime /= 1000 // convert back to seconds for comparison
 
 	b.lock.RLock()
 	if b.request.Weight != 0 {
@@ -217,6 +219,8 @@ func TestSync(t *testing.T) {
 	if err != nil {
 		t.Errorf("should not have received error on sync: %v", err)
 	}
+
+	serverResult.ExpiryTime /= 1000 // convert back to seconds for comparison
 
 	b.lock.Lock()
 	if b.request.Weight != 0 {
@@ -262,14 +266,14 @@ func TestDisconnected(t *testing.T) {
 	}
 
 	m := &manager{
-		close:          make(chan bool),
-		client:         http.DefaultClient,
-		now:            now,
-		bucketToSyncQueue:      make(chan *bucket, 10),
-		baseURL:        context.InternalAPI(),
-		numSyncWorkers: 1,
-		buckets:        map[string]*bucket{},
-		bucketsSyncing: map[*bucket]struct{}{},
+		close:             make(chan bool),
+		client:            http.DefaultClient,
+		now:               now,
+		bucketToSyncQueue: make(chan *bucket, 10),
+		baseURL:           context.InternalAPI(),
+		numSyncWorkers:    1,
+		buckets:           map[string]*bucket{},
+		bucketsSyncing:    map[*bucket]struct{}{},
 	}
 
 	p := &product.APIProduct{
@@ -358,15 +362,15 @@ func TestWindowExpired(t *testing.T) {
 	}
 
 	m := &manager{
-		close:          make(chan bool),
-		client:         http.DefaultClient,
-		now:            now,
-		syncRate:       time.Minute,
-		bucketToSyncQueue:      make(chan *bucket, 10),
-		baseURL:        context.InternalAPI(),
-		numSyncWorkers: 1,
-		buckets:        map[string]*bucket{},
-		bucketsSyncing: map[*bucket]struct{}{},
+		close:             make(chan bool),
+		client:            http.DefaultClient,
+		now:               now,
+		syncRate:          time.Minute,
+		bucketToSyncQueue: make(chan *bucket, 10),
+		baseURL:           context.InternalAPI(),
+		numSyncWorkers:    1,
+		buckets:           map[string]*bucket{},
+		bucketsSyncing:    map[*bucket]struct{}{},
 	}
 
 	p := &product.APIProduct{
@@ -464,7 +468,7 @@ func testServer(serverResult *Result, now func() time.Time, errC *errControl) *h
 			serverResult.Used = serverResult.Allowed
 		}
 		serverResult.Timestamp = now().Unix()
-		serverResult.ExpiryTime = now().Unix()
+		serverResult.ExpiryTime = now().Unix() * 1000 // milliseconds needed
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(serverResult)
 	}))
