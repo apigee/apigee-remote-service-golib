@@ -237,7 +237,7 @@ func (m *manager) syncBucketDispatcher() {
 
 	for bucket := range m.bucketToSyncQueue {
 		looper := util.Looper{
-			Backoff: util.NewExponentialBackoff(time.Millisecond, time.Millisecond, 2, true),
+			Backoff: util.NewExponentialBackoff(200*time.Millisecond, 30*time.Second, 2, true),
 		}
 		work := func(ctx context.Context) error {
 			return bucket.sync()

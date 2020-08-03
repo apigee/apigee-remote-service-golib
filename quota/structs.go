@@ -14,7 +14,10 @@
 
 package quota
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // A Request is sent to Apigee's quota server to allocate quota.
 type Request struct {
@@ -32,10 +35,19 @@ type Result struct {
 	Allowed    int64 `json:"allowed"`
 	Used       int64 `json:"used"`
 	Exceeded   int64 `json:"exceeded"`
-	ExpiryTime int64 `json:"expiryTime"`
+	ExpiryTime int64 `json:"expiryTime"` // in seconds
 	Timestamp  int64 `json:"timestamp"`
 }
 
 func (r *Result) expiredAt(tm time.Time) bool {
 	return time.Unix(r.ExpiryTime, 0).After(tm)
+}
+
+// Unmarshal decodes the json response into quota Result
+func (r *Result) Unmarshal(b []byte) error {
+	if err := json.Unmarshal(b, r); err != nil {
+		return err
+	}
+	r.ExpiryTime /= 1000 // `/quotas` proxy returns the time in millisecond, which needs to be converted to second
+	return nil
 }
