@@ -64,7 +64,7 @@ func TestBucket(t *testing.T) {
 	tempDir := m.getTempDir(tenant)
 	stageDir := m.getStagingDir(tenant)
 
-	_ = m.Start()
+	m.Start()
 	defer m.Close()
 
 	b, err := newBucket(m, uploader, tenant, tempDir)

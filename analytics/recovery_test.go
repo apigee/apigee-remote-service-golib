@@ -178,7 +178,7 @@ func TestCrashRecovery(t *testing.T) {
 	gz.Close()
 	f.Close()
 
-	_ = m.Start()
+	m.Start()
 
 	files, err := ioutil.ReadDir(stagingDir)
 	if err != nil {

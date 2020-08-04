@@ -288,7 +288,7 @@ func TestPushAnalytics(t *testing.T) {
 		},
 	}
 
-	_ = m.Start()
+	m.Start()
 	defer m.Close()
 
 	tc := authtest.NewContext(fs.URL())
@@ -447,7 +447,7 @@ func TestPushAnalyticsMultipleRecords(t *testing.T) {
 		}},
 	}
 
-	_ = m.Start()
+	m.Start()
 
 	tc := authtest.NewContext(fs.URL())
 	tc.SetOrganization("hi")
@@ -545,7 +545,7 @@ func TestLoad(t *testing.T) {
 		}},
 	}
 
-	_ = m.Start()
+	m.Start()
 
 	tc := authtest.NewContext(fs.URL())
 	tc.SetOrganization("load")

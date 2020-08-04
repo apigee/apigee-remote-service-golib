@@ -35,7 +35,7 @@ import (
 
 // A Manager wraps all things related to analytics processing
 type Manager interface {
-	Start() error
+	Start()
 	Close()
 	SendRecords(ctx *auth.Context, records []Record) error
 }
@@ -74,8 +74,8 @@ func NewManager(opts Options) (Manager, error) {
 		return nil, err
 	}
 
-	err = mgr.Start()
-	return mgr, err
+	mgr.Start()
+	return mgr, nil
 }
 
 func newManager(uploader uploader, opts Options) (*manager, error) {
@@ -173,7 +173,7 @@ const (
 )
 
 // Start starts the manager.
-func (m *manager) Start() error {
+func (m *manager) Start() {
 	log.Infof("starting analytics manager: %s", m.tempDir)
 
 	// start upload channel and workers
@@ -195,7 +195,6 @@ func (m *manager) Start() error {
 	go m.stagingLoop()
 
 	log.Infof("started analytics manager: %s", m.tempDir)
-	return nil
 }
 
 func (m *manager) startUploader(errHandler util.ErrorFunc) {

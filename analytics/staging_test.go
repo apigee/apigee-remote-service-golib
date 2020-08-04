@@ -76,7 +76,7 @@ func TestStagingSizeCap(t *testing.T) {
 		},
 	}
 
-	_ = m.Start()
+	m.Start()
 
 	t1 := "hi~test"
 	tc := authtest.NewContext(fs.URL())
