@@ -1,6 +1,6 @@
 module github.com/apigee/apigee-remote-service-golib
 
-go 1.13
+go 1.14
 
 require (
 	github.com/google/uuid v1.1.1
