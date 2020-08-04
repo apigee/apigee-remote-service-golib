@@ -42,7 +42,7 @@ func TestValidate(t *testing.T) {
 		RefreshRate: time.Hour,
 		Client:      http.DefaultClient,
 	}
-	p, err := NewManager(opts)
+	_, err = NewManager(opts)
 	if err == nil {
 		t.Fatal("should be invalid options")
 	}
@@ -52,7 +52,7 @@ func TestValidate(t *testing.T) {
 		RefreshRate: time.Second,
 		Client:      http.DefaultClient,
 	}
-	p, err = NewManager(opts)
+	_, err = NewManager(opts)
 	if err == nil {
 		t.Fatal("should be invalid options")
 	}
@@ -64,7 +64,7 @@ func TestValidate(t *testing.T) {
 		Org:         "org",
 		Env:         "env",
 	}
-	p, err = NewManager(opts)
+	p, err := NewManager(opts)
 	if err != nil {
 		t.Fatalf("invalid error: %v", err)
 	}

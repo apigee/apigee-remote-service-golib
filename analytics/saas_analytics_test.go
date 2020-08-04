@@ -78,9 +78,11 @@ func (fs *fakeServer) handler(t *testing.T) http.Handler {
 		// Give them a signed URL. Include the file path they picked so that we can
 		// confirm they are sending the right one.
 		url := "%s/signed-url-1234?relative_file_path=%s&tenant=%s"
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"url": fmt.Sprintf(url, fs.srv.URL, r.FormValue("relative_file_path"), r.FormValue("tenant")),
-		})
+		}); err != nil {
+			t.Fatal(err)
+		}
 	})
 	m.HandleFunc("/signed-url-1234", func(w http.ResponseWriter, r *http.Request) {
 		fs.lock.Lock()
@@ -110,7 +112,7 @@ func (fs *fakeServer) handler(t *testing.T) http.Handler {
 		})
 
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok"))
 	})
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// This matches every other route - we should not hit this one.

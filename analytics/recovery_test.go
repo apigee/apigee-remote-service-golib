@@ -63,7 +63,9 @@ func TestRecoverFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ioutil.TempFile(): %v", err)
 	}
-	m.recoverFile(brokeFile.Name(), fixedFile)
+	if err := m.recoverFile(brokeFile.Name(), fixedFile); err != nil {
+		t.Fatalf("error recovering file: %v", err)
+	}
 
 	// test repair
 	recs, err := readRecordsFromGZipFile(fixedFile.Name())
@@ -150,15 +152,19 @@ func TestCrashRecovery(t *testing.T) {
 		t.Fatalf("error creating good file: %s", err)
 	}
 	gz := gzip.NewWriter(f)
-	json.NewEncoder(gz).Encode(&rec)
+	if err := json.NewEncoder(gz).Encode(&rec); err != nil {
+		t.Fatalf("error encoding file into records: %v", err)
+	}
 	gz.Close()
 	f.Close()
 
 	f, _ = os.Create(brokeFile)
 	gz = gzip.NewWriter(f)
-	json.NewEncoder(gz).Encode(&rec)
+	if err := json.NewEncoder(gz).Encode(&rec); err != nil {
+		t.Fatalf("error encoding file into records: %v", err)
+	}
 	gz.Close()
-	f.WriteString("this is not a json record")
+	_, _ = f.WriteString("this is not a json record")
 	f.Close()
 
 	f, err = os.Create(stagedFile)
@@ -166,7 +172,9 @@ func TestCrashRecovery(t *testing.T) {
 		t.Fatalf("error creating stagedFile file: %s", err)
 	}
 	gz = gzip.NewWriter(f)
-	json.NewEncoder(gz).Encode(&rec)
+	if err := json.NewEncoder(gz).Encode(&rec); err != nil {
+		t.Fatalf("error encoding file into records: %v", err)
+	}
 	gz.Close()
 	f.Close()
 

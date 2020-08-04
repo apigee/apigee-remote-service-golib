@@ -44,11 +44,18 @@ func (m *manager) crashRecovery() error {
 			continue
 		}
 
-		m.prepTenant(tenant)
+		err = m.prepTenant(tenant)
+		if err != nil {
+			errs = multierror.Append(errs, err)
+			continue
+		}
 		stageDir := m.getStagingDir(tenant)
 
 		// put staged files in upload queue
 		stagedFiles, err := m.getFilesInStaging()
+		if err != nil {
+			log.Errorf("Get staged files: %v", err)
+		}
 		for _, fi := range stagedFiles {
 			m.upload(tenant, fi, 0)
 		}
@@ -105,7 +112,7 @@ func (m *manager) recoverFile(oldName string, newFile *os.File) error {
 				return fmt.Errorf("scan gzip %s: %s", oldName, err)
 			}
 		}
-		gzw.Write(b[:nRead])
+		_, _ = gzw.Write(b[:nRead])
 		if err != nil {
 			break
 		}

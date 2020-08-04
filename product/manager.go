@@ -70,7 +70,6 @@ type manager struct {
 	closedChan       chan bool
 	returnChan       chan map[string]*APIProduct
 	refreshRate      time.Duration
-	refreshTimerChan <-chan time.Time
 	client           *http.Client
 	productsMux      productsMux
 	cancelPolling    context.CancelFunc

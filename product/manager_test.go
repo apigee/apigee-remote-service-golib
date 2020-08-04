@@ -80,7 +80,7 @@ func TestManager(t *testing.T) {
 			APIProducts: apiProducts,
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(result)
+		_ = json.NewEncoder(w).Encode(result)
 	}))
 	defer ts.Close()
 
@@ -140,7 +140,7 @@ func TestManagerPolling(t *testing.T) {
 			APIProducts: apiProducts,
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(result)
+		_ = json.NewEncoder(w).Encode(result)
 	}))
 	defer ts.Close()
 

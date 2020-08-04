@@ -25,7 +25,6 @@ import (
 
 type testVerifier struct {
 	keyErrors map[string]error
-	claims    map[string]interface{}
 }
 
 var testJWTClaims = map[string]interface{}{

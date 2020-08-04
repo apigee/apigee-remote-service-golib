@@ -45,7 +45,6 @@ func (d *ResultCache) Add(id string, result *Result) {
 		d.buffer.Remove(e)
 		delete(d.lookup, e.Value.(string))
 	}
-	return
 }
 
 // Get a Result from the cache, nil if none

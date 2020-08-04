@@ -33,8 +33,8 @@ type legacyAnalytics struct {
 	client *http.Client
 }
 
-func (oa *legacyAnalytics) Start() error { return nil }
-func (oa *legacyAnalytics) Close()       {}
+func (oa *legacyAnalytics) Start() {}
+func (oa *legacyAnalytics) Close() {}
 
 func (oa *legacyAnalytics) SendRecords(auth *auth.Context, records []Record) error {
 	axURL := *auth.InternalAPI()
@@ -46,7 +46,7 @@ func (oa *legacyAnalytics) SendRecords(auth *auth.Context, records []Record) err
 	}
 
 	body := new(bytes.Buffer)
-	json.NewEncoder(body).Encode(request)
+	_ = json.NewEncoder(body).Encode(request)
 
 	req, err := http.NewRequest(http.MethodPost, axURL.String(), body)
 	if err != nil {

@@ -92,7 +92,9 @@ func (b *bucket) runLoop() {
 	promLabels := prometheus.Labels{"file": b.fileName()}
 	defer prometheusRecordsByFile.Delete(promLabels)
 	for records := range b.incoming {
-		b.uploader.write(records, b.w.writer)
+		if err := b.uploader.write(records, b.w.writer); err != nil {
+			log.Errorf("Write records to bucket: %s", err)
+		}
 		written = written + len(records)
 		prometheusRecordsByFile.With(promLabels).Set(float64(written))
 	}
