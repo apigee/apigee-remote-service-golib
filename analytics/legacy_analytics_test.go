@@ -178,7 +178,7 @@ func makeTestServer(auth *auth.Context, rec Record, t *testing.T) *testServer {
 			Accepted: len(axRequest.Records),
 			Rejected: 0,
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	return &testServer{Server: ts, Request: &axRequest}
 }

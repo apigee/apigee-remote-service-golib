@@ -48,8 +48,12 @@ func goodHandler(apiKey string, t *testing.T) http.HandlerFunc {
 			if err != nil {
 				t.Fatal(err)
 			}
-			key.Set("kid", "1")
-			key.Set("alg", jwa.RS256.String())
+			if err := key.Set("kid", "1"); err != nil {
+				t.Fatal(err)
+			}
+			if err := key.Set("alg", jwa.RS256.String()); err != nil {
+				t.Fatal(err)
+			}
 
 			type JWKS struct {
 				Keys []jwk.Key `json:"keys"`
@@ -62,7 +66,9 @@ func goodHandler(apiKey string, t *testing.T) http.HandlerFunc {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(jwks)
+			if err := json.NewEncoder(w).Encode(jwks); err != nil {
+				t.Fatal(err)
+			}
 			return
 		}
 
@@ -85,23 +91,25 @@ func goodHandler(apiKey string, t *testing.T) http.HandlerFunc {
 		jwtResponse := APIKeyResponse{Token: jwt}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(jwtResponse)
+		if err := json.NewEncoder(w).Encode(jwtResponse); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
 func generateAPIKeyJWT(privateKey *rsa.PrivateKey) (string, error) {
 
 	token := jwt.New()
-	token.Set(jwt.AudienceKey, "remote-service-client")
-	token.Set(jwt.JwtIDKey, "29e2320b-787c-4625-8599-acc5e05c68d0")
-	token.Set(jwt.IssuerKey, "https://theganyo1-eval-test.apigee.net/remote-service/token")
-	token.Set(jwt.NotBeforeKey, time.Now().Add(-10*time.Minute).Unix())
-	token.Set(jwt.IssuedAtKey, time.Now().Unix())
-	token.Set(jwt.ExpirationKey, (time.Now().Add(50 * time.Millisecond)).Unix())
-	token.Set("access_token", "8E7Az3ZgPHKrgzcQA54qAzXT3Z1G")
-	token.Set("client_id", "yBQ5eXZA8rSoipYEi1Rmn0Z8RKtkGI4H")
-	token.Set("application_name", "61cd4d83-06b5-4270-a9ee-cf9255ef45c3")
-	token.Set("api_product_list", []string{"TestProduct"})
+	_ = token.Set(jwt.AudienceKey, "remote-service-client")
+	_ = token.Set(jwt.JwtIDKey, "29e2320b-787c-4625-8599-acc5e05c68d0")
+	_ = token.Set(jwt.IssuerKey, "https://theganyo1-eval-test.apigee.net/remote-service/token")
+	_ = token.Set(jwt.NotBeforeKey, time.Now().Add(-10*time.Minute).Unix())
+	_ = token.Set(jwt.IssuedAtKey, time.Now().Unix())
+	_ = token.Set(jwt.ExpirationKey, (time.Now().Add(50 * time.Millisecond)).Unix())
+	_ = token.Set("access_token", "8E7Az3ZgPHKrgzcQA54qAzXT3Z1G")
+	_ = token.Set("client_id", "yBQ5eXZA8rSoipYEi1Rmn0Z8RKtkGI4H")
+	_ = token.Set("application_name", "61cd4d83-06b5-4270-a9ee-cf9255ef45c3")
+	_ = token.Set("api_product_list", []string{"TestProduct"})
 	payload, err := jwt.Sign(token, jwa.RS256, privateKey)
 
 	return string(payload), err
@@ -112,7 +120,7 @@ func badHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(401)
-		json.NewEncoder(w).Encode(badKeyResponse)
+		_ = json.NewEncoder(w).Encode(badKeyResponse)
 	}
 }
 

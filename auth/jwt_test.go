@@ -37,8 +37,12 @@ func goodJWTRequest(privateKey *rsa.PrivateKey, t *testing.T) http.HandlerFunc {
 		if err != nil {
 			t.Fatal(err)
 		}
-		key.Set("kid", "1")
-		key.Set("alg", jwa.RS256.String())
+		if err := key.Set("kid", "1"); err != nil {
+			t.Fatal(err)
+		}
+		if err := key.Set("alg", jwa.RS256.String()); err != nil {
+			t.Fatal(err)
+		}
 
 		type JWKS struct {
 			Keys []jwk.Key `json:"keys"`
@@ -51,14 +55,16 @@ func goodJWTRequest(privateKey *rsa.PrivateKey, t *testing.T) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(jwks)
+		if err := json.NewEncoder(w).Encode(jwks); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
 func badJWTRequest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
-	json.NewEncoder(w).Encode(badKeyResponse)
+	_ = json.NewEncoder(w).Encode(badKeyResponse)
 }
 
 func TestJWTCaching(t *testing.T) {
@@ -168,17 +174,17 @@ func TestGoodAndBadJWT(t *testing.T) {
 func generateJWT(privateKey *rsa.PrivateKey) (string, error) {
 
 	token := jwt.New()
-	token.Set(jwt.AudienceKey, "remote-service-client")
-	token.Set(jwt.JwtIDKey, "29e2320b-787c-4625-8599-acc5e05c68d0")
-	token.Set(jwt.IssuerKey, "https://theganyo1-eval-test.apigee.net/remote-service/token")
-	token.Set(jwt.NotBeforeKey, time.Now().Add(-10*time.Minute).Unix())
-	token.Set(jwt.IssuedAtKey, time.Now().Unix())
-	token.Set(jwt.ExpirationKey, (time.Now().Add(50 * time.Millisecond)).Unix())
-	token.Set("access_token", "8E7Az3ZgPHKrgzcQA54qAzXT3Z1G")
-	token.Set("client_id", "yBQ5eXZA8rSoipYEi1Rmn0Z8RKtkGI4H")
-	token.Set("application_name", "61cd4d83-06b5-4270-a9ee-cf9255ef45c3")
-	token.Set("scope", "scope1 scope2")
-	token.Set("api_product_list", []string{"TestProduct"})
+	_ = token.Set(jwt.AudienceKey, "remote-service-client")
+	_ = token.Set(jwt.JwtIDKey, "29e2320b-787c-4625-8599-acc5e05c68d0")
+	_ = token.Set(jwt.IssuerKey, "https://theganyo1-eval-test.apigee.net/remote-service/token")
+	_ = token.Set(jwt.NotBeforeKey, time.Now().Add(-10*time.Minute).Unix())
+	_ = token.Set(jwt.IssuedAtKey, time.Now().Unix())
+	_ = token.Set(jwt.ExpirationKey, (time.Now().Add(50 * time.Millisecond)).Unix())
+	_ = token.Set("access_token", "8E7Az3ZgPHKrgzcQA54qAzXT3Z1G")
+	_ = token.Set("client_id", "yBQ5eXZA8rSoipYEi1Rmn0Z8RKtkGI4H")
+	_ = token.Set("application_name", "61cd4d83-06b5-4270-a9ee-cf9255ef45c3")
+	_ = token.Set("scope", "scope1 scope2")
+	_ = token.Set("api_product_list", []string{"TestProduct"})
 	payload, err := jwt.Sign(token, jwa.RS256, privateKey)
 
 	return string(payload), err
@@ -187,11 +193,11 @@ func generateJWT(privateKey *rsa.PrivateKey) (string, error) {
 func generateExpiredJWT(privateKey *rsa.PrivateKey) (string, error) {
 
 	token := jwt.New()
-	token.Set(jwt.JwtIDKey, "29e2320b-787c-4625-8599-acc5e05c68d0")
-	token.Set(jwt.IssuerKey, "https://theganyo1-eval-test.apigee.net/remote-service/token")
-	token.Set(jwt.NotBeforeKey, (time.Now().Add(-10 * time.Minute)).Unix())
-	token.Set(jwt.IssuedAtKey, (time.Now().Add(-10 * time.Minute)).Unix())
-	token.Set(jwt.ExpirationKey, (time.Now().Add(-1 * time.Minute)).Unix())
+	_ = token.Set(jwt.JwtIDKey, "29e2320b-787c-4625-8599-acc5e05c68d0")
+	_ = token.Set(jwt.IssuerKey, "https://theganyo1-eval-test.apigee.net/remote-service/token")
+	_ = token.Set(jwt.NotBeforeKey, (time.Now().Add(-10 * time.Minute)).Unix())
+	_ = token.Set(jwt.IssuedAtKey, (time.Now().Add(-10 * time.Minute)).Unix())
+	_ = token.Set(jwt.ExpirationKey, (time.Now().Add(-1 * time.Minute)).Unix())
 	payload, err := jwt.Sign(token, jwa.RS256, privateKey)
 
 	return string(payload), err
@@ -200,11 +206,11 @@ func generateExpiredJWT(privateKey *rsa.PrivateKey) (string, error) {
 func generateFutureJWT(privateKey *rsa.PrivateKey) (string, error) {
 
 	token := jwt.New()
-	token.Set(jwt.JwtIDKey, "29e2320b-787c-4625-8599-acc5e05c68d0")
-	token.Set(jwt.IssuerKey, "https://theganyo1-eval-test.apigee.net/remote-service/token")
-	token.Set(jwt.NotBeforeKey, (time.Now().Add(5 * time.Second)).Unix())
-	token.Set(jwt.IssuedAtKey, (time.Now().Add(5 * time.Second)).Unix())
-	token.Set(jwt.ExpirationKey, (time.Now().Add(2 * time.Second)).Unix())
+	_ = token.Set(jwt.JwtIDKey, "29e2320b-787c-4625-8599-acc5e05c68d0")
+	_ = token.Set(jwt.IssuerKey, "https://theganyo1-eval-test.apigee.net/remote-service/token")
+	_ = token.Set(jwt.NotBeforeKey, (time.Now().Add(5 * time.Second)).Unix())
+	_ = token.Set(jwt.IssuedAtKey, (time.Now().Add(5 * time.Second)).Unix())
+	_ = token.Set(jwt.ExpirationKey, (time.Now().Add(2 * time.Second)).Unix())
 	payload, err := jwt.Sign(token, jwa.RS256, privateKey)
 
 	return string(payload), err

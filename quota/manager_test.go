@@ -300,11 +300,13 @@ func TestDisconnected(t *testing.T) {
 
 	_, err = m.Apply(authContext, p, args)
 	if err != nil {
-		t.Errorf("shouln't get error: %v", err)
+		t.Errorf("shouldn't get error: %v", err)
 	}
 
 	errC.send = 200
-	m.forceSync(getQuotaID(authContext, p))
+	if err := m.forceSync(getQuotaID(authContext, p)); err == nil {
+		t.Errorf("want error 'new request: net/http: nil Context' got none")
+	}
 
 	res, err := m.Apply(authContext, p, args)
 	if err != nil {
@@ -386,7 +388,12 @@ func TestWindowExpired(t *testing.T) {
 
 	// apply and force a sync
 	res, err := m.Apply(authContext, p, args)
-	m.forceSync(getQuotaID(authContext, p))
+	if err != nil {
+		t.Errorf("shouln't get error: %v", err)
+	}
+	if err := m.forceSync(getQuotaID(authContext, p)); err == nil {
+		t.Errorf("want error 'new request: net/http: nil Context' got none")
+	}
 
 	quotaID := fmt.Sprintf("%s-%s", authContext.Application, p.Name)
 	bucket := m.buckets[quotaID]
@@ -455,12 +462,12 @@ func testServer(serverResult *Result, now func() time.Time, errC *errControl) *h
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if errC != nil && errC.send != 200 {
 			w.WriteHeader(errC.send)
-			w.Write([]byte("error"))
+			_, _ = w.Write([]byte("error"))
 			return
 		}
 
 		req := Request{}
-		json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req)
 		serverResult.Allowed = req.Allow
 		serverResult.Used += req.Weight
 		if serverResult.Used > serverResult.Allowed {
@@ -470,7 +477,7 @@ func testServer(serverResult *Result, now func() time.Time, errC *errControl) *h
 		serverResult.Timestamp = now().Unix()
 		serverResult.ExpiryTime = now().Unix() * 1000 // milliseconds needed
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(serverResult)
+		_ = json.NewEncoder(w).Encode(serverResult)
 	}))
 }
 

@@ -116,7 +116,6 @@ type manager struct {
 	bucketsLock        sync.RWMutex
 	buckets            map[string]*bucket // dir ("org~env") -> bucket
 	sendChannelSize    int
-	stageLock          sync.Mutex
 	closed             bool
 	uploadChan         chan<- interface{}
 	uploadersWait      sync.WaitGroup
@@ -169,21 +168,8 @@ const (
 	axRecordType  = "APIAnalytics"
 	pathFmt       = "date=%s/time=%s/"
 
-	// This is a list of errors that the signedURL endpoint will return.
-	errUnauth     = "401 Unauthorized" // Auth credentials are wrong.
-	errNotFound   = "404 Not Found"    // Base URL is wrong.
-	errApigeeDown = "code 50"          // Internal Apigee issue.
-
-	// collection interval is not configurable at the moment because UAP can
-	// become unstable if all the remote services are spamming it faster than
-	// that. Hard code for now.
-	defaultCollectionInterval = 1 * time.Minute
-
 	// limited to 2 for now to limit upload stress
 	numUploaders = 2
-
-	// number of files that can be queued for upload
-	uploaderBufferLimit = 2
 )
 
 // Start starts the manager.
@@ -228,25 +214,29 @@ func (m *manager) startUploader(errHandler util.ErrorFunc) {
 		l := util.Looper{
 			Backoff: util.DefaultExponentialBackoff(),
 		}
+		m.uploadersWait.Add(1)
 		go func() {
-			m.uploadersWait.Add(1)
 			defer m.uploadersWait.Done()
 
 			for work := range receive {
-				l.Run(ctx, work.(util.WorkFunc), errHandler)
+				if err := l.Run(ctx, work.(util.WorkFunc), errHandler); err != nil {
+					log.Errorf("looper run: %v", err)
+				}
 			}
 		}()
 	}
 
+	m.uploadersWait.Add(1)
 	// handle overflow
 	go func() {
-		m.uploadersWait.Add(1)
 		defer m.uploadersWait.Done()
 
 		for dropped := range overflow {
 			work := dropped.(util.WorkFunc)
 			go func() {
-				work(canceledCtx)
+				if err := work(canceledCtx); err != nil {
+					log.Errorf("handling overflow: %v", err)
+				}
 			}()
 		}
 	}()

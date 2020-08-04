@@ -248,7 +248,9 @@ func (m *manager) syncBucketDispatcher() {
 		}
 
 		// run until success or canceled with backoff
-		looper.Run(m.runningContext, work, errH)
+		if err := looper.Run(m.runningContext, work, errH); err != nil {
+			log.Errorf("looper run: %s", err)
+		}
 
 		m.bucketsSyncingLock.Lock()
 		delete(m.bucketsSyncing, bucket)

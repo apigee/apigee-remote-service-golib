@@ -16,7 +16,6 @@ package quota
 
 import (
 	"encoding/json"
-	"time"
 )
 
 // A Request is sent to Apigee's quota server to allocate quota.
@@ -37,10 +36,6 @@ type Result struct {
 	Exceeded   int64 `json:"exceeded"`
 	ExpiryTime int64 `json:"expiryTime"` // in seconds
 	Timestamp  int64 `json:"timestamp"`
-}
-
-func (r *Result) expiredAt(tm time.Time) bool {
-	return time.Unix(r.ExpiryTime, 0).After(tm)
 }
 
 // Unmarshal decodes the json response into quota Result

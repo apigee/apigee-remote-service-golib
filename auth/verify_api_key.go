@@ -113,7 +113,7 @@ func (kv *keyVerifierImpl) fetchToken(ctx context.Context, apiKey string) (map[s
 	apiURL.Path = path.Join(apiURL.Path, verifyAPIKeyURL)
 
 	body := new(bytes.Buffer)
-	json.NewEncoder(body).Encode(verifyRequest)
+	_ = json.NewEncoder(body).Encode(verifyRequest)
 
 	req, err := http.NewRequest(http.MethodPost, apiURL.String(), body)
 	if err != nil {
@@ -131,7 +131,7 @@ func (kv *keyVerifierImpl) fetchToken(ctx context.Context, apiKey string) (map[s
 	defer resp.Body.Close()
 
 	apiKeyResp := APIKeyResponse{}
-	json.NewDecoder(resp.Body).Decode(&apiKeyResp)
+	_ = json.NewDecoder(resp.Body).Decode(&apiKeyResp)
 
 	token := apiKeyResp.Token
 	if token == "" { // bad API Key
