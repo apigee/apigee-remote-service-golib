@@ -21,6 +21,7 @@ import (
 
 	"github.com/apigee/apigee-remote-service-golib/authtest"
 	"github.com/apigee/apigee-remote-service-golib/context"
+	"github.com/apigee/apigee-remote-service-golib/log"
 )
 
 type testVerifier struct {
@@ -45,6 +46,7 @@ func (tv *testVerifier) Verify(ctx context.Context, apiKey string) (map[string]i
 }
 
 func TestNewManager(t *testing.T) {
+	log.Log.SetLevel(log.Debug)
 	opts := Options{
 		PollInterval: time.Hour,
 		Client:       &http.Client{},
@@ -124,5 +126,33 @@ func TestAuthenticate(t *testing.T) {
 		} else if test.wantError != "" {
 			t.Errorf("wanted error, got none")
 		}
+	}
+}
+
+func TestValidateOptions(t *testing.T) {
+	opts := Options{}
+	var err error
+
+	err = opts.validate()
+	if err == nil || err.Error() != "client is required" {
+		t.Errorf("wanted error 'client is required', got %v", err)
+	}
+
+	opts.Client = &http.Client{}
+	err = opts.validate()
+	if err == nil || err.Error() != "org is required" {
+		t.Errorf("wanted error 'org is required', got %v", err)
+	}
+
+	opts.Org = "hi"
+	err = opts.validate()
+	if err == nil || err.Error() != "env is required" {
+		t.Errorf("wanted error 'env is required', got %v", err)
+	}
+
+	opts.Env = "test"
+	err = opts.validate()
+	if err != nil {
+		t.Errorf("wanted no error, got %v", err)
 	}
 }
