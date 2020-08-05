@@ -52,7 +52,7 @@ func checkLogLevel(t *testing.T, l LoggerWithLevel, lvl Level) {
 	Errorf("error")
 
 	if lvl == Debug {
-		if !l.DebugEnabled() {
+		if !DebugEnabled() {
 			t.Errorf("DEBUG should be enabled")
 		}
 		if len(tl.prints) < 4 {
@@ -60,7 +60,7 @@ func checkLogLevel(t *testing.T, l LoggerWithLevel, lvl Level) {
 		}
 	}
 	if lvl == Info {
-		if !l.InfoEnabled() {
+		if !InfoEnabled() {
 			t.Errorf("INFO should be enabled")
 		}
 		if len(tl.prints) != 3 {
@@ -68,7 +68,7 @@ func checkLogLevel(t *testing.T, l LoggerWithLevel, lvl Level) {
 		}
 	}
 	if lvl == Warn {
-		if !l.WarnEnabled() {
+		if !WarnEnabled() {
 			t.Errorf("WARN should be enabled")
 		}
 		if len(tl.prints) != 2 {
@@ -76,7 +76,7 @@ func checkLogLevel(t *testing.T, l LoggerWithLevel, lvl Level) {
 		}
 	}
 	if lvl == Error {
-		if !l.ErrorEnabled() {
+		if !ErrorEnabled() {
 			t.Errorf("ERROR should be enabled")
 		}
 		if len(tl.prints) != 1 {
@@ -84,16 +84,16 @@ func checkLogLevel(t *testing.T, l LoggerWithLevel, lvl Level) {
 		}
 	}
 
-	if lvl < Error && l.ErrorEnabled() {
+	if lvl < Error && ErrorEnabled() {
 		t.Errorf("ERROR should not be enabled")
 	}
-	if lvl < Warn && l.WarnEnabled() {
+	if lvl < Warn && WarnEnabled() {
 		t.Errorf("WARN should not be enabled")
 	}
-	if lvl < Info && l.InfoEnabled() {
+	if lvl < Info && InfoEnabled() {
 		t.Errorf("INFO should not be enabled")
 	}
-	if lvl < Debug && l.DebugEnabled() {
+	if lvl < Debug && DebugEnabled() {
 		t.Errorf("DEBUG should not be enabled")
 	}
 }
