@@ -17,6 +17,7 @@ package auth
 import (
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -88,5 +89,27 @@ func TestSetClaims(t *testing.T) {
 	}
 	if !reflect.DeepEqual(claimsWant, c.Scopes) {
 		t.Errorf("claims want: %s, got: %v", claimsWant, claims[scopeClaim])
+	}
+}
+
+func TestParseArrays(t *testing.T) {
+	arr := []interface{}{
+		"this",
+		"is",
+		"a",
+		"test",
+		123,
+	}
+
+	res, err := parseArrayOfStrings(arr)
+	if err == nil || err.Error() != "unable to interpret: 123" {
+		t.Errorf("wanted 'unable to interpret: 123', got %v", err)
+	}
+	if len(res) != 4 {
+		t.Errorf("wanted an array of 4, got %d", len(res))
+	}
+	output := strings.Join(res, " ")
+	if output != "this is a test" {
+		t.Errorf("wanted result to be 'this is a test', got %s", output)
 	}
 }

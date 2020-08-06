@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
@@ -242,5 +243,65 @@ func TestUnreachable(t *testing.T) {
 	err = pp.pollingClosure(*serverURL)(ctx)
 	if err == nil {
 		t.Fatal("should have received error")
+	}
+}
+
+func TestBadResponseCode(t *testing.T) {
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer ts.Close()
+
+	serverURL, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	opts := Options{
+		BaseURL:     serverURL,
+		RefreshRate: time.Hour,
+		Client:      http.DefaultClient,
+	}
+	pp := createManager(opts)
+
+	ctx := context.Background()
+
+	err = pp.pollingClosure(*serverURL)(ctx)
+	if err == nil {
+		t.Error("should have received error")
+	}
+	if !strings.Contains(err.Error(), "products request failed (400)") {
+		t.Errorf("want 'products request failed (400)' got %v", err)
+	}
+}
+
+func TestBadResponseBody(t *testing.T) {
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("hi"))
+	}))
+	defer ts.Close()
+
+	serverURL, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	opts := Options{
+		BaseURL:     serverURL,
+		RefreshRate: time.Hour,
+		Client:      http.DefaultClient,
+	}
+	pp := createManager(opts)
+
+	ctx := context.Background()
+
+	err = pp.pollingClosure(*serverURL)(ctx)
+	if err == nil {
+		t.Error("should have received error")
+	}
+	if !strings.Contains(err.Error(), "invalid character 'h' looking for beginning of value") {
+		t.Errorf("want 'invalid character 'h' looking for beginning of value got %v", err)
 	}
 }
