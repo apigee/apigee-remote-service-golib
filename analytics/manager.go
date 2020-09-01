@@ -55,13 +55,13 @@ func NewManager(opts Options) (Manager, error) {
 	}
 
 	var uploader uploader
-	if opts.FluentdEndpoint != "" {
+	if opts.FluentdEndpoint != "" && GCPManagedHost != opts.BaseURL.Hostname() {
 		var err error
 		uploader, err = newFluentdUploader(opts)
 		if err != nil {
 			return nil, err
 		}
-	} else { // SaaS
+	} else { // CG SaaS or GCP-managed URL is given
 		uploader = &saasUploader{
 			client:  opts.Client,
 			baseURL: opts.BaseURL,

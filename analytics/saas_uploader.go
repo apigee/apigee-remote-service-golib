@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -99,19 +100,27 @@ func (s *saasUploader) upload(tenant, fileName string) error {
 		return fmt.Errorf("http.NewRequest: %s", err)
 	}
 
-	req.Header.Set("Expect", "100-continue")
-	req.Header.Set("Content-Type", "application/x-gzip")
-	req.Header.Set("x-amz-server-side-encryption", "AES256")
+	// needs a bare client because udca service account is not authorized for GCS
+	client := http.DefaultClient
+	if s.baseURL.Hostname() != GCPManagedHost {
+		// additional headers for legacy saas
+		req.Header.Set("Expect", "100-continue")
+		req.Header.Set("Content-Type", "application/x-gzip")
+		req.Header.Set("x-amz-server-side-encryption", "AES256")
+		// switch the client back to the default for legacy saas
+		client = s.client
+	}
 	req.ContentLength = fi.Size()
 
 	log.Debugf("uploading %s to %s", fileName, signedURL)
-	resp, err := s.client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("client.Do(): %s", err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("upload %s returned %s", fileName, resp.Status)
+		data, _ := ioutil.ReadAll(resp.Body) // get the response for debug purpose
+		return fmt.Errorf("upload %s returned %s %s", fileName, resp.Status, string(data))
 	}
 
 	if err := os.Remove(fileName); err != nil {
@@ -141,7 +150,7 @@ func (s *saasUploader) uploadDir() string {
 func (s *saasUploader) signedURL(subdir, fileName string) (string, error) {
 	var req *http.Request
 	var err error
-	if s.baseURL.Host == GCPManagedHost {
+	if s.baseURL.Hostname() == GCPManagedHost {
 		req, err = s.gcpGetSignedURLHTTPRequest(subdir, fileName)
 	} else {
 		req, err = s.legacyGetSignedURLHTTPRequest(subdir, fileName)
