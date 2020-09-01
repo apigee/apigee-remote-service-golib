@@ -734,8 +734,8 @@ func TestGCPSignedURLRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if req.URL.Host != GCPManagedHost {
-		t.Errorf("wrong host: want %s got %s", GCPManagedHost, req.URL.Host)
+	if req.URL.Host != "apigee.googleapis.com" {
+		t.Errorf("wrong host: want %s got %s", "apigee.googleapis.com", req.URL.Host)
 	}
 }
 

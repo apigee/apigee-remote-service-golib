@@ -55,7 +55,7 @@ func NewManager(opts Options) (Manager, error) {
 	}
 
 	var uploader uploader
-	if opts.FluentdEndpoint != "" && GCPManagedHost != opts.BaseURL.Hostname() {
+	if opts.FluentdEndpoint != "" && !opts.isGCPManaged() {
 		var err error
 		uploader, err = newFluentdUploader(opts)
 		if err != nil {
@@ -63,9 +63,10 @@ func NewManager(opts Options) (Manager, error) {
 		}
 	} else { // CG SaaS or GCP-managed URL is given
 		uploader = &saasUploader{
-			client:  opts.Client,
-			baseURL: opts.BaseURL,
-			now:     opts.now,
+			client:       opts.Client,
+			baseURL:      opts.BaseURL,
+			now:          opts.now,
+			isGCPManaged: opts.isGCPManaged(),
 		}
 	}
 
@@ -153,6 +154,7 @@ type Options struct {
 	TLSSkipVerify bool
 }
 
+// validate checks if there is missing options
 func (o *Options) validate() error {
 	if o.BufferPath == "" ||
 		o.StagingFileLimit <= 0 ||
@@ -161,6 +163,12 @@ func (o *Options) validate() error {
 		return fmt.Errorf("all analytics options are required")
 	}
 	return nil
+}
+
+// isGCPManaged checks if the given baseURL is GCPManagedHost
+func (o *Options) isGCPManaged() bool {
+	const GCPManagedHost = "apigee.googleapis.com"
+	return GCPManagedHost == o.BaseURL.Hostname()
 }
 
 const (
