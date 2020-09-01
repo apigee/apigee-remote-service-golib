@@ -29,7 +29,10 @@ import (
 
 	"github.com/apigee/apigee-remote-service-golib/log"
 	"github.com/apigee/apigee-remote-service-golib/util"
+	"github.com/google/uuid"
 )
+
+const GCPManagedHost = "apigee.googleapis.com"
 
 type uploader interface {
 	workFunc(tenant, fileName string) util.WorkFunc
@@ -107,7 +110,7 @@ func (s *saasUploader) upload(tenant, fileName string) error {
 		return fmt.Errorf("client.Do(): %s", err)
 	}
 	resp.Body.Close()
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("upload %s returned %s", fileName, resp.Status)
 	}
 
@@ -136,16 +139,48 @@ func (s *saasUploader) uploadDir() string {
 
 // signedURL asks for a signed URL that can be used to upload gzip file
 func (s *saasUploader) signedURL(subdir, fileName string) (string, error) {
+	var req *http.Request
+	var err error
+	if s.baseURL.Host == GCPManagedHost {
+		req, err = s.gcpGetSignedURLHTTPRequest(subdir, fileName)
+	} else {
+		req, err = s.legacyGetSignedURLHTTPRequest(subdir, fileName)
+	}
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("status (code %d) returned from %s: %s", resp.StatusCode, req.URL.String(), resp.Status)
+	}
+
+	var data struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return "", fmt.Errorf("error decoding response: %s", err)
+	}
+	return data.URL, nil
+}
+
+// legacyGetSignedURLHTTPRequest returns a *http.Request based on the the legacy analytics path and parameters
+func (s *saasUploader) legacyGetSignedURLHTTPRequest(subdir, fileName string) (*http.Request, error) {
 	org, env := s.orgEnvFromSubdir(subdir)
 	if org == "" || env == "" {
-		return "", fmt.Errorf("invalid subdir %s", subdir)
+		return nil, fmt.Errorf("invalid subdir %s", subdir)
 	}
 
 	ur := *s.baseURL
 	ur.Path = path.Join(ur.Path, fmt.Sprintf(analyticsPath, org, env))
 	req, err := http.NewRequest("GET", ur.String(), nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	relPath := filepath.Join(s.uploadDir(), filepath.Base(fileName))
@@ -157,21 +192,30 @@ func (s *saasUploader) signedURL(subdir, fileName string) (string, error) {
 	q.Add("encrypt", "true")
 	req.URL.RawQuery = q.Encode()
 
-	resp, err := s.client.Do(req)
+	return req, nil
+}
+
+// gcpGetSignedURLHTTPRequest returns a *http.Request based on the UAP analytics path and parameters
+func (s *saasUploader) gcpGetSignedURLHTTPRequest(subdir, fileName string) (*http.Request, error) {
+	org, env := s.orgEnvFromSubdir(subdir)
+	if org == "" || env == "" {
+		return nil, fmt.Errorf("invalid subdir %s", subdir)
+	}
+
+	ur := *s.baseURL
+	ur.Path = path.Join(ur.Path, fmt.Sprintf(uapAnalyticsPath, org, env))
+	req, err := http.NewRequest("GET", ur.String(), nil)
 	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("status (code %d) returned from %s: %s", resp.StatusCode, ur.String(), resp.Status)
+		return nil, err
 	}
 
-	var data struct {
-		URL string `json:"url"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return "", fmt.Errorf("error decoding response: %s", err)
-	}
-	return data.URL, nil
+	relPath := fmt.Sprintf(relativeFilePathFmt, time.Now().Unix(), org, env, uuid.New().String())
+
+	q := req.URL.Query()
+	q.Add("repo", repoName)
+	q.Add("dataset", datasetType)
+	q.Add("relative_file_path", relPath)
+	req.URL.RawQuery = q.Encode()
+
+	return req, nil
 }

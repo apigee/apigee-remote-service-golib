@@ -164,9 +164,16 @@ func (o *Options) validate() error {
 }
 
 const (
+	// legacy saas path and parameters
 	analyticsPath = "/analytics/organization/%s/environment/%s"
 	axRecordType  = "APIAnalytics"
 	pathFmt       = "date=%s/time=%s/"
+
+	// gcp managed uap path and parameters
+	uapAnalyticsPath    = "/v1/organizations/%s/environments/%s/datalocation"
+	repoName            = "edge"
+	datasetType         = "api"
+	relativeFilePathFmt = "%v.api.%s.%s.%s.gz" // %timestamp.api.org.env.uuid.gz
 
 	// limited to 2 for now to limit upload stress
 	numUploaders = 2
