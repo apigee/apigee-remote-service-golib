@@ -726,8 +726,9 @@ func TestGCPSignedURLRequest(t *testing.T) {
 	baseURL, _ := url.Parse("https://apigee.googleapis.com")
 
 	uploader := &saasUploader{
-		client:  http.DefaultClient,
-		baseURL: baseURL,
+		client:       http.DefaultClient,
+		baseURL:      baseURL,
+		isGCPManaged: true,
 	}
 
 	req, err := uploader.gcpGetSignedURLHTTPRequest("hi~test", "record_file")

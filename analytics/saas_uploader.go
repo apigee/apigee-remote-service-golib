@@ -84,30 +84,13 @@ func (s *saasUploader) upload(tenant, fileName string) error {
 		return err
 	}
 
-	fi, err := file.Stat()
-	if err != nil {
-		return err
-	}
-
 	log.Debugf("getting signed URL for %s", fileName)
-	signedURL, err := s.signedURL(tenant, fileName)
+	req, err := s.signedURLRequest(tenant, fileName, file)
 	if err != nil {
-		return fmt.Errorf("signedURL: %s", err)
-	}
-	req, err := http.NewRequest("PUT", signedURL, file)
-	if err != nil {
-		return fmt.Errorf("http.NewRequest: %s", err)
+		return fmt.Errorf("signedURLRequest: %v", err)
 	}
 
-	if !s.isGCPManaged {
-		// additional headers for legacy saas
-		req.Header.Set("Expect", "100-continue")
-		req.Header.Set("Content-Type", "application/x-gzip")
-		req.Header.Set("x-amz-server-side-encryption", "AES256")
-	}
-	req.ContentLength = fi.Size()
-
-	log.Debugf("uploading %s to %s", fileName, signedURL)
+	log.Debugf("uploading %s to %s", fileName, req.URL.String())
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("client.Do(): %s", err)
@@ -139,6 +122,32 @@ func (s *saasUploader) uploadDir() string {
 	d := now.Format("2006-01-02")
 	t := now.Format("15-04-00")
 	return fmt.Sprintf(pathFmt, d, t)
+}
+
+func (s *saasUploader) signedURLRequest(subdir, filename string, file *os.File) (*http.Request, error) {
+	fi, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	signedURL, err := s.signedURL(subdir, filename)
+	if err != nil {
+		return nil, fmt.Errorf("signedURL: %s", err)
+	}
+	req, err := http.NewRequest("PUT", signedURL, file)
+	if err != nil {
+		return nil, fmt.Errorf("http.NewRequest: %s", err)
+	}
+
+	if !s.isGCPManaged {
+		// additional headers for legacy saas
+		req.Header.Set("Expect", "100-continue")
+		req.Header.Set("Content-Type", "application/x-gzip")
+		req.Header.Set("x-amz-server-side-encryption", "AES256")
+	}
+	req.ContentLength = fi.Size()
+
+	return req, nil
 }
 
 // signedURL asks for a signed URL that can be used to upload gzip file
