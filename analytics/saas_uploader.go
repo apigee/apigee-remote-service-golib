@@ -99,23 +99,16 @@ func (s *saasUploader) upload(tenant, fileName string) error {
 		return fmt.Errorf("http.NewRequest: %s", err)
 	}
 
-	// The given s.client is configured with service account credentials to fetch the
-	// signed URL in the GCP-managed case. As a side-effect of being narrowly scoped,
-	// it lacks the storage.objects.create access.
-	// Therefore, a default client is needed to do the PUT request to the signed URL.
-	client := http.DefaultClient
 	if !s.isGCPManaged {
 		// additional headers for legacy saas
 		req.Header.Set("Expect", "100-continue")
 		req.Header.Set("Content-Type", "application/x-gzip")
 		req.Header.Set("x-amz-server-side-encryption", "AES256")
-		// switch back to the given s.client for legacy saas
-		client = s.client
 	}
 	req.ContentLength = fi.Size()
 
 	log.Debugf("uploading %s to %s", fileName, signedURL)
-	resp, err := client.Do(req)
+	resp, err := s.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("client.Do(): %s", err)
 	}
