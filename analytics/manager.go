@@ -55,17 +55,18 @@ func NewManager(opts Options) (Manager, error) {
 	}
 
 	var uploader uploader
-	if opts.FluentdEndpoint != "" {
+	if opts.FluentdEndpoint != "" && !opts.isGCPManaged() {
 		var err error
 		uploader, err = newFluentdUploader(opts)
 		if err != nil {
 			return nil, err
 		}
-	} else { // SaaS
+	} else { // CG SaaS or GCP-managed URL is given
 		uploader = &saasUploader{
-			client:  opts.Client,
-			baseURL: opts.BaseURL,
-			now:     opts.now,
+			client:       opts.Client,
+			baseURL:      opts.BaseURL,
+			now:          opts.now,
+			isGCPManaged: opts.isGCPManaged(),
 		}
 	}
 
@@ -153,6 +154,7 @@ type Options struct {
 	TLSSkipVerify bool
 }
 
+// validate checks if there is missing options
 func (o *Options) validate() error {
 	if o.BufferPath == "" ||
 		o.StagingFileLimit <= 0 ||
@@ -163,10 +165,23 @@ func (o *Options) validate() error {
 	return nil
 }
 
+// isGCPManaged checks if the given baseURL is GCPManagedHost
+func (o *Options) isGCPManaged() bool {
+	const GCPManagedHost = "apigee.googleapis.com"
+	return GCPManagedHost == o.BaseURL.Hostname()
+}
+
 const (
+	// legacy saas path and parameters
 	analyticsPath = "/analytics/organization/%s/environment/%s"
 	axRecordType  = "APIAnalytics"
 	pathFmt       = "date=%s/time=%s/"
+
+	// gcp managed uap path and parameters
+	uapAnalyticsPath    = "/v1/organizations/%s/environments/%s/datalocation"
+	repoName            = "edge"
+	datasetType         = "api"
+	relativeFilePathFmt = "%v.api.%s.%s.%s.gz" // %timestamp.api.org.env.uuid.gz
 
 	// limited to 2 for now to limit upload stress
 	numUploaders = 2

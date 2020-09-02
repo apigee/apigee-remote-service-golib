@@ -11,5 +11,4 @@ require (
 	github.com/prometheus/client_golang v1.7.1
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
-	gopkg.in/yaml.v2 v2.3.0 // indirect
 )

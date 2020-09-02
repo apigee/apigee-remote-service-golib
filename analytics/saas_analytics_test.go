@@ -721,3 +721,40 @@ func TestUploadFailure(t *testing.T) {
 		}
 	}
 }
+
+func TestGCPSignedURLRequest(t *testing.T) {
+	baseURL, _ := url.Parse("https://apigee.googleapis.com")
+
+	uploader := &saasUploader{
+		client:       http.DefaultClient,
+		baseURL:      baseURL,
+		isGCPManaged: true,
+	}
+
+	req, err := uploader.gcpGetSignedURLHTTPRequest("hi~test", "record_file")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.URL.Host != "apigee.googleapis.com" {
+		t.Errorf("wrong host: want %s got %s", "apigee.googleapis.com", req.URL.Host)
+	}
+}
+
+func TestLegacySignedURLRequest(t *testing.T) {
+	legacyHost := "istioservices.apigee.net"
+	baseURL, _ := url.Parse("https://istioservices.apigee.net/edgemicro")
+
+	uploader := &saasUploader{
+		client:  http.DefaultClient,
+		baseURL: baseURL,
+		now:     time.Now,
+	}
+
+	req, err := uploader.legacyGetSignedURLHTTPRequest("hi~test", "record_file")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.URL.Host != legacyHost {
+		t.Errorf("wrong host: want %s got %s", legacyHost, req.URL.Host)
+	}
+}
