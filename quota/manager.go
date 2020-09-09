@@ -36,7 +36,7 @@ const (
 	defaultNumSyncWorkers = 10
 	defaultRefreshAfter   = 1 * time.Minute
 	defaultDeleteAfter    = 10 * time.Minute
-	syncQueueSize         = 100
+	syncQueueSize         = 1000
 	resultCacheBufferSize = 30
 )
 
@@ -199,9 +199,9 @@ func (m *manager) bucketMaintenanceLoop() {
 					m.bucketsSyncingLock.Lock()
 					if _, ok := m.bucketsSyncing[b]; !ok { // not already scheduled
 						m.bucketsSyncing[b] = struct{}{}
-						m.bucketToSyncQueue <- b
 					}
 					m.bucketsSyncingLock.Unlock()
+					m.bucketToSyncQueue <- b
 				}
 			}
 			m.bucketsLock.RUnlock()
