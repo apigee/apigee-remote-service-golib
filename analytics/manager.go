@@ -168,7 +168,7 @@ func (o *Options) validate() error {
 // isGCPManaged checks if the given baseURL is GCPManagedHost
 func (o *Options) isGCPManaged() bool {
 	const GCPManagedHost = "apigee.googleapis.com"
-	return GCPManagedHost == o.BaseURL.Hostname()
+	return o.BaseURL != nil && GCPManagedHost == o.BaseURL.Hostname()
 }
 
 const (
