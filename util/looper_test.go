@@ -17,6 +17,7 @@ package util_test
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,9 +32,9 @@ func TestPoller(t *testing.T) {
 
 	wait := make(chan struct{})
 
-	called := 0
+	var called int32
 	f := func(ctx context.Context) error {
-		called++
+		atomic.AddInt32(&called, 1)
 		<-wait
 		return nil
 	}
@@ -45,11 +46,11 @@ func TestPoller(t *testing.T) {
 	})
 	defer cancel()
 
-	if called != 0 {
+	if atomic.LoadInt32(&called) != 0 {
 		t.Error("called should be 0")
 	}
 	wait <- struct{}{}
-	if called != 1 {
+	if atomic.LoadInt32(&called) != 1 {
 		t.Error("called should be 1")
 	}
 }
@@ -65,22 +66,22 @@ func TestPollerQuit(t *testing.T) {
 		return errors.Errorf("yup")
 	}
 
-	called := 0
+	var called int32
 	waitErr := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 	poller.Start(ctx, f, time.Millisecond, func(err error) error {
-		called++
+		atomic.AddInt32(&called, 1)
 		waitErr <- struct{}{}
 		return nil
 	})
 	defer cancel()
 
-	if called != 0 {
+	if atomic.LoadInt32(&called) != 0 {
 		t.Error("called should be 0")
 	}
 	wait <- struct{}{}
 	<-waitErr
-	if called != 1 {
+	if atomic.LoadInt32(&called) != 1 {
 		t.Error("called should be 1")
 	}
 }
@@ -122,11 +123,10 @@ func TestNewChannelWithWorkerPool(t *testing.T) {
 		return nil
 	}
 	channel := util.NewChannelWithWorkerPool(ctx, 2, 2, errH, backoff)
-	var i = 0
-	ip := &i
+	var i int32
 
 	work := func(ctx context.Context) error {
-		*ip++
+		atomic.AddInt32(&i, 1)
 		return nil
 	}
 	work2 := func(ctx context.Context) error {
@@ -135,20 +135,20 @@ func TestNewChannelWithWorkerPool(t *testing.T) {
 	channel <- work
 	time.Sleep(5 * time.Millisecond)
 
-	if *ip != 1 {
-		t.Errorf("want: 1, got: %d", *ip)
+	if got := atomic.LoadInt32(&i); got != 1 {
+		t.Errorf("want: 1, got: %d", got)
 	}
 
 	channel <- work2
 	time.Sleep(5 * time.Millisecond)
-	if *ip != 1 {
-		t.Errorf("want: 1, got: %d", *ip)
+	if got := atomic.LoadInt32(&i); got != 1 {
+		t.Errorf("want: 1, got: %d", got)
 	}
 
 	channel <- work
 	time.Sleep(5 * time.Millisecond)
-	if *ip != 2 {
-		t.Errorf("want: 2, got: %d", *ip)
+	if got := atomic.LoadInt32(&i); got != 2 {
+		t.Errorf("want: 2, got: %d", got)
 	}
 
 	close(channel)

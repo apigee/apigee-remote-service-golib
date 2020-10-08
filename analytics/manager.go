@@ -194,9 +194,12 @@ func (m *manager) Start() {
 	// start upload channel and workers
 	errNoRetry := fmt.Errorf("analytics closed, no retry on upload")
 	errHandler := func(err error) error {
+		m.bucketsLock.RLock()
 		if m.closed {
+			m.bucketsLock.RUnlock()
 			return errNoRetry
 		}
+		m.bucketsLock.RUnlock()
 		log.Errorf("analytics upload: %v", err)
 		return nil
 	}
