@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -141,10 +142,9 @@ func TestQuota(t *testing.T) {
 // not fully determinate, uses delays and background threads
 func TestSync(t *testing.T) {
 
-	fakeTime := int64(1521221450)
-	now := func() time.Time { return time.Unix(fakeTime, 0) }
+	fakeTime := newClock()
 	serverResult := Result{}
-	ts := testServer(&serverResult, now, nil)
+	ts := testServer(&serverResult, fakeTime.now, nil)
 	defer ts.Close()
 
 	context := authtest.NewContext(ts.URL)
@@ -164,7 +164,7 @@ func TestSync(t *testing.T) {
 	m := &manager{
 		close:             make(chan bool),
 		client:            http.DefaultClient,
-		now:               now,
+		now:               fakeTime.now,
 		syncRate:          2 * time.Millisecond,
 		bucketToSyncQueue: make(chan *bucket, 10),
 		baseURL:           context.InternalAPI(),
@@ -173,7 +173,7 @@ func TestSync(t *testing.T) {
 	}
 
 	b := newBucket(*request, m, m.prometheusLabelsForQuota(quotaID))
-	b.checked = now()
+	b.checked = fakeTime.now()
 	b.result = result
 	m.buckets = map[string]*bucket{quotaID: b}
 	b.refreshAfter = time.Millisecond
@@ -181,9 +181,11 @@ func TestSync(t *testing.T) {
 	m.Start()
 	defer m.Close()
 
-	fakeTime = fakeTime + 10
+	fakeTime.add(10)
 	time.Sleep(10 * time.Millisecond) // allow idle sync
+	b.lock.Lock()
 	b.refreshAfter = time.Hour
+	b.lock.Unlock()
 
 	serverResult.ExpiryTime /= 1000 // convert back to seconds for comparison
 
@@ -214,7 +216,7 @@ func TestSync(t *testing.T) {
 	if err != nil {
 		t.Errorf("should not have received error on apply: %v", err)
 	}
-	fakeTime = fakeTime + 10
+	fakeTime.add(10)
 	err = b.sync()
 	if err != nil {
 		t.Errorf("should not have received error on sync: %v", err)
@@ -233,7 +235,7 @@ func TestSync(t *testing.T) {
 		t.Errorf("synced got: %#v, want: %#v", b.synced, m.now())
 	}
 
-	fakeTime = fakeTime + 10*60
+	fakeTime.add(10 * 60)
 	b.lock.Unlock()
 	time.Sleep(10 * time.Millisecond) // allow background delete
 	m.bucketsLock.RLock()
@@ -244,14 +246,13 @@ func TestSync(t *testing.T) {
 }
 
 func TestDisconnected(t *testing.T) {
-	fakeTime := int64(1521221450)
-	now := func() time.Time { return time.Unix(fakeTime, 0) }
+	fakeTime := newClock()
 
 	errC := &errControl{
 		send: 404,
 	}
 	serverResult := Result{}
-	ts := testServer(&serverResult, now, errC)
+	ts := testServer(&serverResult, fakeTime.now, errC)
 	ts.Close()
 
 	context := authtest.NewContext(ts.URL)
@@ -268,7 +269,7 @@ func TestDisconnected(t *testing.T) {
 	m := &manager{
 		close:             make(chan bool),
 		client:            http.DefaultClient,
-		now:               now,
+		now:               fakeTime.now,
 		bucketToSyncQueue: make(chan *bucket, 10),
 		baseURL:           context.InternalAPI(),
 		numSyncWorkers:    1,
@@ -316,15 +317,15 @@ func TestDisconnected(t *testing.T) {
 		Allowed:    1,
 		Used:       1,
 		Exceeded:   2,
-		ExpiryTime: now().Unix(),
-		Timestamp:  now().Unix(),
+		ExpiryTime: fakeTime.now().Unix(),
+		Timestamp:  fakeTime.now().Unix(),
 	}
 	if !reflect.DeepEqual(*res, wantResult) {
 		t.Errorf("result got: %#v, want: %#v", *res, wantResult)
 	}
 
 	// next window
-	fakeTime = fakeTime + 60
+	fakeTime.add(60)
 	res, err = m.Apply(authContext, p, args)
 	if err != nil {
 		t.Fatalf("got error: %s", err)
@@ -333,8 +334,8 @@ func TestDisconnected(t *testing.T) {
 		Allowed:    1,
 		Used:       1,
 		Exceeded:   0,
-		ExpiryTime: now().Unix(),
-		Timestamp:  now().Unix(),
+		ExpiryTime: fakeTime.now().Unix(),
+		Timestamp:  fakeTime.now().Unix(),
 	}
 	if !reflect.DeepEqual(*res, wantResult) {
 		t.Errorf("result got: %#v, want: %#v", *res, wantResult)
@@ -342,14 +343,13 @@ func TestDisconnected(t *testing.T) {
 }
 
 func TestWindowExpired(t *testing.T) {
-	fakeTime := int64(1521221450)
-	now := func() time.Time { return time.Unix(fakeTime, 0) }
+	fakeTime := newClock()
 
 	errC := &errControl{
 		send: 200,
 	}
 	serverResult := Result{}
-	ts := testServer(&serverResult, now, errC)
+	ts := testServer(&serverResult, fakeTime.now, errC)
 	defer ts.Close()
 
 	context := authtest.NewContext(ts.URL)
@@ -366,7 +366,7 @@ func TestWindowExpired(t *testing.T) {
 	m := &manager{
 		close:             make(chan bool),
 		client:            http.DefaultClient,
-		now:               now,
+		now:               fakeTime.now,
 		syncRate:          time.Minute,
 		bucketToSyncQueue: make(chan *bucket, 10),
 		baseURL:           context.InternalAPI(),
@@ -408,7 +408,7 @@ func TestWindowExpired(t *testing.T) {
 	if bucket.windowExpired() {
 		t.Errorf("should not be expired")
 	}
-	fakeTime++
+	fakeTime.add(1)
 	if !bucket.windowExpired() {
 		t.Errorf("should be expired")
 	}
@@ -436,7 +436,7 @@ func TestWindowExpired(t *testing.T) {
 	}
 
 	// move to the next window
-	fakeTime++
+	fakeTime.add(1)
 	if !bucket.windowExpired() {
 		t.Errorf("should be expired")
 	}
@@ -499,4 +499,27 @@ func (m *manager) forceSync(quotaID string) error {
 		m.bucketsSyncingLock.Unlock()
 	}()
 	return b.sync()
+}
+
+type Clock struct {
+	time int64
+	lock sync.RWMutex
+}
+
+func newClock() *Clock {
+	return &Clock{
+		time: int64(1521221450),
+	}
+}
+
+func (c *Clock) now() time.Time {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	return time.Unix(c.time, 0)
+}
+
+func (c *Clock) add(time int64) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	c.time = c.time + time
 }
