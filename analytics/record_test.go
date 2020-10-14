@@ -34,6 +34,13 @@ func TestValidationFailure(t *testing.T) {
 			ClientReceivedEndTimestamp:   ts * 1000,
 			GatewayFlowID:                "x",
 		}, ""},
+		{"good record within 1 minute tolerance", Record{
+			Organization:                 "hi",
+			Environment:                  "test",
+			ClientReceivedStartTimestamp: (ts + 30) * 1000,
+			ClientReceivedEndTimestamp:   (ts + 30) * 1000,
+			GatewayFlowID:                "x",
+		}, ""},
 		{"missing org", Record{
 			Environment:                  "test",
 			ClientReceivedStartTimestamp: ts * 1000,
@@ -68,8 +75,8 @@ func TestValidationFailure(t *testing.T) {
 		{"in the future", Record{
 			Organization:                 "hi",
 			Environment:                  "test",
-			ClientReceivedStartTimestamp: (ts + 1) * 1000,
-			ClientReceivedEndTimestamp:   (ts + 1) * 1000,
+			ClientReceivedStartTimestamp: (ts + 61) * 1000,
+			ClientReceivedEndTimestamp:   (ts + 61) * 1000,
 			GatewayFlowID:                "x",
 		}, "in the future"},
 		{"too old", Record{

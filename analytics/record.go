@@ -99,7 +99,7 @@ func (r Record) validate(now time.Time) error {
 
 	// Validate that timestamps make sense.
 	ts := time.Unix(r.ClientReceivedStartTimestamp/1000, 0)
-	if ts.After(now) {
+	if ts.After(now.Add(time.Minute)) { // allow a minute of tolerance
 		err = multierror.Append(err, errors.New("ClientReceivedStartTimestamp cannot be in the future"))
 	}
 	if ts.Before(now.Add(-90 * 24 * time.Hour)) {
