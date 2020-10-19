@@ -16,13 +16,15 @@ package product
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
+	"regexp"
 	"testing"
 
 	"github.com/apigee/apigee-remote-service-golib/auth"
 )
 
-func TestResolve(t *testing.T) {
+func TestAuthorize(t *testing.T) {
 
 	productsMap := map[string]*APIProduct{
 		"Name 1": {
@@ -36,7 +38,7 @@ func TestResolve(t *testing.T) {
 		},
 		"Name 2": {
 			Attributes: []Attribute{
-				{Name: TargetsAttr, Value: "service2.test,shared.test"},
+				{Name: TargetsAttr, Value: "service2.test, shared.test"},
 			},
 			Environments: []string{"prod"},
 			Name:         "Name 2",
@@ -50,131 +52,425 @@ func TestResolve(t *testing.T) {
 			},
 			Environments: []string{"prod"},
 			Name:         "Name 3",
-			Resources:    []string{"/"},
+			Resources:    []string{"/name3"},
 			Scopes:       []string{},
 			Targets:      []string{"shared.test"},
 		},
 	}
 
-	for _, p := range productsMap {
-		p.resolveResourceMatchers()
+	// marshal/unmarshal to ensure structs
+	b, err := json.Marshal(productsMap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = json.Unmarshal(b, &productsMap)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	api := "shared.test"
-	path := "/"
+	target := "shared.test"
+	path := "/name3"
+	method := "GET"
 
 	ac := &auth.Context{
 		APIProducts: []string{"Name 1", "Name 2", "Name 3", "Invalid"},
 		Scopes:      []string{"scope1", "scope2"},
+		Application: "app",
 	}
-	resolved, failHints := resolve(ac, productsMap, api, path)
-	if len(resolved) != 3 {
-		t.Errorf("want: 3, got: %v", failHints)
+	targets, hints := authorize(ac, productsMap, target, path, method, true)
+	if len(targets) != 3 {
+		t.Errorf("want: 3, got: %v", len(targets))
 	}
-	if len(failHints) != 1 {
-		t.Errorf("want: 1, got: %v", failHints)
+	want := `Authorizing request:
+	products: [Name 1 Name 2 Name 3 Invalid]
+	scopes: [scope1 scope2]
+	operation: GET /name3
+	target: shared.test
+	- product: Name 1
+		authorized
+	- product: Name 2
+		authorized
+	- product: Name 3
+		authorized
+	- product: Invalid
+		not found`
+	if noSymbols(want) != noSymbols(hints) {
+		t.Errorf("want: '%s', got: '%s'", want, hints)
 	}
 
-	ac.Scopes = []string{"scope2"}
-	resolved, failHints = resolve(ac, productsMap, api, path)
-	if len(resolved) != 2 {
-		t.Errorf("want: 2, got: %d", len(resolved))
+	// specific path
+	targets, hints = authorize(ac, productsMap, target, "/path", method, true)
+	if len(targets) != 2 {
+		t.Errorf("want: 2, got: %d", len(targets))
 	} else {
-		got := resolved[0]
-		want := productsMap["Name 2"]
+		got := targets[0]
+		want := AuthorizedOperation{
+			ID:         "Name 1-app",
+			QuotaLimit: productsMap["Name 1"].QuotaLimitInt,
+		}
 		if !reflect.DeepEqual(want, got) {
 			t.Errorf("\nwant: %v\n got: %v", want, got)
 		}
 	}
-	if len(failHints) != 2 {
-		t.Errorf("want: 2, got: %v", failHints)
+	want = `Authorizing request:
+	products: [Name 1 Name 2 Name 3 Invalid]
+	scopes: [scope1 scope2]
+	operation: GET /path
+	target: shared.test
+	- product: Name 1
+		authorized
+	- product: Name 2
+		authorized
+	- product: Name 3
+		no path: /path
+	- product: Invalid
+		not found`
+	if noSymbols(want) != noSymbols(hints) {
+		t.Errorf("want: '%s', got: '%s'", want, hints)
 	}
 
+	// bad target
+	targets, hints = authorize(ac, productsMap, "target", "/path", method, true)
+	if len(targets) != 0 {
+		t.Errorf("want: 0, got: %d", len(targets))
+	}
+	want = `Authorizing request:
+	products: [Name 1 Name 2 Name 3 Invalid]
+	scopes: [scope1 scope2]
+	operation: GET /path
+	target: target
+	- product: Name 1
+		no targets: target
+	- product: Name 2
+		no targets: target
+	- product: Name 3
+		no targets: target
+	- product: Invalid
+		not found`
+	if noSymbols(want) != noSymbols(hints) {
+		t.Errorf("want: '%s', got: '%s'", want, hints)
+	}
+
+	// scope
+	ac.Scopes = []string{"scope2"}
+	targets, hints = authorize(ac, productsMap, target, path, method, true)
+	if len(targets) != 2 {
+		t.Errorf("want: 2, got: %d", len(targets))
+	} else {
+		got := targets[0]
+		want := AuthorizedOperation{
+			ID:         "Name 2-app",
+			QuotaLimit: productsMap["Name 2"].QuotaLimitInt,
+		}
+		if !reflect.DeepEqual(want, got) {
+			t.Errorf("\nwant: %v\n got: %v", want, got)
+		}
+	}
+	want = `Authorizing request:
+	products: [Name 1 Name 2 Name 3 Invalid]
+	scopes: [scope2]
+	operation: GET /name3
+	target: shared.test
+	- product: Name 1
+		incorrect scopes: [scope1]
+	- product: Name 2
+		authorized
+	- product: Name 3
+		authorized
+	- product: Invalid
+		not found`
+	if noSymbols(want) != noSymbols(hints) {
+		t.Errorf("want: '%s', got: '%s'", want, hints)
+	}
+
+	// specific product
 	ac.APIProducts = []string{"Name 1"}
-	resolved, failHints = resolve(ac, productsMap, api, path)
-	if len(resolved) != 0 {
-		t.Errorf("want: 0, got: %d", len(resolved))
+	targets, hints = authorize(ac, productsMap, target, path, method, true)
+	if len(targets) != 0 {
+		t.Errorf("want: 0, got: %d", len(targets))
 	}
-	if len(failHints) != 1 {
-		t.Errorf("want: 1, got: %v", failHints)
+	want = `Authorizing request:
+	products: [Name 1]
+	scopes: [scope2]
+	operation: GET /name3
+	target: shared.test
+	- product: Name 1
+		incorrect scopes: [scope1]
+	`
+	if noSymbols(want) != noSymbols(hints) {
+		t.Errorf("want: '%s', got: '%s'", want, hints)
 	}
 
-	// check API Key - no scopes required!
+	// API Key - no scopes required!
 	ac.APIKey = "x"
 	ac.APIProducts = []string{"Name 1", "Name 2", "Name 3"}
 	ac.Scopes = []string{}
-	resolved, failHints = resolve(ac, productsMap, api, path)
-	if len(resolved) != 3 {
-		t.Errorf("want: 3, got: %d", len(resolved))
+	targets, hints = authorize(ac, productsMap, target, path, method, true)
+	if len(targets) != 3 {
+		t.Errorf("want: 3, got: %d", len(targets))
 	}
-	if len(failHints) != 0 {
-		t.Errorf("want: 0, got: %v", failHints)
+	want = `Authorizing request:
+	products: [Name 1 Name 2 Name 3]
+	scopes: []
+	operation: GET /name3
+	target: shared.test
+	- product: Name 1
+			authorized
+	- product: Name 2
+			authorized
+	- product: Name 3
+			authorized
+		`
+	if noSymbols(want) != noSymbols(hints) {
+		t.Errorf("want: '%s', got: '%s'", want, hints)
 	}
 }
 
-// Path matching is similar to wildcard semantics described in the Apigee product documentation here:
-// https://docs.apigee.com/developer-services/content/create-api-products#resourcebehavior.
-// However, as there is no base path, it is simplified as follows:
-// 1. A single slash (/) by itself matches any path.
-// 2. * is valid anywhere and matches within a segment (between slashes).
-// 3. ** is valid at the end and matches anything to the end of line.
-func TestValidPath(t *testing.T) {
+func TestAuthorizeOperations(t *testing.T) {
 
-	resources := []string{"/", "/v1/*", "/v1/**", "/v1/weatherapikey/*/2/**"}
-	specs := []struct {
-		Path    string
-		Results []bool
-	}{
-		{"/v1/weatherapikey", []bool{true, true, true, false}},
-		{"/v1/weatherapikey/", []bool{true, false, true, false}},
-		{"/v1/weatherapikey/1", []bool{true, false, true, false}},
-		{"/v1/weatherapikey/1/", []bool{true, false, true, false}},
-		{"/v1/weatherapikey/1/2", []bool{true, false, true, false}},
-		{"/v1/weatherapikey/1/2/", []bool{true, false, true, true}},
-		{"/v1/weatherapikey/1/2/3/", []bool{true, false, true, true}},
-		{"/v1/weatherapikey/1/a/2/3/", []bool{true, false, true, false}},
+	productsMap := map[string]*APIProduct{
+		"Name 1": {
+			Attributes: []Attribute{
+				{Name: TargetsAttr, Value: "service1.test, shared.test"},
+			},
+			Name:          "Name 1",
+			Resources:     []string{"/"},
+			Scopes:        []string{"scope1"},
+			Targets:       []string{"service1.test", "shared.test"},
+			QuotaInterval: "2",
+			QuotaLimit:    "2",
+			QuotaTimeUnit: "second",
+			OperationGroup: &OperationGroup{
+				OperationConfigType: "remote-service",
+				OperationConfigs: []OperationConfig{
+					{
+						APISource: "host",
+						Operations: []Operation{
+							{
+								Resource: "/operation1",
+								Methods:  []string{"GET"},
+							},
+						},
+						Quota: &Quota{
+							Limit:    "1",
+							Interval: "1",
+							TimeUnit: "minute",
+						},
+					},
+				},
+			},
+		},
+		"Name 2": {
+			Attributes: []Attribute{
+				{Name: TargetsAttr, Value: "service1.test, shared.test"},
+			},
+			Name:          "Name 2",
+			Resources:     []string{"/"},
+			Scopes:        []string{"scope1"},
+			Targets:       []string{"service1.test", "shared.test"},
+			QuotaInterval: "2",
+			QuotaLimit:    "2",
+			QuotaTimeUnit: "second",
+			OperationGroup: &OperationGroup{
+				OperationConfigType: "remote-service",
+				OperationConfigs: []OperationConfig{
+					{
+						APISource: "host",
+						Operations: []Operation{
+							{
+								Resource: "/operation2",
+								Methods:  []string{"GET"},
+							},
+						},
+						// no OperationConfig quota
+					},
+				},
+			},
+		},
 	}
 
-	for _, spec := range specs {
-		for j, resource := range resources {
-			p := &APIProduct{
-				Resources: []string{resource},
-			}
-			p.resolveResourceMatchers()
-			if p.isValidPath(spec.Path) != spec.Results[j] {
-				t.Errorf("expected: %v got: %v for path: %s, resource: %s",
-					spec.Results[j], p.isValidPath(spec.Path), spec.Path, resource)
-			}
-		}
+	// marshal/unmarshal to ensure structs
+	b, err := json.Marshal(productsMap)
+	if err != nil {
+		t.Fatal(err)
 	}
+	err = json.Unmarshal(b, &productsMap)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	target := "host"
+	path := "/operation1"
+	method := "GET"
+
+	ac := &auth.Context{
+		APIProducts: []string{"Name 1", "Name 2", "Invalid"},
+		Scopes:      []string{"scope1", "scope2"},
+		Application: "app",
+	}
+	targets, hints := authorize(ac, productsMap, target, path, method, true)
+	if len(targets) != 1 {
+		t.Errorf("want: 1, got: %v", len(targets))
+	}
+
+	wantProduct := productsMap["Name 1"]
+	wantQuota := wantProduct.OperationGroup.OperationConfigs[0].Quota
+	wantTargetID := fmt.Sprintf("%s-%s-%s", wantProduct.Name, ac.Application, target)
+	if wantTargetID != targets[0].ID {
+		t.Errorf("want: '%s', got: '%s'", wantTargetID, targets[0].ID)
+	}
+	if wantQuota.TimeUnit != targets[0].QuotaTimeUnit {
+		t.Errorf("want: '%s', got: '%s'", wantQuota.TimeUnit, targets[0].QuotaTimeUnit)
+	}
+	if wantQuota.IntervalInt != targets[0].QuotaInterval {
+		t.Errorf("want: '%d', got: '%d'", wantQuota.IntervalInt, targets[0].QuotaInterval)
+	}
+	if wantQuota.LimitInt != targets[0].QuotaLimit {
+		t.Errorf("want: '%d', got: '%d'", wantQuota.LimitInt, targets[0].QuotaLimit)
+	}
+
+	want := `Authorizing request:
+	products: [Name 1 Name 2 Invalid]
+	scopes: [scope1 scope2]
+	operation: GET /operation1
+	target: host
+	- product: Name 1
+		operation configs:
+			0: authorized
+	- product: Name 2
+		operation configs:
+			0: no path: /operation1
+	- product: Invalid
+		not found`
+	if noSymbols(want) != noSymbols(hints) {
+		t.Errorf("want: '%s', got: '%s'", want, hints)
+	}
+
+	// quota override
+	path = "/operation2"
+	targets, hints = authorize(ac, productsMap, target, path, method, true)
+	if len(targets) != 1 {
+		t.Errorf("want: 1, got: %v", len(targets))
+	}
+
+	wantProduct = productsMap["Name 2"]
+	wantTargetID = fmt.Sprintf("%s-%s-%s", wantProduct.Name, ac.Application, target)
+	if wantTargetID != targets[0].ID {
+		t.Errorf("want: '%s', got: '%s'", wantTargetID, targets[0].ID)
+	}
+	if wantProduct.QuotaTimeUnit != targets[0].QuotaTimeUnit {
+		t.Errorf("want: '%s', got: '%s'", wantProduct.QuotaTimeUnit, targets[0].QuotaTimeUnit)
+	}
+	if wantProduct.QuotaIntervalInt != targets[0].QuotaInterval {
+		t.Errorf("want: '%d', got: '%d'", wantProduct.QuotaIntervalInt, targets[0].QuotaInterval)
+	}
+	if wantProduct.QuotaLimitInt != targets[0].QuotaLimit {
+		t.Errorf("want: '%d', got: '%d'", wantProduct.QuotaLimitInt, targets[0].QuotaLimit)
+	}
+
+	want = `Authorizing request:
+	products: [Name 1 Name 2 Invalid]
+	scopes: [scope1 scope2]
+	operation: GET /operation2
+	target: host
+	- product: Name 1
+		operation configs:
+			0: no path: /operation2
+	- product: Name 2
+		operation configs:
+			0: authorized
+	- product: Invalid
+		not found`
+	if noSymbols(want) != noSymbols(hints) {
+		t.Errorf("want: '%s', got: '%s'", want, hints)
+	}
+
+	// no method
+	targets, hints = authorize(ac, productsMap, target, path, "POST", true)
+	if len(targets) != 0 {
+		t.Errorf("want: 0, got: %v", len(targets))
+	}
+
+	want = `Authorizing request:
+	products: [Name 1 Name 2 Invalid]
+	scopes: [scope1 scope2]
+	operation: POST /operation2
+	target: host
+	- product: Name 1
+		operation configs:
+			0: no method: POST
+	- product: Name 2
+		operation configs:
+			0: no method: POST
+	- product: Invalid
+		not found`
+	if noSymbols(want) != noSymbols(hints) {
+		t.Errorf("want: '%s', got: '%s'", want, hints)
+	}
+
+	// no target
+	targets, hints = authorize(ac, productsMap, "target", path, method, true)
+	if len(targets) != 0 {
+		t.Errorf("want: 0, got: %v", len(targets))
+	}
+
+	want = `Authorizing request:
+	products: [Name 1 Name 2 Invalid]
+	scopes: [scope1 scope2]
+	operation: GET /operation2
+	target: target
+	- product: Name 1
+		operation configs:
+			0: no target: target
+	- product: Name 2
+		operation configs:
+			0: no target: target
+	- product: Invalid
+		not found`
+	if noSymbols(want) != noSymbols(hints) {
+		t.Errorf("want: '%s', got: '%s'", want, hints)
+	}
+}
+
+func noSymbols(str string) string {
+	symbols := regexp.MustCompile(`\s+`)
+	return symbols.ReplaceAllString(str, " ")
 }
 
 func TestValidScopes(t *testing.T) {
 	p := APIProduct{
 		Scopes: []string{"scope1"},
 	}
-	if !p.isValidScopes([]string{"scope1"}) {
+	ac := &auth.Context{
+		Scopes: []string{"scope1"},
+	}
+	if !p.isValidScopes(ac) {
 		t.Errorf("expected %s is valid", p.Scopes)
 	}
-	if !p.isValidScopes([]string{"scope1", "scope2"}) {
+	ac.Scopes = []string{"scope1", "scope2"}
+	if !p.isValidScopes(ac) {
 		t.Errorf("expected %s is valid", p.Scopes)
 	}
-	if p.isValidScopes([]string{"scope2"}) {
+	ac.Scopes = []string{"scope2"}
+	if p.isValidScopes(ac) {
 		t.Errorf("expected %s is not valid", p.Scopes)
 	}
 	p.Scopes = []string{"scope1", "scope2"}
-	if !p.isValidScopes([]string{"scope1"}) {
+	ac.Scopes = []string{"scope1"}
+	if !p.isValidScopes(ac) {
 		t.Errorf("expected %s is valid", p.Scopes)
 	}
-	if !p.isValidScopes([]string{"scope1", "scope2"}) {
+	ac.Scopes = []string{"scope1", "scope2"}
+	if !p.isValidScopes(ac) {
 		t.Errorf("expected %s is valid", p.Scopes)
 	}
-	if !p.isValidScopes([]string{"scope2"}) {
+	ac.Scopes = []string{"scope2"}
+	if !p.isValidScopes(ac) {
 		t.Errorf("expected %s is valid", p.Scopes)
 	}
 }
 
-func TestParseNewJSON(t *testing.T) {
+func TestParseJSONWithOperations(t *testing.T) {
 	var product APIProduct
 	if err := json.Unmarshal([]byte(productJSON), &product); err != nil {
 		t.Fatalf("can't parse productJSON: %v", err)
@@ -218,8 +514,8 @@ func TestParseNewJSON(t *testing.T) {
 		t.Errorf("want: 'remote-service', got: '%s'", product.OperationGroup.OperationConfigType)
 	}
 
-	if len(product.OperationGroup.OperationConfigs) != 1 {
-		t.Fatalf("want 1 OperationConfig")
+	if len(product.OperationGroup.OperationConfigs) != 2 {
+		t.Fatalf("want 2 OperationConfig, got: %d", len(product.OperationGroup.OperationConfigs))
 	}
 	oc := product.OperationGroup.OperationConfigs[0]
 	if oc.APISource != "quota-demo" {
@@ -288,6 +584,15 @@ const productJSON = `
           "limit": "1",
           "interval": "1",
           "timeUnit": "minute"
+        }
+      },
+      {
+        "apiSource": "quota-demo",
+        "operations": [],
+        "quota": {
+          "limit": "null",
+          "interval": "null",
+          "timeUnit": "null"
         }
       }
     ],

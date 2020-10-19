@@ -53,7 +53,7 @@ Dispatch basically works like this:
 // A Manager tracks multiple Apigee quotas
 type Manager interface {
 	Start()
-	Apply(auth *auth.Context, p *product.APIProduct, args Args) (*Result, error)
+	Apply(auth *auth.Context, o product.AuthorizedOperation, args Args) (*Result, error)
 	Close()
 }
 
@@ -135,40 +135,38 @@ func (m *manager) Close() {
 	log.Infof("closed quota manager")
 }
 
-func getQuotaID(auth *auth.Context, p *product.APIProduct) string {
-	return fmt.Sprintf("%s-%s", auth.Application, p.Name)
-}
-
 // Apply a quota request to the local quota bucket and schedule for sync
-func (m *manager) Apply(auth *auth.Context, p *product.APIProduct, args Args) (*Result, error) {
+func (m *manager) Apply(auth *auth.Context, operation product.AuthorizedOperation, args Args) (*Result, error) {
+
+	if operation.QuotaLimit == 0 {
+		return nil, nil
+	}
 
 	if result := m.dupCache.Get(args.DeduplicationID); result != nil {
 		return result, nil
 	}
 
-	quotaID := getQuotaID(auth, p)
-
 	req := &Request{
-		Identifier: quotaID,
-		Interval:   p.QuotaIntervalInt,
-		Allow:      p.QuotaLimitInt,
-		TimeUnit:   p.QuotaTimeUnit,
+		Identifier: operation.ID,
+		Interval:   operation.QuotaInterval,
+		Allow:      operation.QuotaLimit,
+		TimeUnit:   operation.QuotaTimeUnit,
 	}
 
 	// a new bucket is created if missing or if product is no longer compatible
 	var result *Result
 	var err error
 	m.bucketsLock.RLock()
-	b, ok := m.buckets[quotaID]
+	b, ok := m.buckets[req.Identifier]
 	m.bucketsLock.RUnlock()
 	if !ok || !b.compatible(req) {
 		m.bucketsLock.Lock()
-		b, ok = m.buckets[quotaID]
+		b, ok = m.buckets[req.Identifier]
 		if !ok || !b.compatible(req) {
-			promLabels := m.prometheusLabelsForQuota(quotaID)
+			promLabels := m.prometheusLabelsForQuota(req.Identifier)
 			b = newBucket(*req, m, promLabels)
-			m.buckets[quotaID] = b
-			log.Debugf("new quota bucket: %s", quotaID)
+			m.buckets[req.Identifier] = b
+			log.Debugf("new quota bucket: %s", req.Identifier)
 		}
 		m.bucketsLock.Unlock()
 	}

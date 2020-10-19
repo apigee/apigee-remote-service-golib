@@ -15,11 +15,13 @@
 package product
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/apigee/apigee-remote-service-golib/auth"
 	"github.com/apigee/apigee-remote-service-golib/log"
 )
 
@@ -49,7 +51,7 @@ type APIProduct struct {
 	Targets          []string
 	QuotaLimitInt    int64
 	QuotaIntervalInt int64
-	resourceRegexps  []*regexp.Regexp
+	resourceRegexps  []*regexp.Regexp // APIProduct-level only
 }
 
 // An Attribute is a name-value-pair attribute of an API product.
@@ -66,9 +68,60 @@ type OperationGroup struct {
 
 // An OperationConfig is a group of Operations
 type OperationConfig struct {
-	APISource  string      `json:"apiSource"`
-	Operations []Operation `json:"operations"`
-	Quota      *Quota      `json:"quota"`
+	APISource               string      `json:"apiSource"`
+	Operations              []Operation `json:"operations"`
+	Quota                   *Quota      `json:"quota"`
+	resourceRegexpsByMethod map[string][]*regexp.Regexp
+}
+
+func (oc *OperationConfig) UnmarshalJSON(data []byte) error {
+
+	type Unmarsh OperationConfig
+	var un Unmarsh
+	if err := json.Unmarshal(data, &un); err != nil {
+		return err
+	}
+	*oc = OperationConfig(un)
+
+	oc.resourceRegexpsByMethod = map[string][]*regexp.Regexp{}
+	for _, op := range oc.Operations {
+		reg, err := makeResourceRegex(op.Resource)
+		if err != nil {
+			log.Errorf("unable to create resource matcher: %#v", op.Resource)
+			continue
+		}
+		for _, method := range op.Methods {
+			oc.resourceRegexpsByMethod[method] = append(oc.resourceRegexpsByMethod[method], reg)
+		}
+	}
+
+	return nil
+}
+
+func (oc *OperationConfig) isValidOperation(target, path, method string, hints bool) (valid bool, hint string) {
+	if oc.APISource != target {
+		if hints {
+			hint = fmt.Sprintf("no target: %s", target)
+		}
+		return
+	}
+	regexps, ok := oc.resourceRegexpsByMethod[method]
+	if !ok {
+		if hints {
+			hint = fmt.Sprintf("no method: %s", method)
+		}
+		return
+	}
+	for _, regexp := range regexps {
+		if regexp.MatchString(path) {
+			valid = true
+			break
+		}
+	}
+	if !valid && hints {
+		hint = fmt.Sprintf("no path: %s", path)
+	}
+	return
 }
 
 // An Operation represents methods on a Resource
@@ -79,72 +132,76 @@ type Operation struct {
 
 // A Quota is attached to an OperationConfig
 type Quota struct {
-	Limit    string `json:"limit,omitempty"`
-	Interval string `json:"interval,omitempty"`
-	TimeUnit string `json:"timeUnit,omitempty"`
+	Limit       string `json:"limit,omitempty"`
+	Interval    string `json:"interval,omitempty"`
+	TimeUnit    string `json:"timeUnit,omitempty"`
+	LimitInt    int64
+	IntervalInt int64
 }
 
-// true if valid target for API Product
-func (p *APIProduct) isValidTarget(api string) bool {
-	for _, target := range p.Targets {
-		if target == api {
-			return true
-		}
-	}
-	return false
-}
+func (q *Quota) UnmarshalJSON(data []byte) error {
 
-// true if valid path for API Product
-func (p *APIProduct) isValidPath(requestPath string) bool {
-	for _, reg := range p.resourceRegexps {
-		if reg.MatchString(requestPath) {
-			return true
-		}
+	type Unmarsh Quota
+	var un Unmarsh
+	if err := json.Unmarshal(data, &un); err != nil {
+		return err
 	}
-	return false
-}
+	*q = Quota(un)
 
-// true if any intersect of scopes (or no product scopes)
-func (p *APIProduct) isValidScopes(scopes []string) bool {
-	if len(p.Scopes) == 0 {
-		return true
+	// normalize nulls from server to empty
+	if q.Limit == "null" {
+		q.Limit = ""
 	}
-	for _, ds := range p.Scopes {
-		for _, s := range scopes {
-			if ds == s {
-				return true
-			}
-		}
+	if q.Interval == "null" {
+		q.Interval = ""
 	}
-	return false
-}
+	if q.TimeUnit == "null" {
+		q.TimeUnit = ""
+	}
 
-// GetTargetsAttribute returns a pointer to the target attribute or nil
-func (p *APIProduct) GetTargetsAttribute() *Attribute {
-	for _, attr := range p.Attributes {
-		if attr.Name == TargetsAttr {
-			return &attr
+	// parse limit from server
+	var err error
+	if q.Limit != "" {
+		q.LimitInt, err = strconv.ParseInt(q.Limit, 10, 64)
+		if err != nil {
+			log.Errorf("unable to parse quota limit: %#v", q)
 		}
 	}
+
+	// parse interval from server
+	if q.Interval != "" {
+		q.IntervalInt, err = strconv.ParseInt(q.Interval, 10, 64)
+		if err != nil {
+			log.Errorf("unable to parse quota interval: %#v", q)
+		}
+	}
+
 	return nil
 }
 
 // GetBoundTargets returns an array of target names bound to this product
 func (p *APIProduct) GetBoundTargets() []string {
-	attr := p.GetTargetsAttribute()
-	if attr != nil {
-		return strings.Split(attr.Value, ",")
-	}
-	return nil
+	return p.Targets
 }
 
-// called after JSON parsing
-func (p *APIProduct) parse() {
+func (p *APIProduct) UnmarshalJSON(data []byte) error {
 
-	if attr := p.GetTargetsAttribute(); attr != nil {
-		targets := strings.Split(attr.Value, ",")
-		for _, t := range targets {
-			p.Targets = append(p.Targets, strings.TrimSpace(t))
+	type Unmarsh APIProduct
+	var un Unmarsh
+	if err := json.Unmarshal(data, &un); err != nil {
+		return err
+	}
+	*p = APIProduct(un)
+
+	// parse TargetsAttr, if exists
+	p.Targets = []string{}
+	for _, attr := range p.Attributes {
+		if attr.Name == TargetsAttr {
+			targets := strings.Split(attr.Value, ",")
+			for _, t := range targets {
+				p.Targets = append(p.Targets, strings.TrimSpace(t))
+			}
+			break
 		}
 	}
 
@@ -153,33 +210,34 @@ func (p *APIProduct) parse() {
 		p.Scopes = []string{}
 	}
 
+	// normalize nulls from server to empty
+	if p.QuotaLimit == "null" {
+		p.QuotaLimit = ""
+	}
+	if p.QuotaInterval == "null" {
+		p.QuotaInterval = ""
+	}
+	if p.QuotaTimeUnit == "null" {
+		p.QuotaTimeUnit = ""
+	}
+
 	// parse limit from server
 	var err error
-	if p.QuotaLimit != "" && p.QuotaInterval != "null" {
+	if p.QuotaLimit != "" {
 		p.QuotaLimitInt, err = strconv.ParseInt(p.QuotaLimit, 10, 64)
 		if err != nil {
-			log.Errorf("unable to parse quota limit: %#v", p)
+			log.Errorf("x unable to parse quota limit: %#v", p)
 		}
 	}
 
 	// parse interval from server
-	if p.QuotaInterval != "" && p.QuotaInterval != "null" {
+	if p.QuotaInterval != "" {
 		p.QuotaIntervalInt, err = strconv.ParseInt(p.QuotaInterval, 10, 64)
 		if err != nil {
 			log.Errorf("unable to parse quota interval: %#v", p)
 		}
 	}
 
-	// normalize null from server to empty
-	if p.QuotaTimeUnit == "null" {
-		p.QuotaTimeUnit = ""
-	}
-
-	p.resolveResourceMatchers()
-}
-
-// generate matchers for resources (path)
-func (p *APIProduct) resolveResourceMatchers() {
 	for _, resource := range p.Resources {
 		reg, err := makeResourceRegex(resource)
 		if err != nil {
@@ -188,6 +246,112 @@ func (p *APIProduct) resolveResourceMatchers() {
 		}
 		p.resourceRegexps = append(p.resourceRegexps, reg)
 	}
+
+	return nil
+}
+
+// if OperationGroup, all matching OperationConfigs
+// if no OperationGroup, the API Product if it matches
+func (p *APIProduct) authorize(ac *auth.Context, target, path, method string, hints bool) (authorizedOps []AuthorizedOperation, hint string) {
+	// scopes apply for both APIProduct and OperationGroups
+	if !p.isValidScopes(ac) {
+		if hints {
+			hint = fmt.Sprintf("    incorrect scopes: %s\n", p.Scopes)
+		}
+		return
+	}
+
+	// if OperationGroup is present, OperationConfigs override APIProduct target
+	if p.OperationGroup != nil {
+		var hintsBuilder strings.Builder
+		for i, oc := range p.OperationGroup.OperationConfigs {
+			if hints {
+				hintsBuilder.WriteString("    operation configs:\n")
+			}
+			var valid bool
+			valid, hint = oc.isValidOperation(target, path, method, hints)
+			if valid {
+				target := AuthorizedOperation{
+					ID:            fmt.Sprintf("%s-%s-%s", p.Name, ac.Application, oc.APISource),
+					QuotaLimit:    p.QuotaLimitInt,
+					QuotaInterval: p.QuotaIntervalInt,
+					QuotaTimeUnit: p.QuotaTimeUnit,
+				}
+				// OperationConfig quota is an override
+				if oc.Quota != nil && oc.Quota.LimitInt > 0 {
+					target.QuotaLimit = oc.Quota.LimitInt
+					target.QuotaInterval = oc.Quota.IntervalInt
+					target.QuotaTimeUnit = oc.Quota.TimeUnit
+				}
+				authorizedOps = append(authorizedOps, target)
+				if hints {
+					hintsBuilder.WriteString(fmt.Sprintf("      %d: authorized\n", i))
+				}
+			} else if hints {
+				hintsBuilder.WriteString(fmt.Sprintf("      %d: %s\n", i, hint))
+			}
+		}
+		if hints {
+			hint = hintsBuilder.String()
+		}
+
+		return
+	}
+
+	// no OperationGroup
+	var valid bool
+	valid, hint = p.isValidOperation(target, path, hints)
+	if !valid {
+		return
+	}
+
+	authorizedOps = append(authorizedOps, AuthorizedOperation{
+		ID:            fmt.Sprintf("%s-%s", p.Name, ac.Application),
+		QuotaLimit:    p.QuotaLimitInt,
+		QuotaInterval: p.QuotaIntervalInt,
+		QuotaTimeUnit: p.QuotaTimeUnit,
+	})
+	hint = "    authorized\n"
+
+	return
+}
+
+// true if valid target for API Product
+func (p *APIProduct) isValidOperation(target, path string, hints bool) (valid bool, hint string) {
+	for _, t := range p.Targets {
+		if t == target {
+			for _, reg := range p.resourceRegexps {
+				if reg.MatchString(path) {
+					valid = true
+					return
+				}
+			}
+			if hints {
+				hint = fmt.Sprintf("    no path: %s\n", path)
+			}
+			return
+		}
+	}
+	if hints {
+		hint = fmt.Sprintf("    no targets: %s\n", target)
+	}
+	return
+}
+
+// true if any intersect of scopes or no product scopes
+// scopes are ignored when APIKey is present
+func (p *APIProduct) isValidScopes(ac *auth.Context) bool {
+	if ac.APIKey != "" || len(p.Scopes) == 0 {
+		return true
+	}
+	for _, ds := range p.Scopes {
+		for _, s := range ac.Scopes {
+			if ds == s {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // - A single slash by itself matches any path

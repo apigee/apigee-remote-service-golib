@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/auth"
@@ -44,8 +45,8 @@ Usage:
 
 // A Manager wraps all things related to a set of API products.
 type Manager interface {
-	Products() ProductsMap
-	Resolve(ac *auth.Context, api, path string) []*APIProduct
+	Products() ProductsNameMap
+	Authorize(ac *auth.Context, api, path, method string) []AuthorizedOperation
 	Close()
 }
 
@@ -73,11 +74,80 @@ type manager struct {
 	prometheusLabels prometheus.Labels
 }
 
+// AuthorizedOperation is the result of Authorize including Quotas
+type AuthorizedOperation struct {
+	ID            string
+	QuotaLimit    int64
+	QuotaInterval int64
+	QuotaTimeUnit string
+}
+
+// Authorize a request against API Products and its Operations
+func (m *manager) Authorize(ac *auth.Context, target, path, method string) []AuthorizedOperation {
+	authorizedOps, hints := authorize(ac, m.Products(), target, path, method, log.DebugEnabled())
+	if log.DebugEnabled() {
+		log.Debugf(hints)
+	}
+	return authorizedOps
+}
+
+// broken out for testing
+func authorize(ac *auth.Context, productsByName map[string]*APIProduct, target, path, method string, hints bool) ([]AuthorizedOperation, string) {
+	var authorizedOps []AuthorizedOperation
+	authorizedProducts := ac.APIProducts
+
+	var hintsBuilder strings.Builder
+	addHint := func(hint string) {
+		if hintsBuilder.Len() == 0 {
+			hintsBuilder.WriteString("Authorizing request:\n")
+			hintsBuilder.WriteString(fmt.Sprintf("  products: %v\n", authorizedProducts))
+			hintsBuilder.WriteString(fmt.Sprintf("  scopes: %v\n", ac.Scopes))
+			hintsBuilder.WriteString(fmt.Sprintf("  operation: %s %s\n", method, path))
+			hintsBuilder.WriteString(fmt.Sprintf("  target: %s\n", target))
+		}
+		hintsBuilder.WriteString(hint)
+	}
+
+	for _, name := range authorizedProducts {
+		var prodTargets []AuthorizedOperation
+		var hint string = "    not found"
+		if product, ok := productsByName[name]; ok {
+			prodTargets, hint = product.authorize(ac, target, path, method, hints)
+			authorizedOps = append(authorizedOps, prodTargets...)
+		}
+		if hints && hint != "" {
+			addHint(fmt.Sprintf("  - product: %s\n", name))
+			addHint(hint)
+		}
+	}
+
+	return authorizedOps, hintsBuilder.String()
+}
+
+// Products atomically gets a mapping of name => APIProduct.
+func (m *manager) Products() ProductsNameMap {
+	if m.closed.IsTrue() {
+		return nil
+	}
+	return m.productsMux.Get()
+}
+
+// Close shuts down the manager.
+func (m *manager) Close() {
+	if m == nil || m.closed.SetTrue() {
+		return
+	}
+	log.Infof("closing product manager")
+	m.cancelPolling()
+	m.productsMux.Close()
+	log.Infof("closed product manager")
+}
+
 func (m *manager) start() {
 	log.Infof("starting product manager")
 	m.productsMux = productsMux{
-		setChan:   make(chan ProductsMap),
-		getChan:   make(chan ProductsMap),
+		setChan:   make(chan ProductsNameMap),
+		getChan:   make(chan ProductsNameMap),
 		closeChan: make(chan struct{}),
 		closed:    util.NewAtomicBool(false),
 	}
@@ -96,25 +166,6 @@ func (m *manager) start() {
 	})
 
 	log.Infof("started product manager")
-}
-
-// Products atomically gets a mapping of name => APIProduct.
-func (m *manager) Products() ProductsMap {
-	if m.closed.IsTrue() {
-		return nil
-	}
-	return m.productsMux.Get()
-}
-
-// Close shuts down the manager.
-func (m *manager) Close() {
-	if m == nil || m.closed.SetTrue() {
-		return
-	}
-	log.Infof("closing product manager")
-	m.cancelPolling()
-	m.productsMux.Close()
-	log.Infof("closed product manager")
 }
 
 func (m *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error {
@@ -156,7 +207,15 @@ func (m *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error
 			return err
 		}
 
-		pm := m.makeProductsMap(ctx, res)
+		// parses products and creates name -> product lookup map
+		pm := ProductsNameMap{}
+		for _, p := range res.APIProducts {
+			if ctx.Err() != nil {
+				log.Debugf("product polling canceled, exiting")
+				return nil
+			}
+			pm[p.Name] = &p
+		}
 		m.productsMux.Set(pm)
 
 		prometheusProductsRecords.With(m.prometheusLabels).Set(float64(len(pm)))
@@ -167,76 +226,21 @@ func (m *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error
 	}
 }
 
-// parses products and creates name -> product lookup map
-func (m *manager) makeProductsMap(ctx context.Context, res APIResponse) ProductsMap {
-	pm := ProductsMap{}
-	for _, p := range res.APIProducts {
-		if ctx.Err() != nil {
-			log.Debugf("product polling canceled, exiting")
-			return nil
-		}
-		p.parse()
-		pm[p.Name] = &p
-	}
-	return pm
-}
-
-// Resolve determines the valid products for a given API.
-func (m *manager) Resolve(ac *auth.Context, api, path string) []*APIProduct {
-	validProducts, failHints := resolve(ac, m.Products(), api, path)
-	var selected []string
-	for _, p := range validProducts {
-		selected = append(selected, p.Name)
-	}
-	log.Debugf(`
-Resolve api: %s, path: %s, scopes: %v
-Selected: %v
-Eliminated: %v`, api, path, ac.Scopes, selected, failHints)
-	return validProducts
-}
-
-func resolve(ac *auth.Context, pMap map[string]*APIProduct, api, path string) (
-	result []*APIProduct, failHints []string) {
-
-	for _, name := range ac.APIProducts {
-		apiProduct, ok := pMap[name]
-		if !ok {
-			failHints = append(failHints, fmt.Sprintf("%s doesn't exist", name))
-			continue
-		}
-		// if APIKey, scopes don't matter
-		if ac.APIKey == "" && !apiProduct.isValidScopes(ac.Scopes) {
-			failHints = append(failHints, fmt.Sprintf("%s doesn't match scopes: %s", name, ac.Scopes))
-			continue
-		}
-		if !apiProduct.isValidPath(path) {
-			failHints = append(failHints, fmt.Sprintf("%s doesn't match path: %s", name, path))
-			continue
-		}
-		if !apiProduct.isValidTarget(api) {
-			failHints = append(failHints, fmt.Sprintf("%s doesn't match target: %s", name, api))
-			continue
-		}
-		result = append(result, apiProduct)
-	}
-	return result, failHints
-}
-
-// ProductsMap is a map of API Product name to API Product
-type ProductsMap map[string]*APIProduct
+// ProductsNameMap is a map of API Product name to API Product
+type ProductsNameMap map[string]*APIProduct
 
 type productsMux struct {
-	setChan   chan ProductsMap
-	getChan   chan ProductsMap
+	setChan   chan ProductsNameMap
+	getChan   chan ProductsNameMap
 	closeChan chan struct{}
 	closed    *util.AtomicBool
 }
 
-func (p productsMux) Get() ProductsMap {
+func (p productsMux) Get() ProductsNameMap {
 	return <-p.getChan
 }
 
-func (p productsMux) Set(s ProductsMap) {
+func (p productsMux) Set(s ProductsNameMap) {
 	if p.closed.IsFalse() {
 		p.setChan <- s
 	}
@@ -249,7 +253,7 @@ func (p productsMux) Close() {
 }
 
 func (p productsMux) mux() {
-	var productsMap ProductsMap
+	var productsMap ProductsNameMap
 	for {
 		if productsMap == nil {
 			select {
