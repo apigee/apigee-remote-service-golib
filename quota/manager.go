@@ -53,7 +53,7 @@ Dispatch basically works like this:
 // A Manager tracks multiple Apigee quotas
 type Manager interface {
 	Start()
-	Apply(auth *auth.Context, o product.AuthorizedOperation, args Args) (*Result, error)
+	Apply(authContext *auth.Context, o product.AuthorizedOperation, args Args) (*Result, error)
 	Close()
 }
 
@@ -136,7 +136,7 @@ func (m *manager) Close() {
 }
 
 // Apply a quota request to the local quota bucket and schedule for sync
-func (m *manager) Apply(auth *auth.Context, operation product.AuthorizedOperation, args Args) (*Result, error) {
+func (m *manager) Apply(authContext *auth.Context, operation product.AuthorizedOperation, args Args) (*Result, error) {
 
 	if operation.QuotaLimit == 0 {
 		return nil, nil

@@ -46,7 +46,7 @@ Usage:
 // A Manager wraps all things related to a set of API products.
 type Manager interface {
 	Products() ProductsNameMap
-	Authorize(ac *auth.Context, api, path, method string) []AuthorizedOperation
+	Authorize(authContext *auth.Context, api, path, method string) []AuthorizedOperation
 	Close()
 }
 
@@ -83,8 +83,8 @@ type AuthorizedOperation struct {
 }
 
 // Authorize a request against API Products and its Operations
-func (m *manager) Authorize(ac *auth.Context, target, path, method string) []AuthorizedOperation {
-	authorizedOps, hints := authorize(ac, m.Products(), target, path, method, log.DebugEnabled())
+func (m *manager) Authorize(authContext *auth.Context, target, path, method string) []AuthorizedOperation {
+	authorizedOps, hints := authorize(authContext, m.Products(), target, path, method, log.DebugEnabled())
 	if log.DebugEnabled() {
 		log.Debugf(hints)
 	}
@@ -92,16 +92,16 @@ func (m *manager) Authorize(ac *auth.Context, target, path, method string) []Aut
 }
 
 // broken out for testing
-func authorize(ac *auth.Context, productsByName map[string]*APIProduct, target, path, method string, hints bool) ([]AuthorizedOperation, string) {
+func authorize(authContext *auth.Context, productsByName map[string]*APIProduct, target, path, method string, hints bool) ([]AuthorizedOperation, string) {
 	var authorizedOps []AuthorizedOperation
-	authorizedProducts := ac.APIProducts
+	authorizedProducts := authContext.APIProducts
 
 	var hintsBuilder strings.Builder
 	addHint := func(hint string) {
 		if hintsBuilder.Len() == 0 {
 			hintsBuilder.WriteString("Authorizing request:\n")
 			hintsBuilder.WriteString(fmt.Sprintf("  products: %v\n", authorizedProducts))
-			hintsBuilder.WriteString(fmt.Sprintf("  scopes: %v\n", ac.Scopes))
+			hintsBuilder.WriteString(fmt.Sprintf("  scopes: %v\n", authContext.Scopes))
 			hintsBuilder.WriteString(fmt.Sprintf("  operation: %s %s\n", method, path))
 			hintsBuilder.WriteString(fmt.Sprintf("  target: %s\n", target))
 		}
@@ -112,7 +112,7 @@ func authorize(ac *auth.Context, productsByName map[string]*APIProduct, target, 
 		var prodTargets []AuthorizedOperation
 		var hint string = "    not found"
 		if product, ok := productsByName[name]; ok {
-			prodTargets, hint = product.authorize(ac, target, path, method, hints)
+			prodTargets, hint = product.authorize(authContext, target, path, method, hints)
 			authorizedOps = append(authorizedOps, prodTargets...)
 		}
 		if hints && hint != "" {

@@ -252,9 +252,9 @@ func (p *APIProduct) UnmarshalJSON(data []byte) error {
 
 // if OperationGroup, all matching OperationConfigs
 // if no OperationGroup, the API Product if it matches
-func (p *APIProduct) authorize(ac *auth.Context, target, path, method string, hints bool) (authorizedOps []AuthorizedOperation, hint string) {
+func (p *APIProduct) authorize(authContext *auth.Context, target, path, method string, hints bool) (authorizedOps []AuthorizedOperation, hint string) {
 	// scopes apply for both APIProduct and OperationGroups
-	if !p.isValidScopes(ac) {
+	if !p.isValidScopes(authContext) {
 		if hints {
 			hint = fmt.Sprintf("    incorrect scopes: %s\n", p.Scopes)
 		}
@@ -272,7 +272,7 @@ func (p *APIProduct) authorize(ac *auth.Context, target, path, method string, hi
 			valid, hint = oc.isValidOperation(target, path, method, hints)
 			if valid {
 				target := AuthorizedOperation{
-					ID:            fmt.Sprintf("%s-%s-%s", p.Name, ac.Application, oc.APISource),
+					ID:            fmt.Sprintf("%s-%s-%s", p.Name, authContext.Application, oc.APISource),
 					QuotaLimit:    p.QuotaLimitInt,
 					QuotaInterval: p.QuotaIntervalInt,
 					QuotaTimeUnit: p.QuotaTimeUnit,
@@ -306,7 +306,7 @@ func (p *APIProduct) authorize(ac *auth.Context, target, path, method string, hi
 	}
 
 	authorizedOps = append(authorizedOps, AuthorizedOperation{
-		ID:            fmt.Sprintf("%s-%s", p.Name, ac.Application),
+		ID:            fmt.Sprintf("%s-%s", p.Name, authContext.Application),
 		QuotaLimit:    p.QuotaLimitInt,
 		QuotaInterval: p.QuotaIntervalInt,
 		QuotaTimeUnit: p.QuotaTimeUnit,

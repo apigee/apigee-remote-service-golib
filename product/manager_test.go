@@ -174,10 +174,10 @@ func TestManagerPolling(t *testing.T) {
 		t.Errorf("number of products should have incremented")
 	}
 
-	ac := &auth.Context{
+	authContext := &auth.Context{
 		APIProducts: []string{"Name 1"},
 	}
-	targets := pp.Authorize(ac, "target", "/", "GET")
+	targets := pp.Authorize(authContext, "target", "/", "GET")
 	if len(targets) != 1 {
 		t.Errorf("want: 1, got: %v", len(targets))
 	}

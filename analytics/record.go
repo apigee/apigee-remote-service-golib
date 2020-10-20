@@ -53,22 +53,22 @@ type Record struct {
 	GatewayFlowID                string `json:"gateway_flow_id"`
 }
 
-func (r Record) ensureFields(ctx *auth.Context) Record {
+func (r Record) ensureFields(authContext *auth.Context) Record {
 	r.RecordType = axRecordType
 
 	// populate from auth context
-	r.DeveloperEmail = ctx.DeveloperEmail
-	r.DeveloperApp = ctx.Application
-	r.AccessToken = ctx.AccessToken
-	r.ClientID = ctx.ClientID
-	r.Organization = ctx.Organization()
-	r.Environment = ctx.Environment()
+	r.DeveloperEmail = authContext.DeveloperEmail
+	r.DeveloperApp = authContext.Application
+	r.AccessToken = authContext.AccessToken
+	r.ClientID = authContext.ClientID
+	r.Organization = authContext.Organization()
+	r.Environment = authContext.Environment()
 
 	r.GatewayFlowID = uuid.New().String()
 
 	// selects best APIProduct based on path, otherwise arbitrary
-	if len(ctx.APIProducts) > 0 {
-		r.APIProduct = ctx.APIProducts[0]
+	if len(authContext.APIProducts) > 0 {
+		r.APIProduct = authContext.APIProducts[0]
 	}
 	return r
 }

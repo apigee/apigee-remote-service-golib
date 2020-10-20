@@ -72,12 +72,12 @@ func TestAuthorize(t *testing.T) {
 	path := "/name3"
 	method := "GET"
 
-	ac := &auth.Context{
+	authContext := &auth.Context{
 		APIProducts: []string{"Name 1", "Name 2", "Name 3", "Invalid"},
 		Scopes:      []string{"scope1", "scope2"},
 		Application: "app",
 	}
-	targets, hints := authorize(ac, productsMap, target, path, method, true)
+	targets, hints := authorize(authContext, productsMap, target, path, method, true)
 	if len(targets) != 3 {
 		t.Errorf("want: 3, got: %v", len(targets))
 	}
@@ -99,7 +99,7 @@ func TestAuthorize(t *testing.T) {
 	}
 
 	// specific path
-	targets, hints = authorize(ac, productsMap, target, "/path", method, true)
+	targets, hints = authorize(authContext, productsMap, target, "/path", method, true)
 	if len(targets) != 2 {
 		t.Errorf("want: 2, got: %d", len(targets))
 	} else {
@@ -130,7 +130,7 @@ func TestAuthorize(t *testing.T) {
 	}
 
 	// bad target
-	targets, hints = authorize(ac, productsMap, "target", "/path", method, true)
+	targets, hints = authorize(authContext, productsMap, "target", "/path", method, true)
 	if len(targets) != 0 {
 		t.Errorf("want: 0, got: %d", len(targets))
 	}
@@ -152,8 +152,8 @@ func TestAuthorize(t *testing.T) {
 	}
 
 	// scope
-	ac.Scopes = []string{"scope2"}
-	targets, hints = authorize(ac, productsMap, target, path, method, true)
+	authContext.Scopes = []string{"scope2"}
+	targets, hints = authorize(authContext, productsMap, target, path, method, true)
 	if len(targets) != 2 {
 		t.Errorf("want: 2, got: %d", len(targets))
 	} else {
@@ -184,8 +184,8 @@ func TestAuthorize(t *testing.T) {
 	}
 
 	// specific product
-	ac.APIProducts = []string{"Name 1"}
-	targets, hints = authorize(ac, productsMap, target, path, method, true)
+	authContext.APIProducts = []string{"Name 1"}
+	targets, hints = authorize(authContext, productsMap, target, path, method, true)
 	if len(targets) != 0 {
 		t.Errorf("want: 0, got: %d", len(targets))
 	}
@@ -202,10 +202,10 @@ func TestAuthorize(t *testing.T) {
 	}
 
 	// API Key - no scopes required!
-	ac.APIKey = "x"
-	ac.APIProducts = []string{"Name 1", "Name 2", "Name 3"}
-	ac.Scopes = []string{}
-	targets, hints = authorize(ac, productsMap, target, path, method, true)
+	authContext.APIKey = "x"
+	authContext.APIProducts = []string{"Name 1", "Name 2", "Name 3"}
+	authContext.Scopes = []string{}
+	targets, hints = authorize(authContext, productsMap, target, path, method, true)
 	if len(targets) != 3 {
 		t.Errorf("want: 3, got: %d", len(targets))
 	}
@@ -303,19 +303,19 @@ func TestAuthorizeOperations(t *testing.T) {
 	path := "/operation1"
 	method := "GET"
 
-	ac := &auth.Context{
+	authContext := &auth.Context{
 		APIProducts: []string{"Name 1", "Name 2", "Invalid"},
 		Scopes:      []string{"scope1", "scope2"},
 		Application: "app",
 	}
-	targets, hints := authorize(ac, productsMap, target, path, method, true)
+	targets, hints := authorize(authContext, productsMap, target, path, method, true)
 	if len(targets) != 1 {
 		t.Errorf("want: 1, got: %v", len(targets))
 	}
 
 	wantProduct := productsMap["Name 1"]
 	wantQuota := wantProduct.OperationGroup.OperationConfigs[0].Quota
-	wantTargetID := fmt.Sprintf("%s-%s-%s", wantProduct.Name, ac.Application, target)
+	wantTargetID := fmt.Sprintf("%s-%s-%s", wantProduct.Name, authContext.Application, target)
 	if wantTargetID != targets[0].ID {
 		t.Errorf("want: '%s', got: '%s'", wantTargetID, targets[0].ID)
 	}
@@ -348,13 +348,13 @@ func TestAuthorizeOperations(t *testing.T) {
 
 	// quota override
 	path = "/operation2"
-	targets, hints = authorize(ac, productsMap, target, path, method, true)
+	targets, hints = authorize(authContext, productsMap, target, path, method, true)
 	if len(targets) != 1 {
 		t.Errorf("want: 1, got: %v", len(targets))
 	}
 
 	wantProduct = productsMap["Name 2"]
-	wantTargetID = fmt.Sprintf("%s-%s-%s", wantProduct.Name, ac.Application, target)
+	wantTargetID = fmt.Sprintf("%s-%s-%s", wantProduct.Name, authContext.Application, target)
 	if wantTargetID != targets[0].ID {
 		t.Errorf("want: '%s', got: '%s'", wantTargetID, targets[0].ID)
 	}
@@ -386,7 +386,7 @@ func TestAuthorizeOperations(t *testing.T) {
 	}
 
 	// no method
-	targets, hints = authorize(ac, productsMap, target, path, "POST", true)
+	targets, hints = authorize(authContext, productsMap, target, path, "POST", true)
 	if len(targets) != 0 {
 		t.Errorf("want: 0, got: %v", len(targets))
 	}
@@ -409,7 +409,7 @@ func TestAuthorizeOperations(t *testing.T) {
 	}
 
 	// no target
-	targets, hints = authorize(ac, productsMap, "target", path, method, true)
+	targets, hints = authorize(authContext, productsMap, "target", path, method, true)
 	if len(targets) != 0 {
 		t.Errorf("want: 0, got: %v", len(targets))
 	}
@@ -441,31 +441,31 @@ func TestValidScopes(t *testing.T) {
 	p := APIProduct{
 		Scopes: []string{"scope1"},
 	}
-	ac := &auth.Context{
+	authContext := &auth.Context{
 		Scopes: []string{"scope1"},
 	}
-	if !p.isValidScopes(ac) {
+	if !p.isValidScopes(authContext) {
 		t.Errorf("expected %s is valid", p.Scopes)
 	}
-	ac.Scopes = []string{"scope1", "scope2"}
-	if !p.isValidScopes(ac) {
+	authContext.Scopes = []string{"scope1", "scope2"}
+	if !p.isValidScopes(authContext) {
 		t.Errorf("expected %s is valid", p.Scopes)
 	}
-	ac.Scopes = []string{"scope2"}
-	if p.isValidScopes(ac) {
+	authContext.Scopes = []string{"scope2"}
+	if p.isValidScopes(authContext) {
 		t.Errorf("expected %s is not valid", p.Scopes)
 	}
 	p.Scopes = []string{"scope1", "scope2"}
-	ac.Scopes = []string{"scope1"}
-	if !p.isValidScopes(ac) {
+	authContext.Scopes = []string{"scope1"}
+	if !p.isValidScopes(authContext) {
 		t.Errorf("expected %s is valid", p.Scopes)
 	}
-	ac.Scopes = []string{"scope1", "scope2"}
-	if !p.isValidScopes(ac) {
+	authContext.Scopes = []string{"scope1", "scope2"}
+	if !p.isValidScopes(authContext) {
 		t.Errorf("expected %s is valid", p.Scopes)
 	}
-	ac.Scopes = []string{"scope2"}
-	if !p.isValidScopes(ac) {
+	authContext.Scopes = []string{"scope2"}
+	if !p.isValidScopes(authContext) {
 		t.Errorf("expected %s is valid", p.Scopes)
 	}
 }

@@ -82,10 +82,10 @@ func TestStagingSizeCap(t *testing.T) {
 	tc := authtest.NewContext(fs.URL())
 	tc.SetOrganization("hi")
 	tc.SetEnvironment("test")
-	ctx := &auth.Context{Context: tc}
+	authContext := &auth.Context{Context: tc}
 
 	for i := 1; i < m.stagingFileLimit+3; i++ {
-		if err := m.SendRecords(ctx, records); err != nil {
+		if err := m.SendRecords(authContext, records); err != nil {
 			t.Errorf("Error on SendRecords(): %s", err)
 		}
 		m.stageAllBucketsWait()
