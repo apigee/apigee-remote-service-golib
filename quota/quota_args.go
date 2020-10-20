@@ -23,9 +23,4 @@ type Args struct {
 
 	// The amount of quota being allocated or released.
 	QuotaAmount int64
-
-	// If true, allows a response to return less quota than requested. When
-	// false, the exact requested amount is returned or 0 if not enough quota
-	// was available.
-	BestEffort bool
 }

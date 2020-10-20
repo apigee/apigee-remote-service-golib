@@ -24,6 +24,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/apigee/apigee-remote-service-golib/auth"
 )
 
 func TestManager(t *testing.T) {
@@ -133,8 +135,9 @@ func TestManagerPolling(t *testing.T) {
 		apiProducts = append(apiProducts, APIProduct{
 			Name: fmt.Sprintf("Name %d", count),
 			Attributes: []Attribute{
-				{Name: TargetsAttr, Value: "attr value"},
+				{Name: TargetsAttr, Value: "target"},
 			},
+			Resources: []string{"/"},
 		})
 
 		var result = APIResponse{
@@ -170,8 +173,24 @@ func TestManagerPolling(t *testing.T) {
 	if pp1 == pp2 {
 		t.Errorf("number of products should have incremented")
 	}
+
+	authContext := &auth.Context{
+		APIProducts: []string{"Name 1"},
+	}
+	targets := pp.Authorize(authContext, "target", "/", "GET")
+	if len(targets) != 1 {
+		t.Errorf("want: 1, got: %v", len(targets))
+	}
+
+	pp.Close()
 }
 
+// Path matching is similar to wildcard semantics described in the Apigee product documentation here:
+// https://docs.apigee.com/developer-services/content/create-api-products#resourcebehavior.
+// However, as there is no base path, it is simplified as follows:
+// 1. A single slash (/) by itself matches any path.
+// 2. * is valid anywhere and matches within a segment (between slashes).
+// 3. ** is valid at the end and matches anything to the end of line.
 func TestResources(t *testing.T) {
 	matchTests := []struct {
 		spec  string

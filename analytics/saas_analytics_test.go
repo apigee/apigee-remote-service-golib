@@ -294,14 +294,14 @@ func TestPushAnalytics(t *testing.T) {
 	tc := authtest.NewContext(fs.URL())
 	tc.SetOrganization("hi")
 	tc.SetEnvironment("test")
-	ctx := &auth.Context{Context: tc}
+	authContext := &auth.Context{Context: tc}
 
-	if err := m.SendRecords(ctx, sendRecords[t1][0].records); err != nil {
+	if err := m.SendRecords(authContext, sendRecords[t1][0].records); err != nil {
 		t.Errorf("Error on SendRecords(): %s", err)
 	}
 
 	// Send an invalid record
-	if err := m.SendRecords(ctx, []Record{{}}); err != nil {
+	if err := m.SendRecords(authContext, []Record{{}}); err != nil {
 		t.Errorf("Error on SendRecords(): %s", err)
 	}
 
@@ -309,8 +309,8 @@ func TestPushAnalytics(t *testing.T) {
 	tc = authtest.NewContext(fs.URL())
 	tc.SetOrganization("otherorg")
 	tc.SetEnvironment("test")
-	ctx = &auth.Context{Context: tc}
-	if err := m.SendRecords(ctx, sendRecords[t2][0].records); err != nil {
+	authContext = &auth.Context{Context: tc}
+	if err := m.SendRecords(authContext, sendRecords[t2][0].records); err != nil {
 		t.Errorf("Error on SendRecords(): %s", err)
 	}
 
@@ -452,14 +452,14 @@ func TestPushAnalyticsMultipleRecords(t *testing.T) {
 	tc := authtest.NewContext(fs.URL())
 	tc.SetOrganization("hi")
 	tc.SetEnvironment("test")
-	ctx := &auth.Context{Context: tc}
+	authContext := &auth.Context{Context: tc}
 
-	if err := m.SendRecords(ctx, sendRecords[t1][0].records); err != nil {
+	if err := m.SendRecords(authContext, sendRecords[t1][0].records); err != nil {
 		t.Errorf("Error on SendRecords(): %s", err)
 	}
 
 	// Send one more with same org
-	if err := m.SendRecords(ctx, sendRecords[t2][0].records); err != nil {
+	if err := m.SendRecords(authContext, sendRecords[t2][0].records); err != nil {
 		t.Errorf("Error on SendRecords(): %s", err)
 	}
 
@@ -550,12 +550,12 @@ func TestLoad(t *testing.T) {
 	tc := authtest.NewContext(fs.URL())
 	tc.SetOrganization("load")
 	tc.SetEnvironment("test")
-	ctx := &auth.Context{Context: tc}
+	authContext := &auth.Context{Context: tc}
 
 	for i := 0; i < SendRecs; i++ {
 		recs := sendRecords[t1][0].records
 		recs[0].APIProxyRevision = i
-		if err := m.SendRecords(ctx, sendRecords[t1][0].records); err != nil {
+		if err := m.SendRecords(authContext, sendRecords[t1][0].records); err != nil {
 			t.Fatalf("SendRecords(): %s", err)
 		}
 		if i%50 == 0 {
@@ -669,7 +669,7 @@ func TestUploadFailure(t *testing.T) {
 	tc := authtest.NewContext(fs.URL())
 	tc.SetOrganization("hi")
 	tc.SetEnvironment("test")
-	authCtx := &auth.Context{Context: tc}
+	authContext := &auth.Context{Context: tc}
 
 	// since we're using a custom errorHandler we can't call m.Start() and need to do this setup
 	var uploadError error
@@ -681,7 +681,7 @@ func TestUploadFailure(t *testing.T) {
 	m.startUploader(errH)
 	go m.stagingLoop()
 
-	if err := m.SendRecords(authCtx, records); err != nil {
+	if err := m.SendRecords(authContext, records); err != nil {
 		t.Errorf("Error on SendRecords(): %s", err)
 	}
 

@@ -22,8 +22,6 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -47,8 +45,8 @@ Usage:
 
 // A Manager wraps all things related to a set of API products.
 type Manager interface {
-	Products() ProductsMap
-	Resolve(ac *auth.Context, api, path string) []*APIProduct
+	Products() ProductsNameMap
+	Authorize(authContext *auth.Context, api, path, method string) []AuthorizedOperation
 	Close()
 }
 
@@ -76,24 +74,93 @@ type manager struct {
 	prometheusLabels prometheus.Labels
 }
 
-func (p *manager) start() {
+// AuthorizedOperation is the result of Authorize including Quotas
+type AuthorizedOperation struct {
+	ID            string
+	QuotaLimit    int64
+	QuotaInterval int64
+	QuotaTimeUnit string
+}
+
+// Authorize a request against API Products and its Operations
+func (m *manager) Authorize(authContext *auth.Context, target, path, method string) []AuthorizedOperation {
+	authorizedOps, hints := authorize(authContext, m.Products(), target, path, method, log.DebugEnabled())
+	if log.DebugEnabled() {
+		log.Debugf(hints)
+	}
+	return authorizedOps
+}
+
+// broken out for testing
+func authorize(authContext *auth.Context, productsByName map[string]*APIProduct, target, path, method string, hints bool) ([]AuthorizedOperation, string) {
+	var authorizedOps []AuthorizedOperation
+	authorizedProducts := authContext.APIProducts
+
+	var hintsBuilder strings.Builder
+	addHint := func(hint string) {
+		if hintsBuilder.Len() == 0 {
+			hintsBuilder.WriteString("Authorizing request:\n")
+			hintsBuilder.WriteString(fmt.Sprintf("  products: %v\n", authorizedProducts))
+			hintsBuilder.WriteString(fmt.Sprintf("  scopes: %v\n", authContext.Scopes))
+			hintsBuilder.WriteString(fmt.Sprintf("  operation: %s %s\n", method, path))
+			hintsBuilder.WriteString(fmt.Sprintf("  target: %s\n", target))
+		}
+		hintsBuilder.WriteString(hint)
+	}
+
+	for _, name := range authorizedProducts {
+		var prodTargets []AuthorizedOperation
+		var hint string = "    not found"
+		if product, ok := productsByName[name]; ok {
+			prodTargets, hint = product.authorize(authContext, target, path, method, hints)
+			authorizedOps = append(authorizedOps, prodTargets...)
+		}
+		if hints && hint != "" {
+			addHint(fmt.Sprintf("  - product: %s\n", name))
+			addHint(hint)
+		}
+	}
+
+	return authorizedOps, hintsBuilder.String()
+}
+
+// Products atomically gets a mapping of name => APIProduct.
+func (m *manager) Products() ProductsNameMap {
+	if m.closed.IsTrue() {
+		return nil
+	}
+	return m.productsMux.Get()
+}
+
+// Close shuts down the manager.
+func (m *manager) Close() {
+	if m == nil || m.closed.SetTrue() {
+		return
+	}
+	log.Infof("closing product manager")
+	m.cancelPolling()
+	m.productsMux.Close()
+	log.Infof("closed product manager")
+}
+
+func (m *manager) start() {
 	log.Infof("starting product manager")
-	p.productsMux = productsMux{
-		setChan:   make(chan ProductsMap),
-		getChan:   make(chan ProductsMap),
+	m.productsMux = productsMux{
+		setChan:   make(chan ProductsNameMap),
+		getChan:   make(chan ProductsNameMap),
 		closeChan: make(chan struct{}),
 		closed:    util.NewAtomicBool(false),
 	}
-	go p.productsMux.mux()
+	go m.productsMux.mux()
 
 	poller := util.Looper{
-		Backoff: util.NewExponentialBackoff(200*time.Millisecond, p.refreshRate, 2, true),
+		Backoff: util.NewExponentialBackoff(200*time.Millisecond, m.refreshRate, 2, true),
 	}
-	apiURL := *p.baseURL
+	apiURL := *m.baseURL
 	apiURL.Path = path.Join(apiURL.Path, productsURL)
 	ctx, cancel := context.WithCancel(context.Background())
-	p.cancelPolling = cancel
-	poller.Start(ctx, p.pollingClosure(apiURL), p.refreshRate, func(err error) error {
+	m.cancelPolling = cancel
+	poller.Start(ctx, m.pollingClosure(apiURL), m.refreshRate, func(err error) error {
 		log.Errorf("Error retrieving products: %v", err)
 		return nil
 	})
@@ -101,26 +168,7 @@ func (p *manager) start() {
 	log.Infof("started product manager")
 }
 
-// Products atomically gets a mapping of name => APIProduct.
-func (p *manager) Products() ProductsMap {
-	if p.closed.IsTrue() {
-		return nil
-	}
-	return p.productsMux.Get()
-}
-
-// Close shuts down the manager.
-func (p *manager) Close() {
-	if p == nil || p.closed.SetTrue() {
-		return
-	}
-	log.Infof("closing product manager")
-	p.cancelPolling()
-	p.productsMux.Close()
-	log.Infof("closed product manager")
-}
-
-func (p *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error {
+func (m *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 
 		req, err := http.NewRequest(http.MethodGet, apiURL.String(), nil)
@@ -134,7 +182,7 @@ func (p *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error
 
 		log.Debugf("retrieving products from: %s", apiURL.String())
 
-		resp, err := p.client.Do(req)
+		resp, err := m.client.Do(req)
 		if err != nil {
 			return err
 		}
@@ -159,10 +207,18 @@ func (p *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error
 			return err
 		}
 
-		pm := p.getProductsMap(ctx, res)
-		p.productsMux.Set(pm)
+		// parses products and creates name -> product lookup map
+		pm := ProductsNameMap{}
+		for _, p := range res.APIProducts {
+			if ctx.Err() != nil {
+				log.Debugf("product polling canceled, exiting")
+				return nil
+			}
+			pm[p.Name] = &p
+		}
+		m.productsMux.Set(pm)
 
-		prometheusProductsRecords.With(p.prometheusLabels).Set(float64(len(pm)))
+		prometheusProductsRecords.With(m.prometheusLabels).Set(float64(len(pm)))
 
 		log.Debugf("retrieved %d products, kept %d", len(res.APIProducts), len(pm))
 
@@ -170,243 +226,51 @@ func (p *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error
 	}
 }
 
-func (p *manager) getProductsMap(ctx context.Context, res APIResponse) ProductsMap {
-	pm := ProductsMap{}
-	for _, v := range res.APIProducts {
-		product := v
-		// only save products that actually map to something
-		for _, attr := range product.Attributes {
-			if ctx.Err() != nil {
-				log.Debugf("product polling canceled, exiting")
-				return nil
-			}
-			if attr.Name == TargetsAttr {
-				var err error
-				targets := strings.Split(attr.Value, ",")
-				for _, t := range targets {
-					product.Targets = append(product.Targets, strings.TrimSpace(t))
-				}
-
-				// server returns empty scopes as array with a single empty string, remove for consistency
-				if len(product.Scopes) == 1 && product.Scopes[0] == "" {
-					product.Scopes = []string{}
-				}
-
-				// parse limit from server
-				if product.QuotaLimit != "" && product.QuotaInterval != "null" {
-					product.QuotaLimitInt, err = strconv.ParseInt(product.QuotaLimit, 10, 64)
-					if err != nil {
-						log.Errorf("unable to parse quota limit: %#v", product)
-					}
-				}
-
-				// parse interval from server
-				if product.QuotaInterval != "" && product.QuotaInterval != "null" {
-					product.QuotaIntervalInt, err = strconv.ParseInt(product.QuotaInterval, 10, 64)
-					if err != nil {
-						log.Errorf("unable to parse quota interval: %#v", product)
-					}
-				}
-
-				// normalize null from server to empty
-				if product.QuotaTimeUnit == "null" {
-					product.QuotaTimeUnit = ""
-				}
-
-				p.resolveResourceMatchers(&product)
-
-				pm[product.Name] = &product
-				break
-			}
-		}
-	}
-	return pm
-}
-
-// generate matchers for resources (path)
-func (p *manager) resolveResourceMatchers(product *APIProduct) {
-	for _, resource := range product.Resources {
-		reg, err := makeResourceRegex(resource)
-		if err != nil {
-			log.Errorf("unable to create resource matcher: %#v", product)
-			continue
-		}
-		product.resourceRegexps = append(product.resourceRegexps, reg)
-	}
-}
-
-// Resolve determines the valid products for a given API.
-func (p *manager) Resolve(ac *auth.Context, api, path string) []*APIProduct {
-	validProducts, failHints := resolve(ac, p.Products(), api, path)
-	var selected []string
-	for _, p := range validProducts {
-		selected = append(selected, p.Name)
-	}
-	log.Debugf(`
-Resolve api: %s, path: %s, scopes: %v
-Selected: %v
-Eliminated: %v`, api, path, ac.Scopes, selected, failHints)
-	return validProducts
-}
-
-func resolve(ac *auth.Context, pMap map[string]*APIProduct, api, path string) (
-	result []*APIProduct, failHints []string) {
-
-	for _, name := range ac.APIProducts {
-		apiProduct, ok := pMap[name]
-		if !ok {
-			failHints = append(failHints, fmt.Sprintf("%s doesn't exist", name))
-			continue
-		}
-		// if APIKey, scopes don't matter
-		if ac.APIKey == "" && !apiProduct.isValidScopes(ac.Scopes) {
-			failHints = append(failHints, fmt.Sprintf("%s doesn't match scopes: %s", name, ac.Scopes))
-			continue
-		}
-		if !apiProduct.isValidPath(path) {
-			failHints = append(failHints, fmt.Sprintf("%s doesn't match path: %s", name, path))
-			continue
-		}
-		if !apiProduct.isValidTarget(api) {
-			failHints = append(failHints, fmt.Sprintf("%s doesn't match target: %s", name, api))
-			continue
-		}
-		result = append(result, apiProduct)
-	}
-	return result, failHints
-}
-
-// true if valid target for API Product
-func (p *APIProduct) isValidTarget(api string) bool {
-	for _, target := range p.Targets {
-		if target == api {
-			return true
-		}
-	}
-	return false
-}
-
-// true if valid path for API Product
-func (p *APIProduct) isValidPath(requestPath string) bool {
-	for _, reg := range p.resourceRegexps {
-		if reg.MatchString(requestPath) {
-			return true
-		}
-	}
-	return false
-}
-
-// true if any intersect of scopes (or no product scopes)
-func (p *APIProduct) isValidScopes(scopes []string) bool {
-	if len(p.Scopes) == 0 {
-		return true
-	}
-	for _, ds := range p.Scopes {
-		for _, s := range scopes {
-			if ds == s {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// GetTargetsAttribute returns a pointer to the target attribute or nil
-func (p *APIProduct) GetTargetsAttribute() *Attribute {
-	for _, attr := range p.Attributes {
-		if attr.Name == TargetsAttr {
-			return &attr
-		}
-	}
-	return nil
-}
-
-// GetBoundTargets returns an array of target names bound to this product
-func (p *APIProduct) GetBoundTargets() []string {
-	attr := p.GetTargetsAttribute()
-	if attr != nil {
-		return strings.Split(attr.Value, ",")
-	}
-	return nil
-}
-
-// - A single slash by itself matches any path
-// - * is valid anywhere and matches within a segment (between slashes)
-// - ** is valid only at the end and matches anything to EOL
-func makeResourceRegex(resource string) (*regexp.Regexp, error) {
-
-	if resource == "/" {
-		return regexp.Compile(".*")
-	}
-
-	// only allow ** as suffix
-	doubleStarIndex := strings.Index(resource, "**")
-	if doubleStarIndex >= 0 && doubleStarIndex != len(resource)-2 {
-		return nil, fmt.Errorf("bad resource specification")
-	}
-
-	// remove ** suffix if exists
-	pattern := resource
-	if doubleStarIndex >= 0 {
-		pattern = pattern[:len(pattern)-2]
-	}
-
-	// let * = any non-slash
-	pattern = strings.Replace(pattern, "*", "[^/]*", -1)
-
-	// if ** suffix, allow anything at end
-	if doubleStarIndex >= 0 {
-		pattern = pattern + ".*"
-	}
-
-	return regexp.Compile("^" + pattern + "$")
-}
-
-// ProductsMap is a map of API Product name to API Product
-type ProductsMap map[string]*APIProduct
+// ProductsNameMap is a map of API Product name to API Product
+type ProductsNameMap map[string]*APIProduct
 
 type productsMux struct {
-	setChan   chan ProductsMap
-	getChan   chan ProductsMap
+	setChan   chan ProductsNameMap
+	getChan   chan ProductsNameMap
 	closeChan chan struct{}
 	closed    *util.AtomicBool
 }
 
-func (h productsMux) Get() ProductsMap {
-	return <-h.getChan
+func (p productsMux) Get() ProductsNameMap {
+	return <-p.getChan
 }
 
-func (h productsMux) Set(s ProductsMap) {
-	if h.closed.IsFalse() {
-		h.setChan <- s
+func (p productsMux) Set(s ProductsNameMap) {
+	if p.closed.IsFalse() {
+		p.setChan <- s
 	}
 }
 
-func (h productsMux) Close() {
-	if !h.closed.SetTrue() {
-		close(h.closeChan)
+func (p productsMux) Close() {
+	if !p.closed.SetTrue() {
+		close(p.closeChan)
 	}
 }
 
-func (h productsMux) mux() {
-	var productsMap ProductsMap
+func (p productsMux) mux() {
+	var productsMap ProductsNameMap
 	for {
 		if productsMap == nil {
 			select {
-			case <-h.closeChan:
-				close(h.setChan)
-				close(h.getChan)
+			case <-p.closeChan:
+				close(p.setChan)
+				close(p.getChan)
 				return
-			case productsMap = <-h.setChan:
+			case productsMap = <-p.setChan:
 				continue
 			}
 		}
 		select {
-		case productsMap = <-h.setChan:
-		case h.getChan <- productsMap:
-		case <-h.closeChan:
-			close(h.setChan)
-			close(h.getChan)
+		case productsMap = <-p.setChan:
+		case p.getChan <- productsMap:
+		case <-p.closeChan:
+			close(p.setChan)
+			close(p.getChan)
 			return
 		}
 	}

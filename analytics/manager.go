@@ -37,7 +37,7 @@ import (
 type Manager interface {
 	Start()
 	Close()
-	SendRecords(ctx *auth.Context, records []Record) error
+	SendRecords(authContext *auth.Context, records []Record) error
 }
 
 // NewManager constructs and starts a new manager. Call Close when you are done.

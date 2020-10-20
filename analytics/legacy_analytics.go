@@ -36,11 +36,11 @@ type legacyAnalytics struct {
 func (oa *legacyAnalytics) Start() {}
 func (oa *legacyAnalytics) Close() {}
 
-func (oa *legacyAnalytics) SendRecords(auth *auth.Context, records []Record) error {
-	axURL := *auth.InternalAPI()
-	axURL.Path = path.Join(axURL.Path, fmt.Sprintf(axPath, auth.Organization(), auth.Environment()))
+func (oa *legacyAnalytics) SendRecords(authContext *auth.Context, records []Record) error {
+	axURL := *authContext.InternalAPI()
+	axURL.Path = path.Join(axURL.Path, fmt.Sprintf(axPath, authContext.Organization(), authContext.Environment()))
 
-	request, err := buildRequest(auth, records)
+	request, err := buildRequest(authContext, records)
 	if request == nil || err != nil {
 		return err
 	}
@@ -80,22 +80,22 @@ func (oa *legacyAnalytics) SendRecords(auth *auth.Context, records []Record) err
 	}
 }
 
-func buildRequest(auth *auth.Context, incoming []Record) (*legacyRequest, error) {
-	if auth == nil || len(incoming) == 0 {
+func buildRequest(authContext *auth.Context, incoming []Record) (*legacyRequest, error) {
+	if authContext == nil || len(incoming) == 0 {
 		return nil, nil
 	}
-	if auth.Organization() == "" || auth.Environment() == "" {
-		return nil, fmt.Errorf("organization and environment are required in auth: %v", auth)
+	if authContext.Organization() == "" || authContext.Environment() == "" {
+		return nil, fmt.Errorf("organization and environment are required in auth: %v", authContext)
 	}
 
 	records := make([]Record, 0, len(incoming))
 	for _, record := range incoming {
-		records = append(records, record.ensureFields(auth))
+		records = append(records, record.ensureFields(authContext))
 	}
 
 	return &legacyRequest{
-		Organization: auth.Organization(),
-		Environment:  auth.Environment(),
+		Organization: authContext.Organization(),
+		Environment:  authContext.Environment(),
 		Records:      records,
 	}, nil
 }
