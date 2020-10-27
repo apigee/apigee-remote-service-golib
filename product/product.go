@@ -205,6 +205,13 @@ func (p *APIProduct) UnmarshalJSON(data []byte) error {
 		}
 	}
 
+	// add Targets from Operations
+	if p.OperationGroup != nil {
+		for _, oc := range p.OperationGroup.OperationConfigs {
+			p.Targets = append(p.Targets, oc.APISource)
+		}
+	}
+
 	// server returns empty scopes as array with a single empty string, remove for consistency
 	if len(p.Scopes) == 1 && p.Scopes[0] == "" {
 		p.Scopes = []string{}

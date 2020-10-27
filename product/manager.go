@@ -209,12 +209,12 @@ func (m *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error
 
 		// parses products and creates name -> product lookup map
 		pm := ProductsNameMap{}
-		for _, p := range res.APIProducts {
+		for i, p := range res.APIProducts {
 			if ctx.Err() != nil {
 				log.Debugf("product polling canceled, exiting")
 				return nil
 			}
-			pm[p.Name] = &p
+			pm[p.Name] = &res.APIProducts[i]
 		}
 		m.productsMux.Set(pm)
 
