@@ -76,6 +76,26 @@ func TestManager(t *testing.T) {
 			QuotaInterval: "null",
 			QuotaTimeUnit: "null",
 		},
+		{
+			Description:  "product 4",
+			DisplayName:  "APIProduct 4",
+			Environments: []string{"prod"},
+			Name:         "Name 4",
+			Resources:    []string{"/whatever"},
+			OperationGroup: &OperationGroup{
+				OperationConfigs: []OperationConfig{
+					{
+						APISource: "Name 4",
+						Operations: []Operation{
+							{
+								Resource: "/",
+								Methods:  []string{"GET"},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +103,9 @@ func TestManager(t *testing.T) {
 			APIProducts: apiProducts,
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(result)
+		if err := json.NewEncoder(w).Encode(result); err != nil {
+			t.Fatal(err)
+		}
 	}))
 	defer ts.Close()
 
@@ -97,30 +119,39 @@ func TestManager(t *testing.T) {
 		RefreshRate: time.Hour,
 		Client:      http.DefaultClient,
 	}
-	pp := createManager(opts)
-	pp.start()
-	defer pp.Close()
+	pm := createManager(opts)
+	pm.start()
+	defer pm.Close()
 
-	if len(pp.Products()) != len(apiProducts) {
-		t.Errorf("num products want: %d, got: %d", len(apiProducts), len(pp.Products()))
+	if len(pm.Products()) != len(apiProducts) {
+		t.Errorf("num products want: %d, got: %d", len(apiProducts), len(pm.Products()))
 	}
 
 	for _, want := range apiProducts {
-		got := pp.Products()[want.Name]
-		if want.Attributes[0].Value != got.Targets[0] {
+		got := pm.Products()[want.Name]
+		if len(want.Attributes) > 0 && want.Attributes[0].Value != got.Targets[0] {
 			t.Errorf("targets not created: %v", got)
+		}
+		if got.Name != want.Name {
+			t.Errorf("got: %s, want %v", got.Name, want.Name)
 		}
 
 		targets := got.GetBoundTargets()
-		if len(targets) != len(want.Attributes) {
-			t.Errorf("num targets want: %d, got: %d", len(targets), len(want.Attributes))
+		if len(targets) != 1 {
+			t.Errorf("num targets want: %d, got: %d", len(targets), 1)
 		}
-		if targets[0] != want.Attributes[0].Value {
-			t.Errorf("get target: %s want: %s", targets[0], want.Attributes[0].Value)
+		if len(want.Attributes) > 0 {
+			if targets[0] != want.Attributes[0].Value {
+				t.Errorf("got target: %s want: %s", targets[0], want.Attributes[0].Value)
+			}
+		} else {
+			if targets[0] != want.OperationGroup.OperationConfigs[0].APISource {
+				t.Errorf("got target: %s want: %s", targets[0], want.OperationGroup.OperationConfigs[0].APISource)
+			}
 		}
 	}
 
-	if len(pp.Products()["Name 3"].Scopes) != 0 {
+	if len(pm.Products()["Name 3"].Scopes) != 0 {
 		t.Errorf("empty scopes should be removed")
 	}
 }
