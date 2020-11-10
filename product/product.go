@@ -34,15 +34,16 @@ type APIResponse struct {
 // https://docs.apigee.com/api-platform/publish/what-api-product
 type APIProduct struct {
 	Attributes       []Attribute     `json:"attributes,omitempty"`
-	CreatedAt        int64           `json:"createdAt,omitempty"` // note: empty from products jar
+	CreatedAt        int64           `json:"createdAt,omitempty"`
 	CreatedBy        string          `json:"createdBy,omitempty"`
 	Description      string          `json:"description,omitempty"`
 	DisplayName      string          `json:"displayName,omitempty"`
 	Environments     []string        `json:"environments,omitempty"`
-	LastModifiedAt   int64           `json:"lastModifiedAt,omitempty"` // note: empty from products jar
+	LastModifiedAt   int64           `json:"lastModifiedAt,omitempty"`
 	LastModifiedBy   string          `json:"lastModifiedBy,omitempty"`
 	Name             string          `json:"name,omitempty"`
 	OperationGroup   *OperationGroup `json:"operationGroup,omitempty"`
+	Proxies          []string        `json:"proxies"`
 	QuotaLimit       string          `json:"quota,omitempty"`
 	QuotaInterval    string          `json:"quotaInterval,omitempty"`
 	QuotaTimeUnit    string          `json:"quotaTimeUnit,omitempty"`
@@ -69,6 +70,7 @@ type OperationGroup struct {
 // An OperationConfig is a group of Operations
 type OperationConfig struct {
 	APISource               string      `json:"apiSource"`
+	Attributes              []Attribute `json:"attributes,omitempty"`
 	Operations              []Operation `json:"operations"`
 	Quota                   *Quota      `json:"quota"`
 	resourceRegexpsByMethod map[string][]*regexp.Regexp
@@ -126,17 +128,17 @@ func (oc *OperationConfig) isValidOperation(target, path, method string, hints b
 
 // An Operation represents methods on a Resource
 type Operation struct {
-	Resource string   `json:"resource"`
 	Methods  []string `json:"methods"`
+	Resource string   `json:"resource"`
 }
 
 // A Quota is attached to an OperationConfig
 type Quota struct {
-	Limit       string `json:"limit,omitempty"`
 	Interval    string `json:"interval,omitempty"`
+	Limit       string `json:"limit,omitempty"`
 	TimeUnit    string `json:"timeUnit,omitempty"`
-	LimitInt    int64
 	IntervalInt int64
+	LimitInt    int64
 }
 
 func (q *Quota) UnmarshalJSON(data []byte) error {
