@@ -110,7 +110,7 @@ func authorize(authContext *auth.Context, productsByName map[string]*APIProduct,
 
 	for _, name := range authorizedProducts {
 		var prodTargets []AuthorizedOperation
-		var hint string = "    not found"
+		var hint string = "    not found\n"
 		if product, ok := productsByName[name]; ok {
 			prodTargets, hint = product.authorize(authContext, target, path, method, hints)
 			authorizedOps = append(authorizedOps, prodTargets...)

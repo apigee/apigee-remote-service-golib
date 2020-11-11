@@ -93,7 +93,8 @@ func TestAuthorize(t *testing.T) {
 	- product: Name 3
 		authorized
 	- product: Invalid
-		not found`
+		not found
+		`
 	if noSymbols(want) != noSymbols(hints) {
 		t.Errorf("want: '%s', got: '%s'", want, hints)
 	}
@@ -124,7 +125,8 @@ func TestAuthorize(t *testing.T) {
 	- product: Name 3
 		no path: /path
 	- product: Invalid
-		not found`
+		not found
+		`
 	if noSymbols(want) != noSymbols(hints) {
 		t.Errorf("want: '%s', got: '%s'", want, hints)
 	}
@@ -146,7 +148,8 @@ func TestAuthorize(t *testing.T) {
 	- product: Name 3
 		no targets: target
 	- product: Invalid
-		not found`
+		not found
+		`
 	if noSymbols(want) != noSymbols(hints) {
 		t.Errorf("want: '%s', got: '%s'", want, hints)
 	}
@@ -178,7 +181,8 @@ func TestAuthorize(t *testing.T) {
 	- product: Name 3
 		authorized
 	- product: Invalid
-		not found`
+		not found
+		`
 	if noSymbols(want) != noSymbols(hints) {
 		t.Errorf("want: '%s', got: '%s'", want, hints)
 	}
@@ -341,7 +345,8 @@ func TestAuthorizeOperations(t *testing.T) {
 		operation configs:
 			0: no path: /operation1
 	- product: Invalid
-		not found`
+		not found
+		`
 	if noSymbols(want) != noSymbols(hints) {
 		t.Errorf("want: '%s', got: '%s'", want, hints)
 	}
@@ -380,7 +385,8 @@ func TestAuthorizeOperations(t *testing.T) {
 		operation configs:
 			0: authorized
 	- product: Invalid
-		not found`
+		not found
+		`
 	if noSymbols(want) != noSymbols(hints) {
 		t.Errorf("want: '%s', got: '%s'", want, hints)
 	}
@@ -403,7 +409,8 @@ func TestAuthorizeOperations(t *testing.T) {
 		operation configs:
 			0: no method: POST
 	- product: Invalid
-		not found`
+		not found
+		`
 	if noSymbols(want) != noSymbols(hints) {
 		t.Errorf("want: '%s', got: '%s'", want, hints)
 	}
@@ -426,7 +433,8 @@ func TestAuthorizeOperations(t *testing.T) {
 		operation configs:
 			0: no target: target
 	- product: Invalid
-		not found`
+		not found
+		`
 	if noSymbols(want) != noSymbols(hints) {
 		t.Errorf("want: '%s', got: '%s'", want, hints)
 	}
