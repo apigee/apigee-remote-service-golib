@@ -273,10 +273,10 @@ func (p *APIProduct) authorize(authContext *auth.Context, target, path, method s
 	// if OperationGroup is present, OperationConfigs override APIProduct target
 	if p.OperationGroup != nil {
 		var hintsBuilder strings.Builder
+		if hints {
+			hintsBuilder.WriteString("    operation configs:\n")
+		}
 		for i, oc := range p.OperationGroup.OperationConfigs {
-			if hints {
-				hintsBuilder.WriteString("    operation configs:\n")
-			}
 			var valid bool
 			valid, hint = oc.isValidOperation(target, path, method, hints)
 			if valid {
