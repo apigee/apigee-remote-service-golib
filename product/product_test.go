@@ -286,7 +286,15 @@ func TestAuthorizeOperations(t *testing.T) {
 								Methods:  []string{"GET"},
 							},
 						},
-						// no OperationConfig quota
+					},
+					{
+						APISource: "host2",
+						Operations: []Operation{
+							{
+								Resource: "/operation3",
+								Methods:  []string{"POST"},
+							},
+						},
 					},
 				},
 			},
@@ -344,6 +352,7 @@ func TestAuthorizeOperations(t *testing.T) {
 	- product: Name 2
 		operation configs:
 			0: no path: /operation1
+			1: no target: host
 	- product: Invalid
 		not found
 		`
@@ -384,6 +393,7 @@ func TestAuthorizeOperations(t *testing.T) {
 	- product: Name 2
 		operation configs:
 			0: authorized
+			1: no target: host
 	- product: Invalid
 		not found
 		`
@@ -408,6 +418,7 @@ func TestAuthorizeOperations(t *testing.T) {
 	- product: Name 2
 		operation configs:
 			0: no method: POST
+			1: no target: host
 	- product: Invalid
 		not found
 		`
@@ -432,6 +443,7 @@ func TestAuthorizeOperations(t *testing.T) {
 	- product: Name 2
 		operation configs:
 			0: no target: target
+			1: no target: target
 	- product: Invalid
 		not found
 		`
