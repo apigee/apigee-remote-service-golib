@@ -216,6 +216,63 @@ func TestManagerPolling(t *testing.T) {
 	pp.Close()
 }
 
+func TestManagerHandlingEtag(t *testing.T) {
+	cached := false
+	apiProducts := []APIProduct{
+		{
+			Attributes: []Attribute{
+				{Name: TargetsAttr, Value: "target"},
+			},
+			Name:      "Name 1",
+			Resources: []string{"/"},
+		},
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if cached {
+			if etag := r.Header.Get("If-None-Match"); etag != "etag" {
+				t.Fatalf("wanted to receive etag in If-None-Match header, got '%s'", etag)
+			}
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		cached = true
+		var result = APIResponse{
+			APIProducts: apiProducts,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Etag", "etag")
+		_ = json.NewEncoder(w).Encode(result)
+	}))
+	defer ts.Close()
+
+	serverURL, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	opts := Options{
+		BaseURL:     serverURL,
+		RefreshRate: 5 * time.Millisecond,
+		Client:      http.DefaultClient,
+	}
+	pp := createManager(opts)
+	pp.start()
+	defer pp.Close()
+
+	time.Sleep(opts.RefreshRate * 10)
+
+	authContext := &auth.Context{
+		APIProducts: []string{"Name 1"},
+	}
+	targets := pp.Authorize(authContext, "target", "/", "GET")
+	if len(targets) != 1 {
+		t.Errorf("want: 1, got: %v", len(targets))
+	}
+
+	pp.Close()
+}
+
 // Path matching is similar to wildcard semantics described in the Apigee product documentation here:
 // https://docs.apigee.com/developer-services/content/create-api-products#resourcebehavior.
 // However, as there is no base path, it is simplified as follows:

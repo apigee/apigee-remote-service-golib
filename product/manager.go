@@ -169,6 +169,7 @@ func (m *manager) start() {
 }
 
 func (m *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error {
+	var etag string
 	return func(ctx context.Context) error {
 
 		req, err := http.NewRequest(http.MethodGet, apiURL.String(), nil)
@@ -179,6 +180,10 @@ func (m *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error
 
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/json")
+
+		if etag != "" {
+			req.Header.Set("If-None-Match", etag)
+		}
 
 		log.Debugf("retrieving products from: %s", apiURL.String())
 
@@ -194,10 +199,20 @@ func (m *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error
 			return err
 		}
 
+		if resp.StatusCode == 304 {
+			log.Debugf("products not modified")
+			return nil
+		}
+
 		if resp.StatusCode != 200 {
 			err := fmt.Errorf("products request failed (%d): %s", resp.StatusCode, string(body))
 			log.Errorf(err.Error())
 			return err
+		}
+
+		etag = resp.Header.Get("ETag")
+		if etag != "" {
+			log.Debugf("received etag for products request: '%s'", etag)
 		}
 
 		var res APIResponse
