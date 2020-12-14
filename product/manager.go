@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/auth"
@@ -72,6 +73,8 @@ type manager struct {
 	productsMux      productsMux
 	cancelPolling    context.CancelFunc
 	prometheusLabels prometheus.Labels
+	etag             string
+	etagLock         sync.RWMutex
 }
 
 // AuthorizedOperation is the result of Authorize including Quotas
@@ -180,6 +183,10 @@ func (m *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/json")
 
+		m.etagLock.RLock()
+		req.Header.Set("If-None-Match", m.etag)
+		m.etagLock.RUnlock()
+
 		log.Debugf("retrieving products from: %s", apiURL.String())
 
 		resp, err := m.client.Do(req)
@@ -194,10 +201,22 @@ func (m *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error
 			return err
 		}
 
+		if resp.StatusCode == 304 {
+			log.Debugf("products not modified")
+			return nil
+		}
+
 		if resp.StatusCode != 200 {
 			err := fmt.Errorf("products request failed (%d): %s", resp.StatusCode, string(body))
 			log.Errorf(err.Error())
 			return err
+		}
+
+		if etag := resp.Header.Get("ETag"); etag != "" {
+			m.etagLock.Lock()
+			m.etag = etag
+			log.Debugf("received etag for products request: '%s'", m.etag)
+			m.etagLock.Unlock()
 		}
 
 		var res APIResponse
