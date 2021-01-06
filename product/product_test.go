@@ -609,11 +609,11 @@ const productJSON = `
           {
             "resource": "/all",
             "methods": [
-							"GET",
-							"POST",
-							"PATCH",
-							"PUT",
-							"DELETE"
+              "GET",
+              "POST",
+              "PATCH",
+              "PUT",
+              "DELETE"
             ]
           },
           {
