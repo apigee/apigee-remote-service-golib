@@ -327,7 +327,7 @@ func TestAuthorizeOperations(t *testing.T) {
 
 	wantProduct := productsMap["Name 1"]
 	wantQuota := wantProduct.OperationGroup.OperationConfigs[0].Quota
-	wantTargetID := fmt.Sprintf("%s-%s-%s", wantProduct.Name, authContext.Application, target)
+	wantTargetID := fmt.Sprintf("%s-%s-%s-%x", wantProduct.Name, authContext.Application, target, md5hash(wantProduct.OperationGroup.OperationConfigs[0].Operations))
 	if wantTargetID != targets[0].ID {
 		t.Errorf("want: '%s', got: '%s'", wantTargetID, targets[0].ID)
 	}
@@ -368,7 +368,7 @@ func TestAuthorizeOperations(t *testing.T) {
 	}
 
 	wantProduct = productsMap["Name 2"]
-	wantTargetID = fmt.Sprintf("%s-%s-%s", wantProduct.Name, authContext.Application, target)
+	wantTargetID = fmt.Sprintf("%s-%s-%s-%x", wantProduct.Name, authContext.Application, target, md5hash(wantProduct.OperationGroup.OperationConfigs[0].Operations))
 	if wantTargetID != targets[0].ID {
 		t.Errorf("want: '%s', got: '%s'", wantTargetID, targets[0].ID)
 	}
@@ -542,15 +542,28 @@ func TestParseJSONWithOperations(t *testing.T) {
 		t.Errorf("want: 'quota-demo', got: '%s'", oc.APISource)
 	}
 
-	if len(oc.Operations) != 1 {
+	if len(oc.Operations) != 4 {
 		t.Fatalf("want 1 Operation")
 	}
-	op := oc.Operations[0]
+	var op Operation
+
+	op = oc.Operations[0]
+	if op.Resource != "/all" {
+		t.Errorf("want: '/all', got: '%s'", op.Resource)
+	}
+	if len(op.Methods) != 5 {
+		t.Fatalf("want 5 method, got: %d", len(op.Methods))
+	}
+	if op.Methods[0] != "DELETE" {
+		t.Errorf("want: 'DELETE', got: '%s'", op.Methods[0])
+	}
+
+	op = oc.Operations[3]
 	if op.Resource != "/put" {
 		t.Errorf("want: '/put', got: '%s'", op.Resource)
 	}
 	if len(op.Methods) != 1 {
-		t.Fatalf("want 1 method")
+		t.Fatalf("want 1 method, got: %d", len(op.Methods))
 	}
 	if op.Methods[0] != "PUT" {
 		t.Errorf("want: 'PUT', got: '%s'", op.Methods[0])
@@ -593,10 +606,32 @@ const productJSON = `
       {
         "apiSource": "quota-demo",
         "operations": [
+					{
+            "resource": "/all",
+            "methods": [
+							"GET",
+							"POST",
+							"PATCH",
+							"PUT",
+							"DELETE"
+            ]
+					},
           {
             "resource": "/put",
             "methods": [
               "PUT"
+            ]
+					},
+					{
+            "resource": "/post",
+            "methods": [
+              "POST"
+            ]
+					},
+					{
+            "resource": "/get",
+            "methods": [
+              "GET"
             ]
           }
         ],

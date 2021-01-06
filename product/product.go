@@ -15,9 +15,11 @@
 package product
 
 import (
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -86,7 +88,11 @@ func (oc *OperationConfig) UnmarshalJSON(data []byte) error {
 	*oc = OperationConfig(un)
 
 	oc.resourceRegexpsByMethod = map[string][]*regexp.Regexp{}
-	for _, op := range oc.Operations {
+	for i, op := range oc.Operations {
+		// sort operation's methods lexicographically to make sure
+		// the laster hashing always yields consistent results
+		sort.Strings(oc.Operations[i].Methods)
+
 		reg, err := makeResourceRegex(op.Resource)
 		if err != nil {
 			log.Errorf("unable to create resource matcher: %#v", op.Resource)
@@ -96,6 +102,12 @@ func (oc *OperationConfig) UnmarshalJSON(data []byte) error {
 			oc.resourceRegexpsByMethod[method] = append(oc.resourceRegexpsByMethod[method], reg)
 		}
 	}
+
+	// sort the Operations by resource, the uniqueness of which
+	// within the same OperationConfig are enforced by Apigee
+	sort.Slice(oc.Operations, func(i, j int) bool {
+		return oc.Operations[i].Resource < oc.Operations[j].Resource
+	})
 
 	return nil
 }
@@ -281,7 +293,7 @@ func (p *APIProduct) authorize(authContext *auth.Context, target, path, method s
 			valid, hint = oc.isValidOperation(target, path, method, hints)
 			if valid {
 				target := AuthorizedOperation{
-					ID:            fmt.Sprintf("%s-%s-%s", p.Name, authContext.Application, oc.APISource),
+					ID:            fmt.Sprintf("%s-%s-%s-%x", p.Name, authContext.Application, oc.APISource, md5hash(oc.Operations)),
 					QuotaLimit:    p.QuotaLimitInt,
 					QuotaInterval: p.QuotaIntervalInt,
 					QuotaTimeUnit: p.QuotaTimeUnit,
@@ -393,4 +405,13 @@ func makeResourceRegex(resource string) (*regexp.Regexp, error) {
 	}
 
 	return regexp.Compile("^" + pattern + "$")
+}
+
+// md5hash returns a md5 signature based on oc.APISource and oc.Operations
+func md5hash(os []Operation) [16]byte {
+	data, err := json.Marshal(os)
+	if err != nil { // this causes md5.Sum(nil) to be returned
+		log.Errorf("unable to marshal operations, %#v", os)
+	}
+	return md5.Sum(data)
 }
