@@ -606,7 +606,7 @@ const productJSON = `
       {
         "apiSource": "quota-demo",
         "operations": [
-					{
+          {
             "resource": "/all",
             "methods": [
 							"GET",
@@ -615,20 +615,20 @@ const productJSON = `
 							"PUT",
 							"DELETE"
             ]
-					},
+          },
           {
             "resource": "/put",
             "methods": [
               "PUT"
             ]
-					},
-					{
+          },
+          {
             "resource": "/post",
             "methods": [
               "POST"
             ]
-					},
-					{
+          },
+          {
             "resource": "/get",
             "methods": [
               "GET"
