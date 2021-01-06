@@ -545,6 +545,9 @@ func TestParseJSONWithOperations(t *testing.T) {
 	if len(oc.Operations) != 4 {
 		t.Fatalf("want 1 Operation")
 	}
+	if want := "quota-demo-98c34c322202a4f9e01aea733326a129"; oc.ID != want {
+		t.Errorf("want OperationConfig.ID: '%s', got '%s'", want, oc.ID)
+	}
 	var op Operation
 
 	op = oc.Operations[0]

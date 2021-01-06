@@ -71,6 +71,7 @@ type OperationGroup struct {
 
 // An OperationConfig is a group of Operations
 type OperationConfig struct {
+	ID                      string      `json:"-"`
 	APISource               string      `json:"apiSource"`
 	Attributes              []Attribute `json:"attributes,omitempty"`
 	Operations              []Operation `json:"operations"`
@@ -108,6 +109,8 @@ func (oc *OperationConfig) UnmarshalJSON(data []byte) error {
 	sort.Slice(oc.Operations, func(i, j int) bool {
 		return oc.Operations[i].Resource < oc.Operations[j].Resource
 	})
+
+	oc.ID = fmt.Sprintf("%s-%x", oc.APISource, md5hash(oc.Operations))
 
 	return nil
 }
@@ -293,7 +296,7 @@ func (p *APIProduct) authorize(authContext *auth.Context, target, path, method s
 			valid, hint = oc.isValidOperation(target, path, method, hints)
 			if valid {
 				target := AuthorizedOperation{
-					ID:            fmt.Sprintf("%s-%s-%s-%x", p.Name, authContext.Application, oc.APISource, md5hash(oc.Operations)),
+					ID:            fmt.Sprintf("%s-%s-%s", p.Name, authContext.Application, oc.ID),
 					QuotaLimit:    p.QuotaLimitInt,
 					QuotaInterval: p.QuotaIntervalInt,
 					QuotaTimeUnit: p.QuotaTimeUnit,
