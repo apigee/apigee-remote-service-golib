@@ -52,6 +52,7 @@ type APIProduct struct {
 	Resources        []string        `json:"apiResources"`
 	Scopes           []string        `json:"scopes"`
 	Targets          []string
+	EnvironmentMap   map[string]struct{}
 	QuotaLimitInt    int64
 	QuotaIntervalInt int64
 	resourceRegexps  []*regexp.Regexp // APIProduct-level only
@@ -210,6 +211,12 @@ func (p *APIProduct) UnmarshalJSON(data []byte) error {
 	}
 	*p = APIProduct(un)
 
+	// put Environments into EnvironmentMap
+	p.EnvironmentMap = make(map[string]struct{})
+	for _, e := range p.Environments {
+		p.EnvironmentMap[e] = struct{}{}
+	}
+
 	// parse TargetsAttr, if exists
 	p.Targets = []string{}
 	for _, attr := range p.Attributes {
@@ -277,6 +284,14 @@ func (p *APIProduct) UnmarshalJSON(data []byte) error {
 // if OperationGroup, all matching OperationConfigs
 // if no OperationGroup, the API Product if it matches
 func (p *APIProduct) authorize(authContext *auth.Context, target, path, method string, hints bool) (authorizedOps []AuthorizedOperation, hint string) {
+	env := authContext.Environment()
+	if _, ok := p.EnvironmentMap[env]; !ok { // the product is not authorized in context environment
+		if hints {
+			hint = fmt.Sprintf("    incorrect environments: %#v\n", p.Environments)
+		}
+		return
+	}
+
 	// scopes apply for both APIProduct and OperationGroups
 	if !p.isValidScopes(authContext) {
 		if hints {
@@ -296,7 +311,7 @@ func (p *APIProduct) authorize(authContext *auth.Context, target, path, method s
 			valid, hint = oc.isValidOperation(target, path, method, hints)
 			if valid {
 				target := AuthorizedOperation{
-					ID:            fmt.Sprintf("%s-%s-%s", p.Name, authContext.Application, oc.ID),
+					ID:            fmt.Sprintf("%s-%s-%s-%s", p.Name, env, authContext.Application, oc.ID),
 					QuotaLimit:    p.QuotaLimitInt,
 					QuotaInterval: p.QuotaIntervalInt,
 					QuotaTimeUnit: p.QuotaTimeUnit,
@@ -330,7 +345,7 @@ func (p *APIProduct) authorize(authContext *auth.Context, target, path, method s
 	}
 
 	authorizedOps = append(authorizedOps, AuthorizedOperation{
-		ID:            fmt.Sprintf("%s-%s", p.Name, authContext.Application),
+		ID:            fmt.Sprintf("%s-%s-%s", p.Name, env, authContext.Application),
 		QuotaLimit:    p.QuotaLimitInt,
 		QuotaInterval: p.QuotaIntervalInt,
 		QuotaTimeUnit: p.QuotaTimeUnit,
