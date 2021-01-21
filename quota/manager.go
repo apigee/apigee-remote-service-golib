@@ -72,7 +72,6 @@ type manager struct {
 	bucketsSyncingLock sync.Mutex
 	bucketsSyncing     map[*bucket]struct{}
 	org                string
-	env                string
 	runningContext     context.Context
 	cancelContext      context.CancelFunc
 }
@@ -101,7 +100,6 @@ func newManager(options Options) *manager {
 		dupCache:          ResultCache{size: resultCacheBufferSize},
 		bucketsSyncing:    map[*bucket]struct{}{},
 		org:               options.Org,
-		env:               options.Env,
 	}
 }
 
@@ -163,8 +161,7 @@ func (m *manager) Apply(authContext *auth.Context, operation product.AuthorizedO
 		m.bucketsLock.Lock()
 		b, ok = m.buckets[req.Identifier]
 		if !ok || !b.compatible(req) {
-			promLabels := m.prometheusLabelsForQuota(req.Identifier)
-			b = newBucket(*req, m, promLabels)
+			b = newBucket(*req, m, prometheus.Labels{"org": authContext.Organization(), "env": authContext.Environment(), "quota": req.Identifier})
 			m.buckets[req.Identifier] = b
 			log.Debugf("new quota bucket: %s", req.Identifier)
 		}
@@ -208,12 +205,12 @@ func (m *manager) bucketMaintenanceLoop() {
 				log.Debugf("deleting quota buckets: %v", deleteIDs)
 				m.bucketsLock.Lock()
 				for _, id := range deleteIDs {
+					bucket := m.buckets[id]
 					delete(m.buckets, id)
-					labels := m.prometheusLabelsForQuota(id)
-					prometheusBucketWindowExpires.Delete(labels)
-					prometheusBucketChecked.Delete(labels)
-					prometheusBucketSynced.Delete(labels)
-					prometheusBucketValue.Delete(labels)
+					prometheusBucketWindowExpires.Delete(bucket.prometheusLabels)
+					prometheusBucketChecked.Delete(bucket.prometheusLabels)
+					prometheusBucketSynced.Delete(bucket.prometheusLabels)
+					prometheusBucketValue.Delete(bucket.prometheusLabels)
 				}
 				m.bucketsLock.Unlock()
 			}
@@ -224,10 +221,6 @@ func (m *manager) bucketMaintenanceLoop() {
 			return
 		}
 	}
-}
-
-func (m *manager) prometheusLabelsForQuota(quotaID string) prometheus.Labels {
-	return prometheus.Labels{"org": m.org, "env": m.env, "quota": quotaID}
 }
 
 // routine for dispatching work to sync a bucket with the server

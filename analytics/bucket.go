@@ -89,7 +89,8 @@ func (b *bucket) fileName() string {
 
 func (b *bucket) runLoop() {
 	written := 0
-	promLabels := prometheus.Labels{"file": b.fileName()}
+	org, env, _ := getOrgAndEnvFromTenant(b.tenant)
+	promLabels := prometheus.Labels{"org": org, "env": env, "file": b.fileName()}
 	defer prometheusRecordsByFile.Delete(promLabels)
 	for records := range b.incoming {
 		if err := b.uploader.write(records, b.w.writer); err != nil {

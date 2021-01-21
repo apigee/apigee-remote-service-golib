@@ -168,7 +168,8 @@ func TestManagerPolling(t *testing.T) {
 			Attributes: []Attribute{
 				{Name: TargetsAttr, Value: "target"},
 			},
-			Resources: []string{"/"},
+			Environments: []string{"env"},
+			Resources:    []string{"/"},
 		})
 
 		var result = APIResponse{
@@ -206,6 +207,7 @@ func TestManagerPolling(t *testing.T) {
 	}
 
 	authContext := &auth.Context{
+		Context:     &fakeContext{org: "org", env: "env"},
 		APIProducts: []string{"Name 1"},
 	}
 	targets := pp.Authorize(authContext, "target", "/", "GET")
@@ -223,8 +225,9 @@ func TestManagerHandlingEtag(t *testing.T) {
 			Attributes: []Attribute{
 				{Name: TargetsAttr, Value: "target"},
 			},
-			Name:      "Name 1",
-			Resources: []string{"/"},
+			Environments: []string{"env"},
+			Name:         "Name 1",
+			Resources:    []string{"/"},
 		},
 	}
 
@@ -263,6 +266,7 @@ func TestManagerHandlingEtag(t *testing.T) {
 	time.Sleep(opts.RefreshRate * 10)
 
 	authContext := &auth.Context{
+		Context:     &fakeContext{org: "org", env: "env"},
 		APIProducts: []string{"Name 1"},
 	}
 	targets := pp.Authorize(authContext, "target", "/", "GET")

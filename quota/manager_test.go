@@ -26,6 +26,7 @@ import (
 	"github.com/apigee/apigee-remote-service-golib/auth"
 	"github.com/apigee/apigee-remote-service-golib/authtest"
 	"github.com/apigee/apigee-remote-service-golib/product"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func TestQuota(t *testing.T) {
@@ -170,7 +171,7 @@ func TestSync(t *testing.T) {
 		bucketsSyncing:    map[*bucket]struct{}{},
 	}
 
-	b := newBucket(*request, m, m.prometheusLabelsForQuota(quotaID))
+	b := newBucket(*request, m, prometheus.Labels{"org": "org", "env": "env", "quota": quotaID})
 	b.checked = fakeTime.now()
 	b.result = result
 	m.buckets = map[string]*bucket{quotaID: b}

@@ -55,7 +55,6 @@ func NewManager(options Options) (Manager, error) {
 		Client:   options.Client,
 		CacheTTL: options.APIKeyCacheDuration,
 		Org:      options.Org,
-		Env:      options.Env,
 	})
 	am := &manager{
 		jwtMan:   jwtMan,

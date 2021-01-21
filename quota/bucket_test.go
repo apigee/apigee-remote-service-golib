@@ -19,6 +19,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func TestBucket(t *testing.T) {
@@ -123,7 +125,7 @@ func TestBucket(t *testing.T) {
 			created:          now(),
 			lock:             sync.RWMutex{},
 			deleteAfter:      defaultDeleteAfter,
-			prometheusLabels: m.prometheusLabelsForQuota(id),
+			prometheusLabels: prometheus.Labels{"org": "org", "env": "env", "quota": id},
 		}
 
 		res, err := b.apply(c.request)

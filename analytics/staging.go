@@ -23,6 +23,7 @@ import (
 
 	"github.com/apigee/apigee-remote-service-golib/log"
 	"github.com/hashicorp/go-multierror"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func (m *manager) stageFile(tenant, tempFile string, numRecs int) {
@@ -33,7 +34,9 @@ func (m *manager) stageFile(tenant, tempFile string, numRecs int) {
 		log.Errorf("can't rename file: %s", err)
 		return
 	}
-	prometheusRecordsByFile.WithLabelValues(stagedFile).Set(float64(numRecs))
+	org, env, _ := getOrgAndEnvFromTenant(tenant)
+	promLabels := prometheus.Labels{"org": org, "env": env, "file": stagedFile}
+	prometheusRecordsByFile.With(promLabels).Set(float64(numRecs))
 
 	m.upload(tenant, stagedFile, numRecs)
 	log.Debugf("staged file: %s", stagedFile)
