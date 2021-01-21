@@ -260,18 +260,13 @@ func (m *manager) startUploader(errHandler util.ErrorFunc) {
 }
 
 func (m *manager) upload(tenant, file string, numRecs int) {
-	promLabels := prometheus.Labels{"file": file}
 	prometheusInstrumentedWork := func(ctx context.Context) error {
 		err := m.uploader.workFunc(tenant, file)(ctx)
 		if err == nil {
-			prometheusRecordsByFile.Delete(promLabels)
-			org, env, err := getOrgAndEnvFromTenant(tenant)
-			if err != nil {
-				log.Warnf("unable to set uploaded status count: %s", err)
-			} else {
-				countLabels := prometheus.Labels{"org": org, "env": env, "status": "uploaded"}
-				prometheusRecordsCount.With(countLabels).Add(float64(numRecs))
-			}
+			org, env, _ := getOrgAndEnvFromTenant(tenant)
+			prometheusRecordsByFile.Delete(prometheus.Labels{"org": org, "env": env, "file": file})
+			countLabels := prometheus.Labels{"org": org, "env": env, "status": "uploaded"}
+			prometheusRecordsCount.With(countLabels).Add(float64(numRecs))
 		}
 		return err
 	}
@@ -422,5 +417,5 @@ var (
 		Subsystem: "analytics",
 		Name:      "records_staged",
 		Help:      "Analytics record counts by staging file",
-	}, []string{"file"})
+	}, []string{"org", "env", "file"})
 )

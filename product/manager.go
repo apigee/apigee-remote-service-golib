@@ -58,6 +58,7 @@ func createManager(options Options) *manager {
 		closed:           util.NewAtomicBool(false),
 		refreshRate:      options.RefreshRate,
 		client:           options.Client,
+		env:              options.Env,
 		prometheusLabels: prometheus.Labels{"org": options.Org, "env": options.Env},
 	}
 }
@@ -72,6 +73,7 @@ type manager struct {
 	productsMux      productsMux
 	cancelPolling    context.CancelFunc
 	prometheusLabels prometheus.Labels
+	env              string
 }
 
 // AuthorizedOperation is the result of Authorize including Quotas
@@ -158,6 +160,9 @@ func (m *manager) start() {
 	}
 	apiURL := *m.baseURL
 	apiURL.Path = path.Join(apiURL.Path, productsURL)
+	if m.env != "" { // if env is present, only pull specific env - else, pull all
+		apiURL.Query().Add("env", m.env)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancelPolling = cancel
 	poller.Start(ctx, m.pollingClosure(apiURL), m.refreshRate, func(err error) error {

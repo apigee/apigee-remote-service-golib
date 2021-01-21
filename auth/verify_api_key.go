@@ -71,7 +71,6 @@ type keyVerifierOpts struct {
 	MaxCachedEntries      int
 	Client                *http.Client
 	Org                   string
-	Env                   string
 }
 
 func newVerifier(jwtMan *jwtManager, opts keyVerifierOpts) keyVerifier {
@@ -90,7 +89,7 @@ func newVerifier(jwtMan *jwtManager, opts keyVerifierOpts) keyVerifier {
 		now:              time.Now,
 		client:           opts.Client,
 		knownBad:         cache.NewLRU(defaultBadEntryCacheTTL, opts.CacheEvictionInterval, 100),
-		prometheusLabels: prometheus.Labels{"org": opts.Org, "env": opts.Env},
+		prometheusLabels: prometheus.Labels{"org": opts.Org},
 	}
 }
 
@@ -226,11 +225,11 @@ var (
 		Subsystem: "auth",
 		Name:      "apikeys_cache_hit_count",
 		Help:      "Number of apikey cache hits",
-	}, []string{"org", "env"})
+	}, []string{"org"})
 
 	prometheusAPIKeysCacheMisses = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Subsystem: "auth",
 		Name:      "apikeys_cache_miss_count",
 		Help:      "Number of apikey cache misses",
-	}, []string{"org", "env"})
+	}, []string{"org"})
 )
