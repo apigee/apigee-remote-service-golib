@@ -58,8 +58,8 @@ func createManager(options Options) *manager {
 		closed:           util.NewAtomicBool(false),
 		refreshRate:      options.RefreshRate,
 		client:           options.Client,
-		env:              options.Env,
-		prometheusLabels: prometheus.Labels{"org": options.Org, "env": options.Env},
+		env:              options.Env, // note: "*" means multitenant
+		prometheusLabels: prometheus.Labels{"org": options.Org},
 	}
 }
 
@@ -160,7 +160,7 @@ func (m *manager) start() {
 	}
 	apiURL := *m.baseURL
 	apiURL.Path = path.Join(apiURL.Path, productsURL)
-	if m.env != "" { // if env is present, only pull specific env - else, pull all
+	if m.env != "*" { // if env is not *, pull specified env
 		apiURL.Query().Add("env", m.env)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -301,5 +301,5 @@ var (
 		Subsystem: "products",
 		Name:      "cached",
 		Help:      "Number of products cached in memory",
-	}, []string{"org", "env"})
+	}, []string{"org"})
 )

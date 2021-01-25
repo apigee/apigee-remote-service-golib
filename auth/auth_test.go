@@ -51,7 +51,6 @@ func TestNewManager(t *testing.T) {
 		PollInterval: time.Hour,
 		Client:       &http.Client{},
 		Org:          "org",
-		Env:          "env",
 	}
 	m, err := NewManager(opts)
 	if err != nil {
@@ -145,12 +144,6 @@ func TestValidateOptions(t *testing.T) {
 	}
 
 	opts.Org = "hi"
-	err = opts.validate()
-	if err == nil || err.Error() != "env is required" {
-		t.Errorf("wanted error 'env is required', got %v", err)
-	}
-
-	opts.Env = "test"
 	err = opts.validate()
 	if err != nil {
 		t.Errorf("wanted no error, got %v", err)

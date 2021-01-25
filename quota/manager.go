@@ -260,15 +260,12 @@ type Options struct {
 	BaseURL *url.URL
 	// Org is organization
 	Org string
-	// Env is environment
-	Env string
 }
 
 func (o *Options) validate() error {
 	if o.Client == nil ||
 		o.BaseURL == nil ||
-		o.Org == "" ||
-		o.Env == "" {
+		o.Org == "" {
 		return fmt.Errorf("all quota options are required")
 	}
 	return nil

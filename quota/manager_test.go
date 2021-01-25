@@ -59,7 +59,6 @@ func TestQuota(t *testing.T) {
 		BaseURL: context.InternalAPI(),
 		Client:  http.DefaultClient,
 		Org:     "org",
-		Env:     "env",
 	})
 	if err != nil {
 		t.Fatal(err)
