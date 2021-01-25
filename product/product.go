@@ -80,6 +80,9 @@ type OperationConfig struct {
 	resourceRegexpsByMethod map[string][]*regexp.Regexp
 }
 
+// list of all HTTP verbs
+var allMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "CONNECT", "TRACE"}
+
 func (oc *OperationConfig) UnmarshalJSON(data []byte) error {
 
 	type Unmarsh OperationConfig
@@ -92,7 +95,7 @@ func (oc *OperationConfig) UnmarshalJSON(data []byte) error {
 	oc.resourceRegexpsByMethod = map[string][]*regexp.Regexp{}
 	for i, op := range oc.Operations {
 		// sort operation's methods lexicographically to make sure
-		// the laster hashing always yields consistent results
+		// the later hashing always yields consistent results
 		sort.Strings(oc.Operations[i].Methods)
 
 		reg, err := makeResourceRegex(op.Resource)
@@ -100,7 +103,11 @@ func (oc *OperationConfig) UnmarshalJSON(data []byte) error {
 			log.Errorf("unable to create resource matcher: %#v", op.Resource)
 			continue
 		}
-		for _, method := range op.Methods {
+		methods := op.Methods
+		if len(methods) == 0 { // no method in the operation means all methods are allowed
+			methods = allMethods
+		}
+		for _, method := range methods {
 			oc.resourceRegexpsByMethod[method] = append(oc.resourceRegexpsByMethod[method], reg)
 		}
 	}
