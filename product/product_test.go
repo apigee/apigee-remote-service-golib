@@ -390,6 +390,14 @@ func TestAuthorizeOperations(t *testing.T) {
 							},
 						},
 					},
+					{
+						APISource: "host3",
+						Operations: []Operation{
+							{
+								Resource: "/operation3",
+							},
+						},
+					},
 				},
 			},
 		},
@@ -443,6 +451,7 @@ func TestAuthorizeOperations(t *testing.T) {
 				operation configs:
 					0: no path: /operation1
 					1: no target: host
+					2: no target: host
 			- product: Invalid
 				not found
 				`,
@@ -473,6 +482,7 @@ func TestAuthorizeOperations(t *testing.T) {
 				operation configs:
 					0: authorized
 					1: no target: host
+					2: no target: host
 			- product: Invalid
 				not found
 				`,
@@ -501,6 +511,38 @@ func TestAuthorizeOperations(t *testing.T) {
 				operation configs:
 					0: no method: POST
 					1: no target: host
+					2: no target: host
+			- product: Invalid
+				not found
+				`,
+		},
+		{ // all methods allowed if none specified
+			ctx: &auth.Context{
+				Context:     &fakeContext{org: "org", env: "prod"},
+				APIProducts: []string{"Name 1", "Name 2", "Invalid"},
+				Scopes:      []string{"scope1", "scope2"},
+				Application: "app",
+			},
+			productsMap:    productsMap,
+			target:         "host3",
+			path:           "/operation3",
+			method:         "POST",
+			wantTargetsLen: 1,
+			wantTargetID:   "Name 2-prod-app-host-547dbfc99f0432d3dbc607784917b1bc",
+			wantQuota:      productsMap["Name 2"].OperationGroup.OperationConfigs[0].Quota,
+			wantHints: `Authorizing request:
+			products: [Name 1 Name 2 Invalid]
+			scopes: [scope1 scope2]
+			operation: POST /operation3
+			target: host3
+			- product: Name 1
+				operation configs:
+					0: no target: host3
+			- product: Name 2
+				operation configs:
+					0: no target: host3
+					1: no target: host3
+					2: authorized
 			- product: Invalid
 				not found
 				`,
@@ -529,6 +571,7 @@ func TestAuthorizeOperations(t *testing.T) {
 				operation configs:
 					0: no target: target
 					1: no target: target
+					2: no target: target
 			- product: Invalid
 				not found
 				`,
