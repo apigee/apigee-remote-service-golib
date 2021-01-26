@@ -44,7 +44,7 @@ type Options struct {
 	RefreshRate time.Duration
 	// Org is organization
 	Org string
-	// Env is environment
+	// Env is environment, "*" means multi-tenant
 	Env string
 }
 

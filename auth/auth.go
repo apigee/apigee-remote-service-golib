@@ -176,8 +176,6 @@ type Options struct {
 	APIKeyCacheDuration time.Duration
 	// Org is organization
 	Org string
-	// Env is environment
-	Env string
 }
 
 func (o *Options) validate() error {
@@ -186,9 +184,6 @@ func (o *Options) validate() error {
 	}
 	if o.Org == "" {
 		return fmt.Errorf("org is required")
-	}
-	if o.Env == "" {
-		return fmt.Errorf("env is required")
 	}
 	return nil
 }
