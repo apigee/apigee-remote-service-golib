@@ -102,6 +102,7 @@ func authorize(authContext *auth.Context, productsByName map[string]*APIProduct,
 	addHint := func(hint string) {
 		if hintsBuilder.Len() == 0 {
 			hintsBuilder.WriteString("Authorizing request:\n")
+			hintsBuilder.WriteString(fmt.Sprintf("  environment: %s\n", authContext.Environment()))
 			hintsBuilder.WriteString(fmt.Sprintf("  products: %v\n", authorizedProducts))
 			hintsBuilder.WriteString(fmt.Sprintf("  scopes: %v\n", authContext.Scopes))
 			hintsBuilder.WriteString(fmt.Sprintf("  operation: %s %s\n", method, path))

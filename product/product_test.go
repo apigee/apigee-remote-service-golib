@@ -102,6 +102,7 @@ func TestAuthorize(t *testing.T) {
 			method:         "GET",
 			wantTargetsLen: 3,
 			wantHints: `Authorizing request:
+			environment: prod
 			products: [Name 1 Name 2 Name 3 Invalid]
 			scopes: [scope1 scope2]
 			operation: GET /name3
@@ -129,6 +130,7 @@ func TestAuthorize(t *testing.T) {
 			method:         "GET",
 			wantTargetsLen: 2,
 			wantHints: `Authorizing request:
+			environment: prod
 			products: [Name 1 Name 2 Name 3 Invalid]
 			scopes: [scope1 scope2]
 			operation: GET /path
@@ -156,6 +158,7 @@ func TestAuthorize(t *testing.T) {
 			method:         "GET",
 			wantTargetsLen: 0,
 			wantHints: `Authorizing request:
+			environment: prod
 			products: [Name 1 Name 2 Name 3 Invalid]
 			scopes: [scope1 scope2]
 			operation: GET /path
@@ -187,6 +190,7 @@ func TestAuthorize(t *testing.T) {
 				QuotaLimit: productsMap["Name 2"].QuotaLimitInt,
 			},
 			wantHints: `Authorizing request:
+			environment: prod
 			products: [Name 1 Name 2 Name 3 Invalid]
 			scopes: [scope2]
 			operation: GET /name3
@@ -214,6 +218,7 @@ func TestAuthorize(t *testing.T) {
 			method:         "GET",
 			wantTargetsLen: 0,
 			wantHints: `Authorizing request:
+			environment: prod
 			products: [Name 1]
 			scopes: [scope2]
 			operation: GET /name3
@@ -240,6 +245,7 @@ func TestAuthorize(t *testing.T) {
 				QuotaLimit: productsMap["Name 1"].QuotaLimitInt,
 			},
 			wantHints: `Authorizing request:
+			environment: prod
 			products: [Name 1 Name 2 Name 3]
 			scopes: []
 			operation: GET /name3
@@ -266,6 +272,7 @@ func TestAuthorize(t *testing.T) {
 			method:         "GET",
 			wantTargetsLen: 3,
 			wantHints: `Authorizing request:
+			environment: prod
 			products: [Name 1 Name 2 Name 3]
 			scopes: []
 			operation: GET /name3
@@ -292,6 +299,7 @@ func TestAuthorize(t *testing.T) {
 			method:         "GET",
 			wantTargetsLen: 0,
 			wantHints: `Authorizing request:
+			environment: test
 			products: [Name 1 Name 2 Name 3]
 			scopes: []
 			operation: GET /name3
@@ -440,6 +448,7 @@ func TestAuthorizeOperations(t *testing.T) {
 			wantTargetID:   "Name 1-prod-app-host-7c5532d6fca7a87312365219212de443",
 			wantQuota:      productsMap["Name 1"].OperationGroup.OperationConfigs[0].Quota,
 			wantHints: `Authorizing request:
+			environment: prod
 			products: [Name 1 Name 2 Invalid]
 			scopes: [scope1 scope2]
 			operation: GET /operation1
@@ -471,6 +480,7 @@ func TestAuthorizeOperations(t *testing.T) {
 			wantTargetID:   "Name 2-prod-app-host-547dbfc99f0432d3dbc607784917b1bc",
 			wantQuota:      productsMap["Name 2"].OperationGroup.OperationConfigs[0].Quota,
 			wantHints: `Authorizing request:
+			environment: prod
 			products: [Name 1 Name 2 Invalid]
 			scopes: [scope1 scope2]
 			operation: GET /operation2
@@ -500,6 +510,7 @@ func TestAuthorizeOperations(t *testing.T) {
 			method:         "POST",
 			wantTargetsLen: 0,
 			wantHints: `Authorizing request:
+			environment: prod
 			products: [Name 1 Name 2 Invalid]
 			scopes: [scope1 scope2]
 			operation: POST /operation2
@@ -531,6 +542,7 @@ func TestAuthorizeOperations(t *testing.T) {
 			wantTargetID:   "Name 2-prod-app-host-547dbfc99f0432d3dbc607784917b1bc",
 			wantQuota:      productsMap["Name 2"].OperationGroup.OperationConfigs[0].Quota,
 			wantHints: `Authorizing request:
+			environment: prod
 			products: [Name 1 Name 2 Invalid]
 			scopes: [scope1 scope2]
 			operation: POST /operation3
@@ -560,6 +572,7 @@ func TestAuthorizeOperations(t *testing.T) {
 			method:         "GET",
 			wantTargetsLen: 0,
 			wantHints: `Authorizing request:
+			environment: prod
 			products: [Name 1 Name 2 Invalid]
 			scopes: [scope1 scope2]
 			operation: GET /operation2
