@@ -36,13 +36,9 @@ type APIResponse struct {
 // https://docs.apigee.com/api-platform/publish/what-api-product
 type APIProduct struct {
 	Attributes       []Attribute     `json:"attributes,omitempty"`
-	CreatedAt        int64           `json:"createdAt,omitempty"`
-	CreatedBy        string          `json:"createdBy,omitempty"`
 	Description      string          `json:"description,omitempty"`
 	DisplayName      string          `json:"displayName,omitempty"`
 	Environments     []string        `json:"environments,omitempty"`
-	LastModifiedAt   int64           `json:"lastModifiedAt,omitempty"`
-	LastModifiedBy   string          `json:"lastModifiedBy,omitempty"`
 	Name             string          `json:"name,omitempty"`
 	OperationGroup   *OperationGroup `json:"operationGroup,omitempty"`
 	Proxies          []string        `json:"proxies"`
