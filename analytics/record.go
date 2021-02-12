@@ -53,7 +53,7 @@ type Record struct {
 	GatewayFlowID                string `json:"gateway_flow_id"`
 }
 
-func (r Record) ensureFields(authContext *auth.Context) Record {
+func (r Record) EnsureFields(authContext *auth.Context) Record {
 	r.RecordType = axRecordType
 
 	// populate from auth context
