@@ -81,7 +81,7 @@ func TestFluentdAnalyticsMTLS(t *testing.T) {
 	uuid := up.(*fluentdUploader).clientUUID
 
 	tag := fmt.Sprintf(tagFormat, recType, authContext.Organization(), authContext.Environment(), uuid)
-	axRecord = axRecord.ensureFields(authContext)
+	axRecord = axRecord.EnsureFields(authContext)
 	axJSON, err := json.Marshal(axRecord)
 	if err != nil {
 		t.Fatal(err)
@@ -141,7 +141,7 @@ func TestFluentdAnalyticsTLSSkipVerify(t *testing.T) {
 	uuid := up.(*fluentdUploader).clientUUID
 
 	tag := fmt.Sprintf(tagFormat, recType, authContext.Organization(), authContext.Environment(), uuid)
-	axRecord = axRecord.ensureFields(authContext)
+	axRecord = axRecord.EnsureFields(authContext)
 	axJSON, err := json.Marshal(axRecord)
 	if err != nil {
 		t.Fatal(err)
@@ -195,7 +195,7 @@ func TestFluentdAnalyticsNoTLS(t *testing.T) {
 	uuid := up.(*fluentdUploader).clientUUID
 
 	tag := fmt.Sprintf(tagFormat, recType, authContext.Organization(), authContext.Environment(), uuid)
-	axRecord = axRecord.ensureFields(authContext)
+	axRecord = axRecord.EnsureFields(authContext)
 	axJSON, err := json.Marshal(axRecord)
 	if err != nil {
 		t.Fatal(err)
