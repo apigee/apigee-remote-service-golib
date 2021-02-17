@@ -18,7 +18,6 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -28,9 +27,9 @@ import (
 )
 
 func TestRecoverFile(t *testing.T) {
-	brokeFile, err := ioutil.TempFile("", "")
+	brokeFile, err := os.CreateTemp("", "")
 	if err != nil {
-		t.Fatalf("ioutil.TempFile(): %v", err)
+		t.Fatalf("os.CreateTemp(): %v", err)
 	}
 
 	rec := Record{
@@ -59,9 +58,9 @@ func TestRecoverFile(t *testing.T) {
 
 	// repair
 	m := manager{}
-	fixedFile, err := ioutil.TempFile("", "")
+	fixedFile, err := os.CreateTemp("", "")
 	if err != nil {
-		t.Fatalf("ioutil.TempFile(): %v", err)
+		t.Fatalf("os.CreateTemp(): %v", err)
 	}
 	if err := m.recoverFile(brokeFile.Name(), fixedFile); err != nil {
 		t.Fatalf("error recovering file: %v", err)
@@ -101,9 +100,9 @@ func TestCrashRecovery(t *testing.T) {
 	fs.failUpload = http.StatusInternalServerError
 	defer fs.close()
 
-	d, err := ioutil.TempDir("", "TestCrashRecovery")
+	d, err := os.MkdirTemp("", "TestCrashRecovery")
 	if err != nil {
-		t.Fatalf("ioutil.TempDir(): %s", err)
+		t.Fatalf("os.MkdirTemp(): %s", err)
 	}
 	defer os.RemoveAll(d)
 	baseURL, _ := url.Parse(fs.URL())
@@ -180,7 +179,7 @@ func TestCrashRecovery(t *testing.T) {
 
 	m.Start()
 
-	files, err := ioutil.ReadDir(stagingDir)
+	files, err := os.ReadDir(stagingDir)
 	if err != nil {
 		t.Fatalf("ls %s: %s", stagingDir, err)
 	}

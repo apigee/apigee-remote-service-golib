@@ -15,7 +15,6 @@
 package analytics
 
 import (
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -47,9 +46,9 @@ func TestLegacySelect(t *testing.T) {
 
 func TestStandardSelect(t *testing.T) {
 
-	workDir, err := ioutil.TempDir("", "TestStandardSelect")
+	workDir, err := os.MkdirTemp("", "TestStandardSelect")
 	if err != nil {
-		t.Fatalf("ioutil.TempDir(): %s", err)
+		t.Fatalf("os.MkdirTemp(): %s", err)
 	}
 	defer os.RemoveAll(workDir)
 
@@ -75,9 +74,9 @@ func TestStandardSelect(t *testing.T) {
 
 func TestStandardBadOptions(t *testing.T) {
 
-	workDir, err := ioutil.TempDir("", "TestStandardSelect")
+	workDir, err := os.MkdirTemp("", "TestStandardSelect")
 	if err != nil {
-		t.Fatalf("ioutil.TempDir(): %s", err)
+		t.Fatalf("os.MkdirTemp(): %s", err)
 	}
 	defer os.RemoveAll(workDir)
 

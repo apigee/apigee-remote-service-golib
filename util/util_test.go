@@ -16,7 +16,6 @@ package util
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -75,7 +74,7 @@ func TestTruncate(t *testing.T) {
 }
 
 func TestReadPropertiesFile(t *testing.T) {
-	tf, err := ioutil.TempFile("", "properties")
+	tf, err := os.CreateTemp("", "properties")
 	if err != nil {
 		t.Fatalf("TempFile: %v", err)
 	}

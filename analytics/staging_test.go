@@ -15,7 +15,6 @@
 package analytics
 
 import (
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -35,9 +34,9 @@ func TestStagingSizeCap(t *testing.T) {
 	ts := int64(1521221450) // This timestamp is roughly 11:30 MST on Mar. 16, 2018.
 	now := func() time.Time { return time.Unix(ts, 0) }
 
-	workDir, err := ioutil.TempDir("", "TestStagingSizeCap")
+	workDir, err := os.MkdirTemp("", "TestStagingSizeCap")
 	if err != nil {
-		t.Fatalf("ioutil.TempDir(): %s", err)
+		t.Fatalf("os.MkdirTemp(): %s", err)
 	}
 	defer os.RemoveAll(workDir)
 
@@ -104,7 +103,7 @@ func TestStagingSizeCap(t *testing.T) {
 }
 
 func filesIn(path string) []string {
-	files, err := ioutil.ReadDir(path)
+	files, err := os.ReadDir(path)
 	if err != nil {
 		return nil
 	}

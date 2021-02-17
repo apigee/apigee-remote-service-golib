@@ -16,7 +16,6 @@ package analytics
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -43,7 +42,7 @@ func (m *manager) stageFile(tenant, tempFile string, numRecs int) {
 }
 
 func (m *manager) getFilesInStaging() ([]string, error) {
-	tenantDirs, err := ioutil.ReadDir(m.stagingDir)
+	tenantDirs, err := os.ReadDir(m.stagingDir)
 	if err != nil {
 		return nil, fmt.Errorf("ReadDir(%s): %s", m.tempDir, err)
 	}
@@ -53,7 +52,7 @@ func (m *manager) getFilesInStaging() ([]string, error) {
 	for _, tenantDir := range tenantDirs {
 		tenantDirPath := filepath.Join(m.stagingDir, tenantDir.Name())
 
-		stagedFiles, err := ioutil.ReadDir(tenantDirPath)
+		stagedFiles, err := os.ReadDir(tenantDirPath)
 		if err != nil {
 			errs = multierror.Append(errs, fmt.Errorf("ls %s: %s", tenantDirPath, err))
 			continue

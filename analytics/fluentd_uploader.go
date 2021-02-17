@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"time"
@@ -142,7 +141,7 @@ func loadTLSConfig(opts Options) (*tls.Config, error) {
 
 	if opts.TLSCAFile != "" {
 		// ca cert pool
-		caCert, err := ioutil.ReadFile(opts.TLSCAFile)
+		caCert, err := os.ReadFile(opts.TLSCAFile)
 		if err != nil {
 			return nil, err
 		}
