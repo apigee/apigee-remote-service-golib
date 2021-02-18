@@ -19,7 +19,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -44,9 +43,9 @@ func TestFluentdAnalyticsMTLS(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("port: %d", port)
-	d, err := ioutil.TempDir("", "TestFluentdAnalyticsMTLS")
+	d, err := os.MkdirTemp("", "TestFluentdAnalyticsMTLS")
 	if err != nil {
-		t.Fatalf("ioutil.TempDir: %s", err)
+		t.Fatalf("os.MkdirTemp: %s", err)
 	}
 	defer os.RemoveAll(d)
 
@@ -107,9 +106,9 @@ func TestFluentdAnalyticsTLSSkipVerify(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("port: %d", port)
-	d, err := ioutil.TempDir("", "TestFluentdAnalyticsTLSSkipVerify")
+	d, err := os.MkdirTemp("", "TestFluentdAnalyticsTLSSkipVerify")
 	if err != nil {
-		t.Fatalf("ioutil.TempDir: %s", err)
+		t.Fatalf("os.MkdirTemp: %s", err)
 	}
 	defer os.RemoveAll(d)
 
@@ -167,9 +166,9 @@ func TestFluentdAnalyticsNoTLS(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("port: %d", port)
-	d, err := ioutil.TempDir("", "TestFluentdAnalyticsNoTLS")
+	d, err := os.MkdirTemp("", "TestFluentdAnalyticsNoTLS")
 	if err != nil {
-		t.Fatalf("ioutil.TempDir: %s", err)
+		t.Fatalf("os.MkdirTemp: %s", err)
 	}
 	defer os.RemoveAll(d)
 
