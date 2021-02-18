@@ -15,7 +15,6 @@
 package analytics
 
 import (
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -29,9 +28,9 @@ import (
 
 func TestBucket(t *testing.T) {
 
-	testDir, err := ioutil.TempDir("", "TestBucket")
+	testDir, err := os.MkdirTemp("", "TestBucket")
 	if err != nil {
-		t.Fatalf("ioutil.TempDir(): %s", err)
+		t.Fatalf("os.MkdirTemp(): %s", err)
 	}
 	defer os.RemoveAll(testDir)
 
@@ -85,7 +84,7 @@ func TestBucket(t *testing.T) {
 	b.close(wait)
 	wait.Wait()
 
-	files, err := ioutil.ReadDir(tempDir)
+	files, err := os.ReadDir(tempDir)
 	if err != nil {
 		t.Errorf("unexpected error %v", err)
 	}
@@ -93,7 +92,7 @@ func TestBucket(t *testing.T) {
 		t.Errorf("got %d files, expected %d files: %v", len(files), 0, files)
 	}
 
-	files, err = ioutil.ReadDir(stageDir)
+	files, err = os.ReadDir(stageDir)
 	if err != nil {
 		t.Errorf("unexpected error %v", err)
 	}

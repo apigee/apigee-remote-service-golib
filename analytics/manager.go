@@ -302,7 +302,7 @@ func (m *manager) SendRecords(ctx *auth.Context, incoming []Record) error {
 	promLabels := prometheus.Labels{"org": ctx.Organization(), "env": ctx.Environment()}
 	localRecCount := prometheusRecordsCount.MustCurryWith(promLabels)
 	for _, record := range incoming {
-		record := record.ensureFields(ctx)
+		record := record.EnsureFields(ctx)
 		if err := record.validate(now); err != nil {
 			log.Errorf("invalid record %v: %s", record, err)
 			localRecCount.WithLabelValues("error").Inc()

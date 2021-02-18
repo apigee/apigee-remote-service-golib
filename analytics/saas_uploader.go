@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -97,7 +96,7 @@ func (s *saasUploader) upload(tenant, fileName string) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		data, _ := ioutil.ReadAll(resp.Body) // get the response for debug purpose
+		data, _ := io.ReadAll(resp.Body) // get the response for debug purpose
 		return fmt.Errorf("upload %s returned %s %s", fileName, resp.Status, string(data))
 	}
 

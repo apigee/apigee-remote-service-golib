@@ -90,7 +90,7 @@ func buildRequest(authContext *auth.Context, incoming []Record) (*legacyRequest,
 
 	records := make([]Record, 0, len(incoming))
 	for _, record := range incoming {
-		records = append(records, record.ensureFields(authContext))
+		records = append(records, record.EnsureFields(authContext))
 	}
 
 	return &legacyRequest{

@@ -18,7 +18,6 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"sync"
 
@@ -42,7 +41,7 @@ func newBucket(m *manager, up uploader, tenant, dir string) (*bucket, error) {
 		tempFileSpec = fmt.Sprintf("%d-*.txt", b.manager.now().Unix())
 	}
 
-	f, err := ioutil.TempFile(b.dir, tempFileSpec)
+	f, err := os.CreateTemp(b.dir, tempFileSpec)
 	if err != nil {
 		log.Errorf("AX Records lost. Can't create bucket file: %s", err)
 		return nil, err

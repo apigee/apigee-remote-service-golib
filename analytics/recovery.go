@@ -19,7 +19,6 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -30,7 +29,7 @@ import (
 // crashRecovery cleans up the temp and staging dirs post-crash. This function
 // assumes that the temp dir exists and is accessible.
 func (m *manager) crashRecovery() error {
-	dirs, err := ioutil.ReadDir(m.tempDir)
+	dirs, err := os.ReadDir(m.tempDir)
 	if err != nil {
 		return err
 	}
@@ -38,7 +37,7 @@ func (m *manager) crashRecovery() error {
 	for _, d := range dirs {
 		tenant := d.Name()
 		tempDir := m.getTempDir(tenant)
-		tempFiles, err := ioutil.ReadDir(tempDir)
+		tempFiles, err := os.ReadDir(tempDir)
 		if err != nil {
 			errs = multierror.Append(errs, err)
 			continue

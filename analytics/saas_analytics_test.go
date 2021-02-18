@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -186,9 +185,9 @@ func TestPushAnalytics(t *testing.T) {
 	ts := int64(1521221450) // This timestamp is roughly 11:30 MST on Mar. 16, 2018.
 	now := func() time.Time { return time.Unix(ts, 0) }
 
-	testDir, err := ioutil.TempDir("", "TestPushAnalytics")
+	testDir, err := os.MkdirTemp("", "TestPushAnalytics")
 	if err != nil {
-		t.Fatalf("ioutil.TempDir(): %s", err)
+		t.Fatalf("os.MkdirTemp(): %s", err)
 	}
 	defer os.RemoveAll(testDir)
 
@@ -337,9 +336,9 @@ func TestPushAnalytics(t *testing.T) {
 		m.getStagingDir(t1),
 		m.getStagingDir(t2),
 	} {
-		files, err := ioutil.ReadDir(p)
+		files, err := os.ReadDir(p)
 		if err != nil {
-			t.Errorf("ioutil.ReadDir(%s): %s", p, err)
+			t.Errorf("os.ReadDir(%s): %s", p, err)
 		} else if len(files) > 0 {
 			t.Errorf("got %d records on disk, want 0", len(files))
 			for _, f := range files {
@@ -358,9 +357,9 @@ func TestPushAnalyticsMultipleRecords(t *testing.T) {
 	ts := int64(1521221450) // This timestamp is roughly 11:30 MST on Mar. 16, 2018.
 	now := func() time.Time { return time.Unix(ts, 0) }
 
-	testDir, err := ioutil.TempDir("", "TestPushAnalyticsMultipleRecords")
+	testDir, err := os.MkdirTemp("", "TestPushAnalyticsMultipleRecords")
 	if err != nil {
-		t.Fatalf("ioutil.TempDir(): %s", err)
+		t.Fatalf("os.MkdirTemp(): %s", err)
 	}
 	defer os.RemoveAll(testDir)
 
@@ -483,9 +482,9 @@ func TestPushAnalyticsMultipleRecords(t *testing.T) {
 		m.getTempDir(t1),
 		m.getStagingDir(t1),
 	} {
-		files, err := ioutil.ReadDir(p)
+		files, err := os.ReadDir(p)
 		if err != nil {
-			t.Errorf("ioutil.ReadDir(%s): %s", p, err)
+			t.Errorf("os.ReadDir(%s): %s", p, err)
 		} else if len(files) > 0 {
 			t.Errorf("got %d records on disk, want 0", len(files))
 			for _, f := range files {
@@ -505,9 +504,9 @@ func TestLoad(t *testing.T) {
 	ts := int64(1521221450) // This timestamp is roughly 11:30 MST on Mar. 16, 2018.
 	now := func() time.Time { return time.Unix(ts, 0) }
 
-	testDir, err := ioutil.TempDir("", "TestLoad")
+	testDir, err := os.MkdirTemp("", "TestLoad")
 	if err != nil {
-		t.Fatalf("ioutil.TempDir(): %s", err)
+		t.Fatalf("os.MkdirTemp(): %s", err)
 	}
 	defer os.RemoveAll(testDir)
 
@@ -589,9 +588,9 @@ func TestLoad(t *testing.T) {
 		m.getTempDir(t1),
 		m.getStagingDir(t1),
 	} {
-		files, err := ioutil.ReadDir(p)
+		files, err := os.ReadDir(p)
 		if err != nil {
-			t.Errorf("ioutil.ReadDir(%s): %s", p, err)
+			t.Errorf("os.ReadDir(%s): %s", p, err)
 		} else if len(files) > 0 {
 			t.Errorf("got %d records on disk, want 0", len(files))
 			for _, f := range files {
@@ -622,9 +621,9 @@ func TestUploadFailure(t *testing.T) {
 
 	ts := int64(1521221450) // This timestamp is roughly 11:30 MST on Mar. 16, 2018.
 
-	d, err := ioutil.TempDir("", "TestUploadFailure")
+	d, err := os.MkdirTemp("", "TestUploadFailure")
 	if err != nil {
-		t.Fatalf("ioutil.TempDir(): %s", err)
+		t.Fatalf("os.MkdirTemp(): %s", err)
 	}
 	defer os.RemoveAll(d)
 
@@ -713,9 +712,9 @@ func TestUploadFailure(t *testing.T) {
 		m.getTempDir(t1):    0,
 		m.getStagingDir(t1): 1,
 	} {
-		files, err := ioutil.ReadDir(p)
+		files, err := os.ReadDir(p)
 		if err != nil {
-			t.Errorf("ioutil.ReadDir(%s): %s", p, err)
+			t.Errorf("os.ReadDir(%s): %s", p, err)
 		} else if len(files) != wantCount {
 			t.Errorf("got %d records on disk, want %d", len(files), wantCount)
 		}
