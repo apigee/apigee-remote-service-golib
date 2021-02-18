@@ -54,20 +54,11 @@ func NewManager(opts Options) (Manager, error) {
 		return nil, err
 	}
 
-	var uploader uploader
-	if opts.FluentdEndpoint != "" && !opts.isGCPManaged() {
-		var err error
-		uploader, err = newFluentdUploader(opts)
-		if err != nil {
-			return nil, err
-		}
-	} else { // CG SaaS or GCP-managed URL is given
-		uploader = &saasUploader{
-			client:       opts.Client,
-			baseURL:      opts.BaseURL,
-			now:          opts.now,
-			isGCPManaged: opts.isGCPManaged(),
-		}
+	uploader := &saasUploader{
+		client:       opts.Client,
+		baseURL:      opts.BaseURL,
+		now:          opts.now,
+		isGCPManaged: opts.isGCPManaged(),
 	}
 
 	mgr, err := newManager(uploader, opts)
@@ -142,16 +133,6 @@ type Options struct {
 	CollectionInterval time.Duration
 	// now is for testing
 	now func() time.Time
-	// Fluentd endpoint
-	FluentdEndpoint string
-	// TLSCAFile is fluentd mtls ca file
-	TLSCAFile string
-	// TLSKeyFile is fluentd mtls key file
-	TLSKeyFile string
-	// TLSCertFile is fluentd mtls cert file
-	TLSCertFile string
-	// TLSSkipVerify skips cert verify for fluentd
-	TLSSkipVerify bool
 }
 
 // validate checks if there is missing options
