@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -75,7 +76,7 @@ func TestRecoverFile(t *testing.T) {
 		t.Fatalf("want 1, got %d: %v", len(recs), recs)
 	}
 	got := recs[0]
-	if got != rec {
+	if !reflect.DeepEqual(got, rec) {
 		t.Errorf("file %s: got %v, want %v", brokeFile.Name(), got, rec)
 	}
 }
@@ -198,7 +199,7 @@ func TestCrashRecovery(t *testing.T) {
 		if len(recs) != 1 {
 			t.Errorf("file %s: want 1 rec, got: %v", fi.Name(), recs)
 		}
-		if recs[0] != rec {
+		if !reflect.DeepEqual(recs[0], rec) {
 			t.Errorf("file %s: want %v, got %v", fi.Name(), rec, recs[0])
 		}
 	}
