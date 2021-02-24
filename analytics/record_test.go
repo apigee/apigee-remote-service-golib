@@ -128,6 +128,7 @@ func TestValidationFailure(t *testing.T) {
 }
 
 func TestEncode(t *testing.T) {
+	now := time.Now()
 	for _, test := range []struct {
 		desc string
 		in   interface{}
@@ -141,6 +142,7 @@ func TestEncode(t *testing.T) {
 		{"string", "test", "test"},
 		{"struct", struct{}{}, nil},
 		{"array", []string{"nope"}, nil},
+		{"time", now, float64(timeToApigeeInt(now))},
 	} {
 		record := Record{
 			Attributes: []Attribute{
