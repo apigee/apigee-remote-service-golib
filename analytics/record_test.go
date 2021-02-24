@@ -96,6 +96,16 @@ func TestValidationFailure(t *testing.T) {
 			ClientReceivedStartTimestamp: ts * 1000,
 			ClientReceivedEndTimestamp:   ts * 1000,
 		}, "missing GatewayFlowID"},
+		{"bad attribute", Record{
+			Organization:                 "hi",
+			Environment:                  "test",
+			ClientReceivedStartTimestamp: ts * 1000,
+			ClientReceivedEndTimestamp:   ts * 1000,
+			GatewayFlowID:                "x",
+			Attributes: []Attribute{
+				{Name: "bad", Value: struct{}{}},
+			},
+		}, "attribute bad is invalid type: struct"},
 	} {
 		t.Log(test.desc)
 
@@ -118,6 +128,42 @@ func TestValidationFailure(t *testing.T) {
 }
 
 func TestEncode(t *testing.T) {
+	for _, test := range []struct {
+		desc string
+		in   interface{}
+		want interface{}
+	}{
+		{"int", int(42), float64(42)},
+		{"uint", uint(42), float64(42)},
+		{"float", float32(3.14), float64(3.14)},
+		{"false", false, false},
+		{"true", true, true},
+		{"string", "test", "test"},
+		{"struct", struct{}{}, nil},
+		{"array", []string{"nope"}, nil},
+	} {
+		record := Record{
+			Attributes: []Attribute{
+				{Name: "test", Value: test.in},
+			},
+		}
+
+		var gotBuffer bytes.Buffer
+		enc := json.NewEncoder(&gotBuffer)
+		if err := enc.Encode(record); err != nil {
+			t.Fatal(err)
+		}
+		var gotMap map[string]interface{}
+		if err := json.Unmarshal(gotBuffer.Bytes(), &gotMap); err != nil {
+			t.Fatal(err)
+		}
+		if test.want != gotMap["dc.test"] {
+			t.Errorf("%s:: want: %d, got: %d", test.desc, test.want, gotMap["dc.test"])
+		}
+	}
+}
+
+func TestEncodeLimits(t *testing.T) {
 	maxLenValue := "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin erat lacus, molestie at lorem non, sodales vehicula eros. " +
 		"Ut vel ligula id purus vehicula condimentum non vitae nibh. Sed bibendum mauris non turpis dapibus, et gravida odio tristique. " +
 		"Proin tempor condimentum lectus. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc ac arcu sem. Vestibulum ut mauris in tellus imperdiet mi."
@@ -198,8 +244,9 @@ func TestTruncStringToBytes(t *testing.T) {
 		{"limit 6", "a日bc", 6, "a日bc"},
 		{"limit 7", "a日bc", 7, "a日bc"},
 	} {
-		if truncStringToBytes(test.in, test.limit) != test.want {
-			t.Errorf("%s:: want: %s, got: %s", test.desc, test.want, truncStringToBytes(test.in, test.limit))
+		got, _ := truncStringToBytes(test.in, test.limit)
+		if got != test.want {
+			t.Errorf("%s:: want: %s, got: %s", test.desc, test.want, got)
 		}
 	}
 }
