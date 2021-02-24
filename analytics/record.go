@@ -17,6 +17,8 @@ package analytics
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"reflect"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -38,11 +40,12 @@ const (
 // Value will be limited to 400 bytes, truncated on rune boundary.
 type Attribute struct {
 	Name  string
-	Value string
+	Value interface{}
 }
 
 // A Record is a single event that is tracked via Apigee analytics.
 // A limit of 100 Attributes will be transmitted.
+// Attributes values may be boolean, number, or string.
 type Record struct {
 	ClientReceivedStartTimestamp int64       `json:"client_received_start_timestamp"`
 	ClientReceivedEndTimestamp   int64       `json:"client_received_end_timestamp"`
@@ -125,6 +128,13 @@ func (r Record) validate(now time.Time) error {
 	if ts.Before(now.Add(-90 * 24 * time.Hour)) {
 		err = multierror.Append(err, errors.New("ClientReceivedStartTimestamp cannot be more than 90 days old"))
 	}
+
+	for _, attr := range r.Attributes {
+		if validateErr := validateAttribute(attr); validateErr != nil {
+			err = multierror.Append(err, validateErr)
+		}
+	}
+
 	return err
 }
 
@@ -144,28 +154,75 @@ func (r Record) MarshalJSON() ([]byte, error) {
 	}
 	for _, attr := range attrs {
 		key := attr.Name
-		if !strings.HasPrefix(key, attributePrefix) {
-			key = attributePrefix + attr.Name
+		val := attr.Value
+
+		if err := validateAttribute(attr); err != nil {
+			log.Debugf(err.Error())
+			continue
 		}
-		val := truncStringToBytes(attr.Value, maxAttributeValueBytes)
-		m[key] = val
-		if len(val) != len(attr.Value) {
+
+		// ensure prefix
+		if !strings.HasPrefix(key, attributePrefix) {
+			key = attributePrefix + key
+		}
+
+		// format time as int (ms since epoch)
+		if t, ok := val.(time.Time); ok {
+			val = timeToApigeeInt(t)
+		}
+
+		// truncate, if necessary
+		val, truncated := truncStringToBytes(val, maxAttributeValueBytes)
+		if truncated {
 			log.Debugf("truncated attribute %s to max length of %d", key, maxAttributeValueBytes)
 		}
+		m[key] = val
 	}
-	return json.Marshal(m)
+	b, e := json.Marshal(m)
+	if e != nil {
+		log.Debugf("ax json err: %s", e)
+	} else {
+		log.Debugf("ax record: %s", string(b))
+	}
+	return b, e
 }
 
-// truncates the passed string to the limit number of bytes
-func truncStringToBytes(in string, limit int) string {
-	if len(in) > limit {
-		for start, rune := range in {
-			if start+utf8.RuneLen(rune) > limit {
-				return in[:start]
+// format time as ms since epoch
+func timeToApigeeInt(t time.Time) int64 {
+	return t.UnixNano() / (int64(time.Millisecond) / int64(time.Nanosecond))
+}
+
+// only accept bool, number, string, or time
+func validateAttribute(attr Attribute) error {
+	switch k := reflect.TypeOf(attr.Value).Kind(); k {
+	case
+		reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64,
+		reflect.String:
+		return nil
+	default:
+		// also allow time
+		if _, ok := attr.Value.(time.Time); ok {
+			return nil
+		}
+		return fmt.Errorf("attribute %s is invalid type: %s", attr.Name, k.String())
+	}
+}
+
+// truncates in to the limit number of bytes if a string, returns true if truncated
+func truncStringToBytes(in interface{}, limit int) (interface{}, bool) {
+	if val, ok := in.(string); ok {
+		if len(val) > limit {
+			for start, rune := range val {
+				if start+utf8.RuneLen(rune) > limit {
+					return val[:start], true
+				}
 			}
 		}
 	}
-	return in
+	return in, false
 }
 
 func structToMap(data interface{}) (map[string]interface{}, error) {
