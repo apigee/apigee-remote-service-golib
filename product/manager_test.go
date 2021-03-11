@@ -126,24 +126,24 @@ func TestManager(t *testing.T) {
 
 	for _, want := range apiProducts {
 		got := pm.Products()[want.Name]
-		if len(want.Attributes) > 0 && want.Attributes[0].Value != got.Targets[0] {
-			t.Errorf("targets not created: %v", got)
+		if len(want.Attributes) > 0 && want.Attributes[0].Value != got.APIs[0] {
+			t.Errorf("apis not created: %v", got)
 		}
 		if got.Name != want.Name {
 			t.Errorf("got: %s, want %v", got.Name, want.Name)
 		}
 
-		targets := got.GetBoundTargets()
-		if len(targets) != 1 {
-			t.Errorf("num targets want: %d, got: %d", len(targets), 1)
+		apis := got.GetBoundAPIs()
+		if len(apis) != 1 {
+			t.Errorf("num apis want: %d, got: %d", len(apis), 1)
 		}
 		if len(want.Attributes) > 0 {
-			if targets[0] != want.Attributes[0].Value {
-				t.Errorf("got target: %s want: %s", targets[0], want.Attributes[0].Value)
+			if apis[0] != want.Attributes[0].Value {
+				t.Errorf("got api: %s want: %s", apis[0], want.Attributes[0].Value)
 			}
 		} else {
-			if targets[0] != want.OperationGroup.OperationConfigs[0].APISource {
-				t.Errorf("got target: %s want: %s", targets[0], want.OperationGroup.OperationConfigs[0].APISource)
+			if apis[0] != want.OperationGroup.OperationConfigs[0].APISource {
+				t.Errorf("got api: %s want: %s", apis[0], want.OperationGroup.OperationConfigs[0].APISource)
 			}
 		}
 	}
@@ -163,7 +163,7 @@ func TestManagerPolling(t *testing.T) {
 		apiProducts = append(apiProducts, APIProduct{
 			Name: fmt.Sprintf("Name %d", count),
 			Attributes: []Attribute{
-				{Name: TargetsAttr, Value: "target"},
+				{Name: TargetsAttr, Value: "api"},
 			},
 			Environments: []string{"env"},
 			Resources:    []string{"/"},
@@ -207,9 +207,9 @@ func TestManagerPolling(t *testing.T) {
 		Context:     &fakeContext{org: "org", env: "env"},
 		APIProducts: []string{"Name 1"},
 	}
-	targets := pp.Authorize(authContext, "target", "/", "GET")
-	if len(targets) != 1 {
-		t.Errorf("want: 1, got: %v", len(targets))
+	apis := pp.Authorize(authContext, "api", "/", "GET")
+	if len(apis) != 1 {
+		t.Errorf("want: 1, got: %v", len(apis))
 	}
 
 	pp.Close()
@@ -220,7 +220,7 @@ func TestManagerHandlingEtag(t *testing.T) {
 	apiProducts := []APIProduct{
 		{
 			Attributes: []Attribute{
-				{Name: TargetsAttr, Value: "target"},
+				{Name: TargetsAttr, Value: "api"},
 			},
 			Environments: []string{"env"},
 			Name:         "Name 1",
@@ -266,9 +266,9 @@ func TestManagerHandlingEtag(t *testing.T) {
 		Context:     &fakeContext{org: "org", env: "env"},
 		APIProducts: []string{"Name 1"},
 	}
-	targets := pp.Authorize(authContext, "target", "/", "GET")
-	if len(targets) != 1 {
-		t.Errorf("want: 1, got: %v", len(targets))
+	apis := pp.Authorize(authContext, "api", "/", "GET")
+	if len(apis) != 1 {
+		t.Errorf("want: 1, got: %v", len(apis))
 	}
 
 	pp.Close()

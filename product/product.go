@@ -47,7 +47,7 @@ type APIProduct struct {
 	QuotaTimeUnit    string          `json:"quotaTimeUnit,omitempty"`
 	Resources        []string        `json:"apiResources"`
 	Scopes           []string        `json:"scopes"`
-	Targets          []string
+	APIs             []string
 	EnvironmentMap   map[string]struct{}
 	QuotaLimitInt    int64
 	QuotaIntervalInt int64
@@ -119,10 +119,10 @@ func (oc *OperationConfig) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (oc *OperationConfig) isValidOperation(target, path, method string, hints bool) (valid bool, hint string) {
-	if oc.APISource != target {
+func (oc *OperationConfig) isValidOperation(api, path, method string, hints bool) (valid bool, hint string) {
+	if oc.APISource != api {
 		if hints {
-			hint = fmt.Sprintf("no target: %s", target)
+			hint = fmt.Sprintf("no api: %s", api)
 		}
 		return
 	}
@@ -200,9 +200,9 @@ func (q *Quota) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// GetBoundTargets returns an array of target names bound to this product
-func (p *APIProduct) GetBoundTargets() []string {
-	return p.Targets
+// GetBoundAPIs returns an array of api names bound to this product
+func (p *APIProduct) GetBoundAPIs() []string {
+	return p.APIs
 }
 
 func (p *APIProduct) UnmarshalJSON(data []byte) error {
@@ -221,21 +221,21 @@ func (p *APIProduct) UnmarshalJSON(data []byte) error {
 	}
 
 	// parse TargetsAttr, if exists
-	p.Targets = []string{}
+	p.APIs = []string{}
 	for _, attr := range p.Attributes {
 		if attr.Name == TargetsAttr {
-			targets := strings.Split(attr.Value, ",")
-			for _, t := range targets {
-				p.Targets = append(p.Targets, strings.TrimSpace(t))
+			apis := strings.Split(attr.Value, ",")
+			for _, t := range apis {
+				p.APIs = append(p.APIs, strings.TrimSpace(t))
 			}
 			break
 		}
 	}
 
-	// add Targets from Operations
+	// add APIs from Operations
 	if p.OperationGroup != nil {
 		for _, oc := range p.OperationGroup.OperationConfigs {
-			p.Targets = append(p.Targets, oc.APISource)
+			p.APIs = append(p.APIs, oc.APISource)
 		}
 	}
 
@@ -286,7 +286,7 @@ func (p *APIProduct) UnmarshalJSON(data []byte) error {
 
 // if OperationGroup, all matching OperationConfigs
 // if no OperationGroup, the API Product if it matches
-func (p *APIProduct) authorize(authContext *auth.Context, target, path, method string, hints bool) (authorizedOps []AuthorizedOperation, hint string) {
+func (p *APIProduct) authorize(authContext *auth.Context, api, path, method string, hints bool) (authorizedOps []AuthorizedOperation, hint string) {
 	env := authContext.Environment()
 	if _, ok := p.EnvironmentMap[env]; !ok { // the product is not authorized in context environment
 		if hints {
@@ -303,7 +303,7 @@ func (p *APIProduct) authorize(authContext *auth.Context, target, path, method s
 		return
 	}
 
-	// if OperationGroup is present, OperationConfigs override APIProduct target
+	// if OperationGroup is present, OperationConfigs override APIProduct api
 	if p.OperationGroup != nil {
 		var hintsBuilder strings.Builder
 		if hints {
@@ -311,9 +311,10 @@ func (p *APIProduct) authorize(authContext *auth.Context, target, path, method s
 		}
 		for i, oc := range p.OperationGroup.OperationConfigs {
 			var valid bool
-			valid, hint = oc.isValidOperation(target, path, method, hints)
+			valid, hint = oc.isValidOperation(api, path, method, hints)
 			if valid {
-				target := AuthorizedOperation{
+				// api is already defined outside this block as a string so ao is used here to avoid confusion
+				ao := AuthorizedOperation{
 					ID:            fmt.Sprintf("%s-%s-%s-%s", p.Name, env, authContext.Application, oc.ID),
 					QuotaLimit:    p.QuotaLimitInt,
 					QuotaInterval: p.QuotaIntervalInt,
@@ -321,11 +322,11 @@ func (p *APIProduct) authorize(authContext *auth.Context, target, path, method s
 				}
 				// OperationConfig quota is an override
 				if oc.Quota != nil && oc.Quota.LimitInt > 0 {
-					target.QuotaLimit = oc.Quota.LimitInt
-					target.QuotaInterval = oc.Quota.IntervalInt
-					target.QuotaTimeUnit = oc.Quota.TimeUnit
+					ao.QuotaLimit = oc.Quota.LimitInt
+					ao.QuotaInterval = oc.Quota.IntervalInt
+					ao.QuotaTimeUnit = oc.Quota.TimeUnit
 				}
-				authorizedOps = append(authorizedOps, target)
+				authorizedOps = append(authorizedOps, ao)
 				if hints {
 					hintsBuilder.WriteString(fmt.Sprintf("      %d: authorized\n", i))
 				}
@@ -342,7 +343,7 @@ func (p *APIProduct) authorize(authContext *auth.Context, target, path, method s
 
 	// no OperationGroup
 	var valid bool
-	valid, hint = p.isValidOperation(target, path, hints)
+	valid, hint = p.isValidOperation(api, path, hints)
 	if !valid {
 		return
 	}
@@ -358,10 +359,10 @@ func (p *APIProduct) authorize(authContext *auth.Context, target, path, method s
 	return
 }
 
-// true if valid target for API Product
-func (p *APIProduct) isValidOperation(target, path string, hints bool) (valid bool, hint string) {
-	for _, t := range p.Targets {
-		if t == target {
+// true if valid api for API Product
+func (p *APIProduct) isValidOperation(api, path string, hints bool) (valid bool, hint string) {
+	for _, v := range p.APIs {
+		if v == api {
 			for _, reg := range p.resourceRegexps {
 				if reg.MatchString(path) {
 					valid = true
@@ -375,7 +376,7 @@ func (p *APIProduct) isValidOperation(target, path string, hints bool) (valid bo
 		}
 	}
 	if hints {
-		hint = fmt.Sprintf("    no targets: %s\n", target)
+		hint = fmt.Sprintf("    no apis: %s\n", api)
 	}
 	return
 }

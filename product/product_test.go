@@ -45,7 +45,7 @@ func TestAuthorize(t *testing.T) {
 			Name:         "Name 1",
 			Resources:    []string{"/"},
 			Scopes:       []string{"scope1"},
-			Targets:      []string{"service1.test", "shared.test"},
+			APIs:         []string{"service1.test", "shared.test"},
 		},
 		"Name 2": {
 			Attributes: []Attribute{
@@ -55,7 +55,7 @@ func TestAuthorize(t *testing.T) {
 			Name:         "Name 2",
 			Resources:    []string{"/**"},
 			Scopes:       []string{"scope2"},
-			Targets:      []string{"service2.test", "shared.test"},
+			APIs:         []string{"service2.test", "shared.test"},
 		},
 		"Name 3": {
 			Attributes: []Attribute{
@@ -65,7 +65,7 @@ func TestAuthorize(t *testing.T) {
 			Name:         "Name 3",
 			Resources:    []string{"/name3"},
 			Scopes:       []string{},
-			Targets:      []string{"shared.test"},
+			APIs:         []string{"shared.test"},
 		},
 	}
 
@@ -80,14 +80,14 @@ func TestAuthorize(t *testing.T) {
 	}
 
 	testCases := []struct {
-		ctx            *auth.Context
-		productsMap    map[string]*APIProduct
-		target         string
-		path           string
-		method         string
-		wantTargetsLen int
-		wantHints      string
-		wantAuthOp     *AuthorizedOperation
+		ctx         *auth.Context
+		productsMap map[string]*APIProduct
+		api         string
+		path        string
+		method      string
+		wantAPIsLen int
+		wantHints   string
+		wantAuthOp  *AuthorizedOperation
 	}{
 		{ // good
 			ctx: &auth.Context{
@@ -96,17 +96,17 @@ func TestAuthorize(t *testing.T) {
 				Scopes:      []string{"scope1", "scope2"},
 				Application: "app",
 			},
-			productsMap:    productsMap,
-			target:         "shared.test",
-			path:           "/name3",
-			method:         "GET",
-			wantTargetsLen: 3,
+			productsMap: productsMap,
+			api:         "shared.test",
+			path:        "/name3",
+			method:      "GET",
+			wantAPIsLen: 3,
 			wantHints: `Authorizing request:
 			environment: prod
 			products: [Name 1 Name 2 Name 3 Invalid]
 			scopes: [scope1 scope2]
 			operation: GET /name3
-			target: shared.test
+			api: shared.test
 			- product: Name 1
 				authorized
 			- product: Name 2
@@ -124,17 +124,17 @@ func TestAuthorize(t *testing.T) {
 				Scopes:      []string{"scope1", "scope2"},
 				Application: "app",
 			},
-			productsMap:    productsMap,
-			target:         "shared.test",
-			path:           "/path",
-			method:         "GET",
-			wantTargetsLen: 2,
+			productsMap: productsMap,
+			api:         "shared.test",
+			path:        "/path",
+			method:      "GET",
+			wantAPIsLen: 2,
 			wantHints: `Authorizing request:
 			environment: prod
 			products: [Name 1 Name 2 Name 3 Invalid]
 			scopes: [scope1 scope2]
 			operation: GET /path
-			target: shared.test
+			api: shared.test
 			- product: Name 1
 				authorized
 			- product: Name 2
@@ -145,30 +145,30 @@ func TestAuthorize(t *testing.T) {
 				not found
 				`,
 		},
-		{ // bad target
+		{ // bad api
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "prod"},
 				APIProducts: []string{"Name 1", "Name 2", "Name 3", "Invalid"},
 				Scopes:      []string{"scope1", "scope2"},
 				Application: "app",
 			},
-			productsMap:    productsMap,
-			target:         "target",
-			path:           "/path",
-			method:         "GET",
-			wantTargetsLen: 0,
+			productsMap: productsMap,
+			api:         "api",
+			path:        "/path",
+			method:      "GET",
+			wantAPIsLen: 0,
 			wantHints: `Authorizing request:
 			environment: prod
 			products: [Name 1 Name 2 Name 3 Invalid]
 			scopes: [scope1 scope2]
 			operation: GET /path
-			target: target
+			api: api
 			- product: Name 1
-				no targets: target
+				no apis: api
 			- product: Name 2
-				no targets: target
+				no apis: api
 			- product: Name 3
-				no targets: target
+				no apis: api
 			- product: Invalid
 				not found
 				`,
@@ -180,11 +180,11 @@ func TestAuthorize(t *testing.T) {
 				Scopes:      []string{"scope2"},
 				Application: "app",
 			},
-			productsMap:    productsMap,
-			target:         "shared.test",
-			path:           "/name3",
-			method:         "GET",
-			wantTargetsLen: 2,
+			productsMap: productsMap,
+			api:         "shared.test",
+			path:        "/name3",
+			method:      "GET",
+			wantAPIsLen: 2,
 			wantAuthOp: &AuthorizedOperation{
 				ID:         "Name 2-prod-app",
 				QuotaLimit: productsMap["Name 2"].QuotaLimitInt,
@@ -194,7 +194,7 @@ func TestAuthorize(t *testing.T) {
 			products: [Name 1 Name 2 Name 3 Invalid]
 			scopes: [scope2]
 			operation: GET /name3
-			target: shared.test
+			api: shared.test
 			- product: Name 1
 				incorrect scopes: [scope1]
 			- product: Name 2
@@ -212,17 +212,17 @@ func TestAuthorize(t *testing.T) {
 				Scopes:      []string{"scope2"},
 				Application: "app",
 			},
-			productsMap:    productsMap,
-			target:         "shared.test",
-			path:           "/name3",
-			method:         "GET",
-			wantTargetsLen: 0,
+			productsMap: productsMap,
+			api:         "shared.test",
+			path:        "/name3",
+			method:      "GET",
+			wantAPIsLen: 0,
 			wantHints: `Authorizing request:
 			environment: prod
 			products: [Name 1]
 			scopes: [scope2]
 			operation: GET /name3
-			target: shared.test
+			api: shared.test
 			- product: Name 1
 				incorrect scopes: [scope1]
 			`,
@@ -235,11 +235,11 @@ func TestAuthorize(t *testing.T) {
 				Application: "app",
 				APIKey:      "x",
 			},
-			productsMap:    productsMap,
-			target:         "shared.test",
-			path:           "/name3",
-			method:         "GET",
-			wantTargetsLen: 3,
+			productsMap: productsMap,
+			api:         "shared.test",
+			path:        "/name3",
+			method:      "GET",
+			wantAPIsLen: 3,
 			wantAuthOp: &AuthorizedOperation{
 				ID:         "Name 1-prod-app",
 				QuotaLimit: productsMap["Name 1"].QuotaLimitInt,
@@ -249,7 +249,7 @@ func TestAuthorize(t *testing.T) {
 			products: [Name 1 Name 2 Name 3]
 			scopes: []
 			operation: GET /name3
-			target: shared.test
+			api: shared.test
 			- product: Name 1
 					authorized
 			- product: Name 2
@@ -266,17 +266,17 @@ func TestAuthorize(t *testing.T) {
 				Application: "app",
 				APIKey:      "x",
 			},
-			productsMap:    productsMap,
-			target:         "shared.test",
-			path:           "/name3",
-			method:         "GET",
-			wantTargetsLen: 3,
+			productsMap: productsMap,
+			api:         "shared.test",
+			path:        "/name3",
+			method:      "GET",
+			wantAPIsLen: 3,
 			wantHints: `Authorizing request:
 			environment: prod
 			products: [Name 1 Name 2 Name 3]
 			scopes: []
 			operation: GET /name3
-			target: shared.test
+			api: shared.test
 			- product: Name 1
 					authorized
 			- product: Name 2
@@ -293,17 +293,17 @@ func TestAuthorize(t *testing.T) {
 				Application: "app",
 				APIKey:      "x",
 			},
-			productsMap:    productsMap,
-			target:         "shared.test",
-			path:           "/name3",
-			method:         "GET",
-			wantTargetsLen: 0,
+			productsMap: productsMap,
+			api:         "shared.test",
+			path:        "/name3",
+			method:      "GET",
+			wantAPIsLen: 0,
 			wantHints: `Authorizing request:
 			environment: test
 			products: [Name 1 Name 2 Name 3]
 			scopes: []
 			operation: GET /name3
-			target: shared.test
+			api: shared.test
 			- product: Name 1
 			  incorrect environments: []string{"prod"}
 			- product: Name 2
@@ -315,11 +315,11 @@ func TestAuthorize(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		targets, hints := authorize(tc.ctx, tc.productsMap, tc.target, tc.path, tc.method, true)
-		if len(targets) != tc.wantTargetsLen {
-			t.Errorf("test %d: number of targets wrong; want: %d, got: %d", i, tc.wantTargetsLen, len(targets))
+		apis, hints := authorize(tc.ctx, tc.productsMap, tc.api, tc.path, tc.method, true)
+		if len(apis) != tc.wantAPIsLen {
+			t.Errorf("test %d: number of apis wrong; want: %d, got: %d", i, tc.wantAPIsLen, len(apis))
 		} else if tc.wantAuthOp != nil {
-			got := targets[0]
+			got := apis[0]
 			if !reflect.DeepEqual(*tc.wantAuthOp, got) {
 				t.Errorf("test %d: \nwant: %v\n got: %v", i, tc.wantAuthOp, got)
 			}
@@ -341,7 +341,7 @@ func TestAuthorizeOperations(t *testing.T) {
 			Name:          "Name 1",
 			Resources:     []string{"/"},
 			Scopes:        []string{"scope1"},
-			Targets:       []string{"service1.test", "shared.test"},
+			APIs:          []string{"service1.test", "shared.test"},
 			QuotaInterval: "2",
 			QuotaLimit:    "2",
 			QuotaTimeUnit: "second",
@@ -373,7 +373,7 @@ func TestAuthorizeOperations(t *testing.T) {
 			Name:          "Name 2",
 			Resources:     []string{"/"},
 			Scopes:        []string{"scope1"},
-			Targets:       []string{"service1.test", "shared.test"},
+			APIs:          []string{"service1.test", "shared.test"},
 			QuotaInterval: "2",
 			QuotaLimit:    "2",
 			QuotaTimeUnit: "second",
@@ -422,16 +422,16 @@ func TestAuthorizeOperations(t *testing.T) {
 	}
 
 	testCases := []struct {
-		ctx            *auth.Context
-		productsMap    map[string]*APIProduct
-		target         string
-		path           string
-		method         string
-		wantTargetsLen int
-		wantTargetID   string
-		wantQuota      *Quota
-		wantHints      string
-		wantAuthOp     *AuthorizedOperation
+		ctx         *auth.Context
+		productsMap map[string]*APIProduct
+		api         string
+		path        string
+		method      string
+		wantAPIsLen int
+		wantAPIID   string
+		wantQuota   *Quota
+		wantHints   string
+		wantAuthOp  *AuthorizedOperation
 	}{
 		{ // good
 			ctx: &auth.Context{
@@ -440,27 +440,27 @@ func TestAuthorizeOperations(t *testing.T) {
 				Scopes:      []string{"scope1", "scope2"},
 				Application: "app",
 			},
-			productsMap:    productsMap,
-			target:         "host",
-			path:           "/operation1",
-			method:         "GET",
-			wantTargetsLen: 1,
-			wantTargetID:   "Name 1-prod-app-host-7c5532d6fca7a87312365219212de443",
-			wantQuota:      productsMap["Name 1"].OperationGroup.OperationConfigs[0].Quota,
+			productsMap: productsMap,
+			api:         "host",
+			path:        "/operation1",
+			method:      "GET",
+			wantAPIsLen: 1,
+			wantAPIID:   "Name 1-prod-app-host-7c5532d6fca7a87312365219212de443",
+			wantQuota:   productsMap["Name 1"].OperationGroup.OperationConfigs[0].Quota,
 			wantHints: `Authorizing request:
 			environment: prod
 			products: [Name 1 Name 2 Invalid]
 			scopes: [scope1 scope2]
 			operation: GET /operation1
-			target: host
+			api: host
 			- product: Name 1
 				operation configs:
 					0: authorized
 			- product: Name 2
 				operation configs:
 					0: no path: /operation1
-					1: no target: host
-					2: no target: host
+					1: no api: host
+					2: no api: host
 			- product: Invalid
 				not found
 				`,
@@ -472,27 +472,27 @@ func TestAuthorizeOperations(t *testing.T) {
 				Scopes:      []string{"scope1", "scope2"},
 				Application: "app",
 			},
-			productsMap:    productsMap,
-			target:         "host",
-			path:           "/operation2",
-			method:         "GET",
-			wantTargetsLen: 1,
-			wantTargetID:   "Name 2-prod-app-host-547dbfc99f0432d3dbc607784917b1bc",
-			wantQuota:      productsMap["Name 2"].OperationGroup.OperationConfigs[0].Quota,
+			productsMap: productsMap,
+			api:         "host",
+			path:        "/operation2",
+			method:      "GET",
+			wantAPIsLen: 1,
+			wantAPIID:   "Name 2-prod-app-host-547dbfc99f0432d3dbc607784917b1bc",
+			wantQuota:   productsMap["Name 2"].OperationGroup.OperationConfigs[0].Quota,
 			wantHints: `Authorizing request:
 			environment: prod
 			products: [Name 1 Name 2 Invalid]
 			scopes: [scope1 scope2]
 			operation: GET /operation2
-			target: host
+			api: host
 			- product: Name 1
 				operation configs:
 					0: no path: /operation2
 			- product: Name 2
 				operation configs:
 					0: authorized
-					1: no target: host
-					2: no target: host
+					1: no api: host
+					2: no api: host
 			- product: Invalid
 				not found
 				`,
@@ -504,25 +504,25 @@ func TestAuthorizeOperations(t *testing.T) {
 				Scopes:      []string{"scope1", "scope2"},
 				Application: "app",
 			},
-			productsMap:    productsMap,
-			target:         "host",
-			path:           "/operation2",
-			method:         "POST",
-			wantTargetsLen: 0,
+			productsMap: productsMap,
+			api:         "host",
+			path:        "/operation2",
+			method:      "POST",
+			wantAPIsLen: 0,
 			wantHints: `Authorizing request:
 			environment: prod
 			products: [Name 1 Name 2 Invalid]
 			scopes: [scope1 scope2]
 			operation: POST /operation2
-			target: host
+			api: host
 			- product: Name 1
 				operation configs:
 					0: no method: POST
 			- product: Name 2
 				operation configs:
 					0: no method: POST
-					1: no target: host
-					2: no target: host
+					1: no api: host
+					2: no api: host
 			- product: Invalid
 				not found
 				`,
@@ -534,57 +534,57 @@ func TestAuthorizeOperations(t *testing.T) {
 				Scopes:      []string{"scope1", "scope2"},
 				Application: "app",
 			},
-			productsMap:    productsMap,
-			target:         "host3",
-			path:           "/operation3",
-			method:         "POST",
-			wantTargetsLen: 1,
-			wantTargetID:   "Name 2-prod-app-host-547dbfc99f0432d3dbc607784917b1bc",
-			wantQuota:      productsMap["Name 2"].OperationGroup.OperationConfigs[0].Quota,
+			productsMap: productsMap,
+			api:         "host3",
+			path:        "/operation3",
+			method:      "POST",
+			wantAPIsLen: 1,
+			wantAPIID:   "Name 2-prod-app-host-547dbfc99f0432d3dbc607784917b1bc",
+			wantQuota:   productsMap["Name 2"].OperationGroup.OperationConfigs[0].Quota,
 			wantHints: `Authorizing request:
 			environment: prod
 			products: [Name 1 Name 2 Invalid]
 			scopes: [scope1 scope2]
 			operation: POST /operation3
-			target: host3
+			api: host3
 			- product: Name 1
 				operation configs:
-					0: no target: host3
+					0: no api: host3
 			- product: Name 2
 				operation configs:
-					0: no target: host3
-					1: no target: host3
+					0: no api: host3
+					1: no api: host3
 					2: authorized
 			- product: Invalid
 				not found
 				`,
 		},
-		{ // no target
+		{ // no api
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "prod"},
 				APIProducts: []string{"Name 1", "Name 2", "Invalid"},
 				Scopes:      []string{"scope1", "scope2"},
 				Application: "app",
 			},
-			productsMap:    productsMap,
-			target:         "target",
-			path:           "/operation2",
-			method:         "GET",
-			wantTargetsLen: 0,
+			productsMap: productsMap,
+			api:         "api",
+			path:        "/operation2",
+			method:      "GET",
+			wantAPIsLen: 0,
 			wantHints: `Authorizing request:
 			environment: prod
 			products: [Name 1 Name 2 Invalid]
 			scopes: [scope1 scope2]
 			operation: GET /operation2
-			target: target
+			api: api
 			- product: Name 1
 				operation configs:
-					0: no target: target
+					0: no api: api
 			- product: Name 2
 				operation configs:
-					0: no target: target
-					1: no target: target
-					2: no target: target
+					0: no api: api
+					1: no api: api
+					2: no api: api
 			- product: Invalid
 				not found
 				`,
@@ -592,21 +592,21 @@ func TestAuthorizeOperations(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		targets, hints := authorize(tc.ctx, tc.productsMap, tc.target, tc.path, tc.method, true)
-		if len(targets) != tc.wantTargetsLen {
-			t.Errorf("test %d: number of targets wrong; want: %d, got: %d", i, tc.wantTargetsLen, len(targets))
+		apis, hints := authorize(tc.ctx, tc.productsMap, tc.api, tc.path, tc.method, true)
+		if len(apis) != tc.wantAPIsLen {
+			t.Errorf("test %d: number of apis wrong; want: %d, got: %d", i, tc.wantAPIsLen, len(apis))
 		} else if tc.wantQuota != nil {
-			if tc.wantTargetID != targets[0].ID {
-				t.Errorf("test %d: want: '%s', got: '%s'", i, tc.wantTargetID, targets[0].ID)
+			if tc.wantAPIID != apis[0].ID {
+				t.Errorf("test %d: want: '%s', got: '%s'", i, tc.wantAPIID, apis[0].ID)
 			}
-			if tc.wantQuota.TimeUnit != targets[0].QuotaTimeUnit {
-				t.Errorf("test %d: want: '%s', got: '%s'", i, tc.wantQuota.TimeUnit, targets[0].QuotaTimeUnit)
+			if tc.wantQuota.TimeUnit != apis[0].QuotaTimeUnit {
+				t.Errorf("test %d: want: '%s', got: '%s'", i, tc.wantQuota.TimeUnit, apis[0].QuotaTimeUnit)
 			}
-			if tc.wantQuota.IntervalInt != targets[0].QuotaInterval {
-				t.Errorf("test %d: want: '%d', got: '%d'", i, tc.wantQuota.IntervalInt, targets[0].QuotaInterval)
+			if tc.wantQuota.IntervalInt != apis[0].QuotaInterval {
+				t.Errorf("test %d: want: '%d', got: '%d'", i, tc.wantQuota.IntervalInt, apis[0].QuotaInterval)
 			}
-			if tc.wantQuota.LimitInt != targets[0].QuotaLimit {
-				t.Errorf("test %d: want: '%d', got: '%d'", i, tc.wantQuota.LimitInt, targets[0].QuotaLimit)
+			if tc.wantQuota.LimitInt != apis[0].QuotaLimit {
+				t.Errorf("test %d: want: '%d', got: '%d'", i, tc.wantQuota.LimitInt, apis[0].QuotaLimit)
 			}
 		}
 		if noSymbols(tc.wantHints) != noSymbols(hints) {

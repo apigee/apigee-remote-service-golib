@@ -45,7 +45,7 @@ func TestQuota(t *testing.T) {
 		Context: context,
 	}
 
-	target := product.AuthorizedOperation{
+	api := product.AuthorizedOperation{
 		QuotaLimit:    1,
 		QuotaInterval: 1,
 		QuotaTimeUnit: quotaMonth,
@@ -96,7 +96,7 @@ func TestQuota(t *testing.T) {
 		t.Logf("** Executing test case '%s' **", c.name)
 
 		args.DeduplicationID = c.dedupID
-		result, err := m.Apply(authContext, target, args)
+		result, err := m.Apply(authContext, api, args)
 		if err != nil {
 			t.Fatalf("should not get error: %v", err)
 		}
@@ -109,7 +109,7 @@ func TestQuota(t *testing.T) {
 	}
 
 	// test incompatible product (replaces bucket)
-	target2 := product.AuthorizedOperation{
+	api2 := product.AuthorizedOperation{
 		QuotaLimit:    1,
 		QuotaInterval: 2,
 		QuotaTimeUnit: quotaSecond,
@@ -125,7 +125,7 @@ func TestQuota(t *testing.T) {
 
 	t.Logf("** Executing test case '%s' **", c.name)
 	args.DeduplicationID = c.dedupID
-	result, err := m.Apply(authContext, target2, args)
+	result, err := m.Apply(authContext, api2, args)
 	if err != nil {
 		t.Fatalf("should not get error: %v", err)
 	}
@@ -275,7 +275,7 @@ func TestDisconnected(t *testing.T) {
 		bucketsSyncing:    map[*bucket]struct{}{},
 	}
 
-	target := product.AuthorizedOperation{
+	api := product.AuthorizedOperation{
 		QuotaLimit:    1,
 		QuotaInterval: 1,
 		QuotaTimeUnit: quotaMinute,
@@ -285,28 +285,28 @@ func TestDisconnected(t *testing.T) {
 		QuotaAmount: 1,
 	}
 
-	_, err := m.Apply(authContext, target, args)
+	_, err := m.Apply(authContext, api, args)
 	if err != nil {
 		t.Errorf("shouln't get error: %v", err)
 	}
 
 	// force sync error
-	err = m.forceSync(target.ID)
+	err = m.forceSync(api.ID)
 	if err == nil {
 		t.Fatalf("should have received error!")
 	}
 
-	_, err = m.Apply(authContext, target, args)
+	_, err = m.Apply(authContext, api, args)
 	if err != nil {
 		t.Errorf("shouldn't get error: %v", err)
 	}
 
 	errC.send = 200
-	if err := m.forceSync(target.ID); err == nil {
+	if err := m.forceSync(api.ID); err == nil {
 		t.Errorf("want error 'new request: net/http: nil Context' got none")
 	}
 
-	res, err := m.Apply(authContext, target, args)
+	res, err := m.Apply(authContext, api, args)
 	if err != nil {
 		t.Fatalf("got error: %s", err)
 	}
@@ -323,7 +323,7 @@ func TestDisconnected(t *testing.T) {
 
 	// next window
 	fakeTime.add(60)
-	res, err = m.Apply(authContext, target, args)
+	res, err = m.Apply(authContext, api, args)
 	if err != nil {
 		t.Fatalf("got error: %s", err)
 	}
@@ -372,7 +372,7 @@ func TestWindowExpired(t *testing.T) {
 		bucketsSyncing:    map[*bucket]struct{}{},
 	}
 
-	target := product.AuthorizedOperation{
+	api := product.AuthorizedOperation{
 		QuotaLimit:    1,
 		QuotaInterval: 1,
 		QuotaTimeUnit: quotaSecond,
@@ -383,15 +383,15 @@ func TestWindowExpired(t *testing.T) {
 	}
 
 	// apply and force a sync
-	res, err := m.Apply(authContext, target, args)
+	res, err := m.Apply(authContext, api, args)
 	if err != nil {
 		t.Errorf("shouln't get error: %v", err)
 	}
-	if err := m.forceSync(target.ID); err == nil {
+	if err := m.forceSync(api.ID); err == nil {
 		t.Errorf("want error 'new request: net/http: nil Context' got none")
 	}
 
-	bucket := m.buckets[target.ID]
+	bucket := m.buckets[api.ID]
 	if res.Used != 1 {
 		t.Errorf("got: %d, want: %d", res.Used, 1)
 	}
@@ -408,7 +408,7 @@ func TestWindowExpired(t *testing.T) {
 		t.Errorf("should be expired")
 	}
 
-	res, err = m.Apply(authContext, target, args)
+	res, err = m.Apply(authContext, api, args)
 	if err != nil {
 		t.Errorf("got error: %v", err)
 	}
@@ -419,7 +419,7 @@ func TestWindowExpired(t *testing.T) {
 		t.Errorf("got: %d, want: %d", res.Exceeded, 0)
 	}
 
-	res, err = m.Apply(authContext, target, args)
+	res, err = m.Apply(authContext, api, args)
 	if err != nil {
 		t.Errorf("got error: %v", err)
 	}
@@ -436,7 +436,7 @@ func TestWindowExpired(t *testing.T) {
 		t.Errorf("should be expired")
 	}
 
-	res, err = m.Apply(authContext, target, args)
+	res, err = m.Apply(authContext, api, args)
 	if err != nil {
 		t.Errorf("got error: %v", err)
 	}
