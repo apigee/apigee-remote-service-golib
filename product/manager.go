@@ -85,8 +85,8 @@ type AuthorizedOperation struct {
 }
 
 // Authorize a request against API Products and its Operations
-func (m *manager) Authorize(authContext *auth.Context, target, path, method string) []AuthorizedOperation {
-	authorizedOps, hints := authorize(authContext, m.Products(), target, path, method, log.DebugEnabled())
+func (m *manager) Authorize(authContext *auth.Context, api, path, method string) []AuthorizedOperation {
+	authorizedOps, hints := authorize(authContext, m.Products(), api, path, method, log.DebugEnabled())
 	if log.DebugEnabled() {
 		log.Debugf(hints)
 	}
@@ -94,7 +94,7 @@ func (m *manager) Authorize(authContext *auth.Context, target, path, method stri
 }
 
 // broken out for testing
-func authorize(authContext *auth.Context, productsByName map[string]*APIProduct, target, path, method string, hints bool) ([]AuthorizedOperation, string) {
+func authorize(authContext *auth.Context, productsByName map[string]*APIProduct, api, path, method string, hints bool) ([]AuthorizedOperation, string) {
 	var authorizedOps []AuthorizedOperation
 	authorizedProducts := authContext.APIProducts
 
@@ -106,17 +106,17 @@ func authorize(authContext *auth.Context, productsByName map[string]*APIProduct,
 			hintsBuilder.WriteString(fmt.Sprintf("  products: %v\n", authorizedProducts))
 			hintsBuilder.WriteString(fmt.Sprintf("  scopes: %v\n", authContext.Scopes))
 			hintsBuilder.WriteString(fmt.Sprintf("  operation: %s %s\n", method, path))
-			hintsBuilder.WriteString(fmt.Sprintf("  target: %s\n", target))
+			hintsBuilder.WriteString(fmt.Sprintf("  api: %s\n", api))
 		}
 		hintsBuilder.WriteString(hint)
 	}
 
 	for _, name := range authorizedProducts {
-		var prodTargets []AuthorizedOperation
+		var prodAPIs []AuthorizedOperation
 		var hint string = "    not found\n"
 		if product, ok := productsByName[name]; ok {
-			prodTargets, hint = product.authorize(authContext, target, path, method, hints)
-			authorizedOps = append(authorizedOps, prodTargets...)
+			prodAPIs, hint = product.authorize(authContext, api, path, method, hints)
+			authorizedOps = append(authorizedOps, prodAPIs...)
 		}
 		if hints && hint != "" {
 			addHint(fmt.Sprintf("  - product: %s\n", name))
