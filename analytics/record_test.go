@@ -15,6 +15,10 @@
 package analytics
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -92,6 +96,16 @@ func TestValidationFailure(t *testing.T) {
 			ClientReceivedStartTimestamp: ts * 1000,
 			ClientReceivedEndTimestamp:   ts * 1000,
 		}, "missing GatewayFlowID"},
+		{"bad attribute", Record{
+			Organization:                 "hi",
+			Environment:                  "test",
+			ClientReceivedStartTimestamp: ts * 1000,
+			ClientReceivedEndTimestamp:   ts * 1000,
+			GatewayFlowID:                "x",
+			Attributes: []Attribute{
+				{Name: "bad", Value: struct{}{}},
+			},
+		}, "attribute bad is invalid type: struct"},
 	} {
 		t.Log(test.desc)
 
@@ -109,6 +123,132 @@ func TestValidationFailure(t *testing.T) {
 
 		if !strings.Contains(gotErr.Error(), test.wantError) {
 			t.Errorf("error %s should contain '%s'", gotErr, test.wantError)
+		}
+	}
+}
+
+func TestEncode(t *testing.T) {
+	now := time.Now()
+	for _, test := range []struct {
+		desc string
+		in   interface{}
+		want interface{}
+	}{
+		{"int", int(42), float64(42)},
+		{"uint", uint(42), float64(42)},
+		{"float", float32(3.14), float64(3.14)},
+		{"false", false, false},
+		{"true", true, true},
+		{"string", "test", "test"},
+		{"struct", struct{}{}, nil},
+		{"array", []string{"nope"}, nil},
+		{"time", now, float64(timeToApigeeInt(now))},
+	} {
+		record := Record{
+			Attributes: []Attribute{
+				{Name: "test", Value: test.in},
+			},
+		}
+
+		var gotBuffer bytes.Buffer
+		enc := json.NewEncoder(&gotBuffer)
+		if err := enc.Encode(record); err != nil {
+			t.Fatal(err)
+		}
+		var gotMap map[string]interface{}
+		if err := json.Unmarshal(gotBuffer.Bytes(), &gotMap); err != nil {
+			t.Fatal(err)
+		}
+		if test.want != gotMap["dc.test"] {
+			t.Errorf("%s:: want: %d, got: %d", test.desc, test.want, gotMap["dc.test"])
+		}
+	}
+}
+
+func TestEncodeLimits(t *testing.T) {
+	maxLenValue := "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin erat lacus, molestie at lorem non, sodales vehicula eros. " +
+		"Ut vel ligula id purus vehicula condimentum non vitae nibh. Sed bibendum mauris non turpis dapibus, et gravida odio tristique. " +
+		"Proin tempor condimentum lectus. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc ac arcu sem. Vestibulum ut mauris in tellus imperdiet mi."
+	overLenValue := maxLenValue + "."
+	if maxAttributeValueBytes != len(maxLenValue) {
+		t.Fatalf("want: %d, got %d", maxAttributeValueBytes, len(maxLenValue))
+	}
+
+	record := Record{
+		Organization: "hi",
+		Environment:  "test",
+		Attributes: []Attribute{
+			{Name: "test-1", Value: maxLenValue},
+			{Name: "dc.test-2", Value: overLenValue},
+		},
+	}
+	var extraAttrs string
+	for i := 0; i < maxNumAttributes; i++ {
+		attr := Attribute{Name: fmt.Sprintf("dc.x-%d", i), Value: "val"}
+		record.Attributes = append(record.Attributes, attr)
+		if i+2 < maxNumAttributes {
+			extraAttrs = extraAttrs + fmt.Sprintf("\"%s\":\"%s\",", attr.Name, attr.Value)
+		}
+	}
+	if maxNumAttributes >= len(record.Attributes) {
+		t.Fatalf("want > %d, got: %d", maxNumAttributes, len(record.Attributes))
+	}
+
+	var gotBuffer bytes.Buffer
+	enc := json.NewEncoder(&gotBuffer)
+	if err := enc.Encode(record); err != nil {
+		t.Fatal(err)
+	}
+
+	var want, got map[string]interface{}
+	if err := json.Unmarshal(gotBuffer.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+
+	wantString := `{
+	"dc.test-1":"` + maxLenValue + `",
+	"dc.test-2":"` + maxLenValue + `",
+	` + extraAttrs + `
+	"apiproxy":"","apiproxy_revision":0,"client_received_end_timestamp":0,"client_received_start_timestamp":0,
+	"client_sent_end_timestamp":0,"client_sent_start_timestamp":0,"environment":"test","gateway_flow_id":"",
+	"gateway_source":"","organization":"hi","recordType":"","request_path":"","request_uri":"","request_verb":"",
+	"response_status_code":0,"useragent":""}`
+	if err := json.Unmarshal([]byte(wantString), &want); err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(want, got) {
+		t.Errorf("want: %#v, got: %#v", want, got)
+	}
+
+	if maxLenValue != got["dc.test-1"] {
+		t.Errorf("want: %#v, got: %#v", maxLenValue, got["dc.test-1"])
+	}
+
+	if maxNumAttributes-2 != strings.Count(gotBuffer.String(), "dc.x") {
+		t.Errorf("want: %#v, got: %#v", maxNumAttributes-2, strings.Count(gotBuffer.String(), "dc.x"))
+	}
+}
+
+func TestTruncStringToBytes(t *testing.T) {
+	for _, test := range []struct {
+		desc  string
+		in    string
+		limit int
+		want  string
+	}{
+		{"limit 0", "a日bc", 0, ""},
+		{"limit 1", "a日bc", 1, "a"},
+		{"limit 2", "a日bc", 2, "a"},
+		{"limit 3", "a日bc", 3, "a"},
+		{"limit 4", "a日bc", 4, "a日"},
+		{"limit 5", "a日bc", 5, "a日b"},
+		{"limit 6", "a日bc", 6, "a日bc"},
+		{"limit 7", "a日bc", 7, "a日bc"},
+	} {
+		got, _ := truncStringToBytes(test.in, test.limit)
+		if got != test.want {
+			t.Errorf("%s:: want: %s, got: %s", test.desc, test.want, got)
 		}
 	}
 }
