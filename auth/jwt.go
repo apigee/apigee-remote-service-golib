@@ -71,7 +71,7 @@ func (a *jwtManager) stop() {
 }
 
 func (a *jwtManager) ensureSet(url string) error {
-	set, err := jwk.FetchHTTP(url)
+	set, err := jwk.Fetch(context.Background(), url)
 	if err != nil {
 		return err
 	}
@@ -90,7 +90,7 @@ func (a *jwtManager) refresh(ctx context.Context) error {
 	return errRet
 }
 
-func (a *jwtManager) jwkSet(ctx adapterContext.Context) (*jwk.Set, error) {
+func (a *jwtManager) jwkSet(ctx adapterContext.Context) (jwk.Set, error) {
 	jwksURL := *ctx.RemoteServiceAPI()
 	jwksURL.Path = path.Join(jwksURL.Path, certsPath)
 	url := jwksURL.String()
@@ -100,7 +100,7 @@ func (a *jwtManager) jwkSet(ctx adapterContext.Context) (*jwk.Set, error) {
 		}
 	}
 	set, _ := a.jwkSets.Load(url)
-	return set.(*jwk.Set), nil
+	return set.(jwk.Set), nil
 }
 
 func (a *jwtManager) parseJWT(ctx adapterContext.Context, raw string, verify bool) (map[string]interface{}, error) {
@@ -112,18 +112,18 @@ func (a *jwtManager) parseJWT(ctx adapterContext.Context, raw string, verify boo
 		}
 
 		// verify against public keys
-		_, err = jws.VerifyWithJWKSet([]byte(raw), set, nil)
+		_, err = jws.VerifySet([]byte(raw), set)
 		if err != nil {
 			return nil, err
 		}
 
-		// verify fields
+		// validate fields
 		token, err := jwt.ParseString(raw)
 		if err != nil {
 			return nil, errors.Wrap(err, "invalid jws message")
 		}
 
-		err = jwt.Verify(token, jwt.WithAcceptableSkew(acceptableSkew))
+		err = jwt.Validate(token, jwt.WithAcceptableSkew(acceptableSkew))
 		if err != nil {
 			return nil, errors.Wrap(err, "invalid jws message")
 		}
