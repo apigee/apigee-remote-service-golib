@@ -43,14 +43,13 @@ var ErrBadAuth = errors.New("permission denied")
 // ErrInternalError is an error because of internal error
 var ErrInternalError = errors.New("internal error")
 
-// NewManager constructs a new Manager and begins an update loop to
-// periodically refresh JWT credentials if options.pollInterval > 0.
+// NewManager constructs a new Manager for JWT functions.
 // Call Close() when done.
 func NewManager(options Options) (Manager, error) {
 	if err := options.validate(); err != nil {
 		return nil, err
 	}
-	jwtMan := newJWTManager(options.PollInterval)
+	jwtMan := newJWTManager()
 	v := newVerifier(jwtMan, keyVerifierOpts{
 		Client:   options.Client,
 		CacheTTL: options.APIKeyCacheDuration,
@@ -168,8 +167,6 @@ func (m *manager) start() {
 
 // Options allows us to specify options for how this auth manager will run
 type Options struct {
-	// PollInterval sets refresh rate of JWT credentials, disabled if = 0
-	PollInterval time.Duration
 	// Client is a configured HTTPClient
 	Client *http.Client
 	// APIKeyCacheDuration is the length of time APIKeys are cached when unable to refresh

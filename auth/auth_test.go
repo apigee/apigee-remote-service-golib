@@ -17,7 +17,6 @@ package auth
 import (
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/authtest"
 	"github.com/apigee/apigee-remote-service-golib/context"
@@ -48,18 +47,14 @@ func (tv *testVerifier) Verify(ctx context.Context, apiKey string) (map[string]i
 func TestNewManager(t *testing.T) {
 	log.Log.SetLevel(log.Debug)
 	opts := Options{
-		PollInterval: time.Hour,
-		Client:       &http.Client{},
-		Org:          "org",
+		Client: &http.Client{},
+		Org:    "org",
 	}
 	m, err := NewManager(opts)
 	if err != nil {
 		t.Fatalf("create and start manager: %v", err)
 	}
 	man := m.(*manager)
-	if opts.PollInterval != man.jwtMan.pollInterval {
-		t.Errorf("pollInterval want: %v, got: %v", opts.PollInterval, man.jwtMan.pollInterval)
-	}
 	verifier := man.verifier.(*keyVerifierImpl)
 	if opts.Client != verifier.client {
 		t.Errorf("client want: %v, got: %v", opts.Client, verifier.client)
@@ -101,7 +96,7 @@ func TestAuthenticate(t *testing.T) {
 	} {
 		t.Log(test.desc)
 
-		jwtMan := newJWTManager(time.Hour)
+		jwtMan := newJWTManager()
 		tv := &testVerifier{
 			keyErrors: map[string]error{
 				goodAPIKey: nil,
