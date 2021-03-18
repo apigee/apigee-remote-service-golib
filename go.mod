@@ -1,4 +1,4 @@
-module github.com/apigee/apigee-remote-service-golib
+module github.com/apigee/apigee-remote-service-golib/v2
 
 go 1.16
 
