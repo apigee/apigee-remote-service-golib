@@ -15,7 +15,6 @@
 package auth
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
@@ -68,7 +67,7 @@ func badJWTRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestJWTCaching(t *testing.T) {
-	jwtMan := newJWTManager(time.Hour)
+	jwtMan := newJWTManager()
 	jwtMan.start()
 	defer jwtMan.stop()
 
@@ -102,16 +101,10 @@ func TestJWTCaching(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-
-	// Refresh, should fail
-	err = jwtMan.refresh(context.Background())
-	if err == nil {
-		t.Errorf("Expected refresh to fail")
-	}
 }
 
 func TestGoodAndBadJWT(t *testing.T) {
-	jwtMan := newJWTManager(time.Hour)
+	jwtMan := newJWTManager()
 	jwtMan.start()
 	defer jwtMan.stop()
 

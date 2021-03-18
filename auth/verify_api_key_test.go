@@ -125,7 +125,7 @@ func badHandler() http.HandlerFunc {
 }
 
 func TestVerifyAPIKeyValid(t *testing.T) {
-	jwtMan := newJWTManager(time.Hour)
+	jwtMan := newJWTManager()
 	jwtMan.start()
 	defer jwtMan.stop()
 	v := newVerifier(jwtMan, keyVerifierOpts{
@@ -154,7 +154,7 @@ func TestVerifyAPIKeyValid(t *testing.T) {
 }
 
 func TestVerifyAPIKeyCacheWithClear(t *testing.T) {
-	jwtMan := newJWTManager(time.Hour)
+	jwtMan := newJWTManager()
 	jwtMan.start()
 	defer jwtMan.stop()
 	v := newVerifier(jwtMan, keyVerifierOpts{
@@ -205,7 +205,7 @@ func TestVerifyAPIKeyCacheWithClear(t *testing.T) {
 }
 
 func TestVerifyAPIKeyCacheWithExpiry(t *testing.T) {
-	jwtMan := newJWTManager(time.Hour)
+	jwtMan := newJWTManager()
 	jwtMan.start()
 	defer jwtMan.stop()
 	v := newVerifier(jwtMan, keyVerifierOpts{
@@ -265,7 +265,7 @@ func TestVerifyAPIKeyCacheWithExpiry(t *testing.T) {
 }
 
 func TestVerifyAPIKeyFail(t *testing.T) {
-	jwtMan := newJWTManager(time.Hour)
+	jwtMan := newJWTManager()
 	jwtMan.start()
 	defer jwtMan.stop()
 	v := newVerifier(jwtMan, keyVerifierOpts{
@@ -285,12 +285,55 @@ func TestVerifyAPIKeyFail(t *testing.T) {
 	if err == nil {
 		t.Errorf("error should not be nil")
 	} else if err.Error() != ErrBadAuth.Error() {
-		t.Errorf("got error: '%s', expected: 'invalid api key'", ErrBadAuth.Error())
+		t.Errorf("got error: '%s', expected: '%s'", err.Error(), ErrBadAuth.Error())
+	}
+}
+
+func TestVerifyAPIKeyBadExpiration(t *testing.T) {
+	jwtMan := newJWTManager()
+	jwtMan.start()
+	defer jwtMan.stop()
+	v := newVerifier(jwtMan, keyVerifierOpts{
+		Client: http.DefaultClient,
+	})
+
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := jwt.New()
+	payload, err := jwt.Sign(token, jwa.RS256, privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jwtResponse := APIKeyResponse{Token: string(payload)}
+
+	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		_ = json.NewEncoder(w).Encode(jwtResponse)
+	}
+
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	ctx := authtest.NewContext(ts.URL)
+	success, err := v.Verify(ctx, "badKey")
+
+	if success != nil {
+		t.Errorf("success should be nil, is: %v", success)
+	}
+
+	want := "bad exp: unknown type <nil> for exp <nil>"
+	if err == nil {
+		t.Errorf("error should not be nil")
+	} else if err.Error() != want {
+		t.Errorf("got error: '%s', expected: '%s'", err.Error(), want)
 	}
 }
 
 func TestVerifyAPIKeyError(t *testing.T) {
-	jwtMan := newJWTManager(time.Hour)
+	jwtMan := newJWTManager()
 	jwtMan.start()
 	defer jwtMan.stop()
 	v := newVerifier(jwtMan, keyVerifierOpts{
@@ -301,7 +344,7 @@ func TestVerifyAPIKeyError(t *testing.T) {
 	success, err := v.Verify(ctx, "badKey")
 
 	if err == nil {
-		t.Errorf("error should be nil")
+		t.Errorf("error should not be nil")
 	}
 
 	if success != nil {
@@ -310,7 +353,7 @@ func TestVerifyAPIKeyError(t *testing.T) {
 }
 
 func TestVerifyAPIKeyCallFail(t *testing.T) {
-	jwtMan := newJWTManager(time.Hour)
+	jwtMan := newJWTManager()
 	jwtMan.start()
 	defer jwtMan.stop()
 	v := newVerifier(jwtMan, keyVerifierOpts{
