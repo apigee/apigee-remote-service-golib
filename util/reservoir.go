@@ -14,7 +14,7 @@
 
 package util
 
-import "github.com/apigee/apigee-remote-service-golib/log"
+import "github.com/apigee/apigee-remote-service-golib/v2/log"
 
 // NewReservoir sends from one channel to another without blocking until closed.
 // Once "in" channel is closed, "out" will continue to drain before closing.

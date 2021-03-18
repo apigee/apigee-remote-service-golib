@@ -25,9 +25,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apigee/apigee-remote-service-golib/auth"
-	"github.com/apigee/apigee-remote-service-golib/log"
-	"github.com/apigee/apigee-remote-service-golib/util"
+	"github.com/apigee/apigee-remote-service-golib/v2/auth"
+	"github.com/apigee/apigee-remote-service-golib/v2/log"
+	"github.com/apigee/apigee-remote-service-golib/v2/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )

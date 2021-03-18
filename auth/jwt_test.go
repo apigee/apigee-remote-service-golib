@@ -24,7 +24,7 @@ import (
 
 	"time"
 
-	"github.com/apigee/apigee-remote-service-golib/authtest"
+	"github.com/apigee/apigee-remote-service-golib/v2/authtest"
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/lestrrat-go/jwx/jwt"

@@ -18,9 +18,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/apigee/apigee-remote-service-golib/authtest"
-	"github.com/apigee/apigee-remote-service-golib/context"
-	"github.com/apigee/apigee-remote-service-golib/log"
+	"github.com/apigee/apigee-remote-service-golib/v2/authtest"
+	"github.com/apigee/apigee-remote-service-golib/v2/context"
+	"github.com/apigee/apigee-remote-service-golib/v2/log"
 )
 
 type testVerifier struct {

@@ -21,7 +21,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/apigee/apigee-remote-service-golib/auth"
+	"github.com/apigee/apigee-remote-service-golib/v2/auth"
 )
 
 type fakeContext struct {

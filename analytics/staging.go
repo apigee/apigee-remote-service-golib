@@ -20,7 +20,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/apigee/apigee-remote-service-golib/log"
+	"github.com/apigee/apigee-remote-service-golib/v2/log"
 	"github.com/hashicorp/go-multierror"
 	"github.com/prometheus/client_golang/prometheus"
 )

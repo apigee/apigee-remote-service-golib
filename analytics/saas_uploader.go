@@ -27,8 +27,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apigee/apigee-remote-service-golib/log"
-	"github.com/apigee/apigee-remote-service-golib/util"
+	"github.com/apigee/apigee-remote-service-golib/v2/log"
+	"github.com/apigee/apigee-remote-service-golib/v2/util"
 	"github.com/google/uuid"
 )
 

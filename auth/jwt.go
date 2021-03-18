@@ -23,7 +23,7 @@ import (
 	"path"
 	"time"
 
-	adapterContext "github.com/apigee/apigee-remote-service-golib/context"
+	adapterContext "github.com/apigee/apigee-remote-service-golib/v2/context"
 	"github.com/lestrrat-go/backoff/v2"
 	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/lestrrat-go/jwx/jws"

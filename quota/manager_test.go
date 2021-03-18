@@ -23,9 +23,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apigee/apigee-remote-service-golib/auth"
-	"github.com/apigee/apigee-remote-service-golib/authtest"
-	"github.com/apigee/apigee-remote-service-golib/product"
+	"github.com/apigee/apigee-remote-service-golib/v2/auth"
+	"github.com/apigee/apigee-remote-service-golib/v2/authtest"
+	"github.com/apigee/apigee-remote-service-golib/v2/product"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

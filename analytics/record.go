@@ -23,8 +23,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/apigee/apigee-remote-service-golib/auth"
-	"github.com/apigee/apigee-remote-service-golib/log"
+	"github.com/apigee/apigee-remote-service-golib/v2/auth"
+	"github.com/apigee/apigee-remote-service-golib/v2/log"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
 )

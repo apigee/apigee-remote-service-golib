@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apigee/apigee-remote-service-golib/context"
+	"github.com/apigee/apigee-remote-service-golib/v2/context"
 	"github.com/pkg/errors"
 )
 
