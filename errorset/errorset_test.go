@@ -19,7 +19,7 @@ import (
 	"testing"
 )
 
-func TestNil(t *testing.T) {
+func TestNils(t *testing.T) {
 	err := Append(nil)
 	if err != nil {
 		t.Errorf("should be nil")
@@ -33,13 +33,13 @@ func TestNil(t *testing.T) {
 
 func TestNilAppend(t *testing.T) {
 	want := "Error(s):\n\t* my error"
-	err := Append(nil, errors.New("my error"))
+	err := Append(nil, nil, errors.New("my error"))
 	if err == nil {
-		t.Errorf("should not be nil")
+		t.Fatalf("should not be nil")
 	}
 	got := err.Error()
 	if want != got {
-		t.Errorf("want: %s, got: %s", want, err.Error())
+		t.Errorf("want: %s, got: %s", want, got)
 	}
 	if 1 != err.(*Error).Len() {
 		t.Errorf("want: %d, got: %d", 1, err.(*Error).Len())

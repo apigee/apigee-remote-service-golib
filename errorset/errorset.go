@@ -20,14 +20,15 @@ import (
 )
 
 func Append(err error, errs ...error) error {
-	if err == nil && (len(errs) == 0 || len(errs) == 1 && errs[0] == nil) {
-		return nil
-	}
 	es, ok := err.(*Error)
 	if !ok && err != nil {
 		es = es.append(err)
 	}
-	return es.append(errs...)
+	es = es.append(errs...)
+	if es.Len() == 0 {
+		return nil
+	}
+	return es
 }
 
 func Errors(err error) []error {
@@ -45,13 +46,10 @@ func (es *Error) append(errs ...error) *Error {
 	if es == nil {
 		es = &Error{}
 	}
-	if len(errs) == 0 {
-		return es
-	}
 	for _, e := range errs {
 		if errset, ok := e.(*Error); ok { // unwrap
 			es.Errors = es.append(errset.Errors...).Errors
-		} else {
+		} else if e != nil {
 			es.Errors = append(es.Errors, e)
 		}
 	}
