@@ -22,8 +22,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/apigee/apigee-remote-service-golib/v2/errorset"
 	"github.com/apigee/apigee-remote-service-golib/v2/log"
-	"github.com/hashicorp/go-multierror"
 )
 
 // crashRecovery cleans up the temp and staging dirs post-crash. This function
@@ -39,13 +39,13 @@ func (m *manager) crashRecovery() error {
 		tempDir := m.getTempDir(tenant)
 		tempFiles, err := os.ReadDir(tempDir)
 		if err != nil {
-			errs = multierror.Append(errs, err)
+			errs = errorset.Append(errs, err)
 			continue
 		}
 
 		err = m.prepTenant(tenant)
 		if err != nil {
-			errs = multierror.Append(errs, err)
+			errs = errorset.Append(errs, err)
 			continue
 		}
 		stageDir := m.getStagingDir(tenant)
@@ -66,13 +66,13 @@ func (m *manager) crashRecovery() error {
 
 			dest, err := os.Create(stageFile)
 			if err != nil {
-				errs = multierror.Append(errs, fmt.Errorf("create recovery file %s: %s", tempDir, err))
+				errs = errorset.Append(errs, fmt.Errorf("create recovery file %s: %s", tempDir, err))
 				continue
 			}
 			if err := m.recoverFile(tempFile, dest); err != nil {
-				errs = multierror.Append(errs, fmt.Errorf("recoverFile %s: %s", tempDir, err))
+				errs = errorset.Append(errs, fmt.Errorf("recoverFile %s: %s", tempDir, err))
 				if err := os.Remove(stageFile); err != nil {
-					errs = multierror.Append(errs, fmt.Errorf("remove stage file %s: %s", tempDir, err))
+					errs = errorset.Append(errs, fmt.Errorf("remove stage file %s: %s", tempDir, err))
 				}
 				continue
 			}

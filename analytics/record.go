@@ -24,9 +24,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/auth"
+	"github.com/apigee/apigee-remote-service-golib/v2/errorset"
 	"github.com/apigee/apigee-remote-service-golib/v2/log"
 	"github.com/google/uuid"
-	"github.com/hashicorp/go-multierror"
 )
 
 const (
@@ -102,36 +102,36 @@ func (r Record) validate(now time.Time) error {
 
 	// Validate that certain fields are set.
 	if r.Organization == "" {
-		err = multierror.Append(err, errors.New("missing Organization"))
+		err = errorset.Append(err, errors.New("missing Organization"))
 	}
 	if r.Environment == "" {
-		err = multierror.Append(err, errors.New("missing Environment"))
+		err = errorset.Append(err, errors.New("missing Environment"))
 	}
 	if r.GatewayFlowID == "" {
-		err = multierror.Append(err, errors.New("missing GatewayFlowID"))
+		err = errorset.Append(err, errors.New("missing GatewayFlowID"))
 	}
 	if r.ClientReceivedStartTimestamp == 0 {
-		err = multierror.Append(err, errors.New("missing ClientReceivedStartTimestamp"))
+		err = errorset.Append(err, errors.New("missing ClientReceivedStartTimestamp"))
 	}
 	if r.ClientReceivedEndTimestamp == 0 {
-		err = multierror.Append(err, errors.New("missing ClientReceivedEndTimestamp"))
+		err = errorset.Append(err, errors.New("missing ClientReceivedEndTimestamp"))
 	}
 	if r.ClientReceivedStartTimestamp > r.ClientReceivedEndTimestamp {
-		err = multierror.Append(err, errors.New("ClientReceivedStartTimestamp > ClientReceivedEndTimestamp"))
+		err = errorset.Append(err, errors.New("ClientReceivedStartTimestamp > ClientReceivedEndTimestamp"))
 	}
 
 	// Validate that timestamps make sense.
 	ts := time.Unix(r.ClientReceivedStartTimestamp/1000, 0)
 	if ts.After(now.Add(time.Minute)) { // allow a minute of tolerance
-		err = multierror.Append(err, errors.New("ClientReceivedStartTimestamp cannot be in the future"))
+		err = errorset.Append(err, errors.New("ClientReceivedStartTimestamp cannot be in the future"))
 	}
 	if ts.Before(now.Add(-90 * 24 * time.Hour)) {
-		err = multierror.Append(err, errors.New("ClientReceivedStartTimestamp cannot be more than 90 days old"))
+		err = errorset.Append(err, errors.New("ClientReceivedStartTimestamp cannot be more than 90 days old"))
 	}
 
 	for _, attr := range r.Attributes {
 		if validateErr := validateAttribute(attr); validateErr != nil {
-			err = multierror.Append(err, validateErr)
+			err = errorset.Append(err, validateErr)
 		}
 	}
 
