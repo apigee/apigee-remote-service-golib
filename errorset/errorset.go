@@ -20,7 +20,7 @@ import (
 )
 
 func Append(err error, errs ...error) error {
-	if err == nil && len(errs) == 1 && errs[0] == nil {
+	if err == nil && (len(errs) == 0 || len(errs) == 1 && errs[0] == nil) {
 		return nil
 	}
 	es, ok := err.(*Error)

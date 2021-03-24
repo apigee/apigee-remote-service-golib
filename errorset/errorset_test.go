@@ -24,6 +24,11 @@ func TestNil(t *testing.T) {
 	if err != nil {
 		t.Errorf("should be nil")
 	}
+
+	err = Append(nil, nil)
+	if err != nil {
+		t.Errorf("should be nil")
+	}
 }
 
 func TestNilAppend(t *testing.T) {
@@ -58,7 +63,9 @@ func TestError(t *testing.T) {
 
 func TestErrors(t *testing.T) {
 	want := "Error(s):\n\t* my error\n\t* my error2"
-	err := Append(errors.New("my error"), errors.New("my error2"))
+	err1 := errors.New("my error")
+	err2 := errors.New("my error2")
+	err := Append(err1, err2)
 	if err == nil {
 		t.Errorf("should not be nil")
 	}
@@ -68,6 +75,19 @@ func TestErrors(t *testing.T) {
 	}
 	if 2 != err.(*Error).Len() {
 		t.Errorf("want: %d, got: %d", 2, err.(*Error).Len())
+	}
+
+	errs := Errors(err1)
+	if err1 != errs[0] {
+		t.Errorf("want: %v, got: %v", err1, errs[0])
+	}
+
+	errs = Errors(err)
+	if err1 != errs[0] {
+		t.Errorf("want: %v, got: %v", err1, errs[0])
+	}
+	if err2 != errs[1] {
+		t.Errorf("want: %v, got: %v", err2, errs[1])
 	}
 }
 
