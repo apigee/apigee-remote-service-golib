@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package auth
+package key
 
 /*
 1. When an API Key check comes in, check a LRU cache.
@@ -30,10 +30,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apigee/apigee-remote-service-golib/v2/auth/jwt"
 	"github.com/apigee/apigee-remote-service-golib/v2/cache"
 	"github.com/apigee/apigee-remote-service-golib/v2/context"
 	"github.com/apigee/apigee-remote-service-golib/v2/log"
 	"github.com/apigee/apigee-remote-service-golib/v2/util"
+	jwx "github.com/lestrrat-go/jwx/jwt"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -41,21 +43,33 @@ import (
 )
 
 const (
+	certsPath                    = "/certs"
 	verifyAPIKeyURL              = "/verifyApiKey"
 	defaultCacheTTL              = 30 * time.Minute
 	defaultCacheEvictionInterval = 10 * time.Second
 	defaultMaxCachedEntries      = 10000
 	defaultBadEntryCacheTTL      = 10 * time.Second
-	parsedExpClaim               = "__apigeeParsedExp"
 )
 
+var ErrBadAuth = errors.New("permission denied")
+
 // keyVerifier encapsulates API key verification logic.
-type keyVerifier interface {
+type Verifier interface {
 	Verify(ctx context.Context, apiKey string) (map[string]interface{}, error)
 }
 
-type keyVerifierImpl struct {
-	jwtMan           *jwtManager
+// APIKeyRequest is the request to Apigee's verifyAPIKey API
+type APIKeyRequest struct {
+	APIKey string `json:"apiKey"`
+}
+
+// APIKeyResponse is the response from Apigee's verifyAPIKey API
+type APIKeyResponse struct {
+	Token string `json:"token"`
+}
+
+type verifierImpl struct {
+	jwtVerifier      jwt.Verifier
 	cache            cache.ExpiringCache
 	now              func() time.Time
 	client           *http.Client
@@ -65,7 +79,8 @@ type keyVerifierImpl struct {
 	prometheusLabels prometheus.Labels
 }
 
-type keyVerifierOpts struct {
+type VerifierOpts struct {
+	JwtVerifier           jwt.Verifier
 	CacheTTL              time.Duration
 	CacheEvictionInterval time.Duration
 	MaxCachedEntries      int
@@ -73,7 +88,7 @@ type keyVerifierOpts struct {
 	Org                   string
 }
 
-func newVerifier(jwtMan *jwtManager, opts keyVerifierOpts) keyVerifier {
+func NewVerifier(opts VerifierOpts) Verifier {
 	if opts.CacheTTL == 0 {
 		opts.CacheTTL = defaultCacheTTL
 	}
@@ -83,8 +98,8 @@ func newVerifier(jwtMan *jwtManager, opts keyVerifierOpts) keyVerifier {
 	if opts.MaxCachedEntries == 0 {
 		opts.MaxCachedEntries = defaultMaxCachedEntries
 	}
-	return &keyVerifierImpl{
-		jwtMan:           jwtMan,
+	return &verifierImpl{
+		jwtVerifier:      opts.JwtVerifier,
 		cache:            cache.NewLRU(opts.CacheTTL, opts.CacheEvictionInterval, int32(opts.MaxCachedEntries)),
 		now:              time.Now,
 		client:           opts.Client,
@@ -93,7 +108,8 @@ func newVerifier(jwtMan *jwtManager, opts keyVerifierOpts) keyVerifier {
 	}
 }
 
-func (kv *keyVerifierImpl) fetchToken(ctx context.Context, apiKey string) (map[string]interface{}, error) {
+// use singleFetchToken() to avoid multiple active requests
+func (kv *verifierImpl) fetchToken(ctx context.Context, apiKey string) (map[string]interface{}, error) {
 	if errResp, ok := kv.knownBad.Get(apiKey); ok {
 		if log.DebugEnabled() {
 			log.Debugf("fetchToken: known bad token: %s", util.Truncate(apiKey, 5))
@@ -139,21 +155,13 @@ func (kv *keyVerifierImpl) fetchToken(ctx context.Context, apiKey string) (map[s
 		return nil, ErrBadAuth
 	}
 
-	// no need to verify our own token, just parse it
-	claims, err := kv.jwtMan.parseJWT(ctx, token, false)
+	// Parse will not verify empty provider
+	claims, err := kv.jwtVerifier.Parse(token, jwt.Provider{})
 	if err != nil {
 		err = errors.Wrap(err, "parsing jwt")
 		kv.knownBad.Set(apiKey, err)
 		return nil, err
 	}
-
-	exp, err := parseExp(claims)
-	if err != nil {
-		err = errors.Wrap(err, "bad exp")
-		kv.knownBad.Set(apiKey, err)
-		return nil, err
-	}
-	claims[parsedExpClaim] = exp
 
 	kv.cache.Set(apiKey, claims)
 	kv.knownBad.Remove(apiKey)
@@ -165,7 +173,8 @@ func (kv *keyVerifierImpl) fetchToken(ctx context.Context, apiKey string) (map[s
 	return claims, nil
 }
 
-func (kv *keyVerifierImpl) singleFetchToken(ctx context.Context, apiKey string) (map[string]interface{}, error) {
+// ensures only a single request for any given api key is active
+func (kv *verifierImpl) singleFetchToken(ctx context.Context, apiKey string) (map[string]interface{}, error) {
 	fetch := func() (interface{}, error) {
 		return kv.fetchToken(ctx, apiKey)
 	}
@@ -178,14 +187,14 @@ func (kv *keyVerifierImpl) singleFetchToken(ctx context.Context, apiKey string) 
 }
 
 // verify returns the list of claims that an API key has.
-func (kv *keyVerifierImpl) Verify(ctx context.Context, apiKey string) (claims map[string]interface{}, err error) {
+func (kv *verifierImpl) Verify(ctx context.Context, apiKey string) (claims map[string]interface{}, err error) {
 	if existing, ok := kv.cache.Get(apiKey); ok {
 		claims = existing.(map[string]interface{})
 	}
 
 	// if token is expired, initiate a background refresh
 	if claims != nil {
-		exp := claims[parsedExpClaim].(time.Time)
+		exp := claims[jwx.ExpirationKey].(time.Time)
 		ttl := exp.Sub(kv.now())
 		if ttl <= 0 { // refresh if possible
 			if _, ok := kv.checking.Load(apiKey); !ok { // one refresh per apiKey at a time

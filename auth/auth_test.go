@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/apigee/apigee-remote-service-golib/v2/auth/jwt"
 	"github.com/apigee/apigee-remote-service-golib/v2/authtest"
 	"github.com/apigee/apigee-remote-service-golib/v2/context"
 	"github.com/apigee/apigee-remote-service-golib/v2/log"
@@ -49,17 +50,17 @@ func TestNewManager(t *testing.T) {
 	opts := Options{
 		Client: &http.Client{},
 		Org:    "org",
+		JWTProviders: []jwt.Provider{
+			{
+				JWKSURL: "bad",
+			},
+		},
 	}
 	m, err := NewManager(opts)
 	if err != nil {
 		t.Fatalf("create and start manager: %v", err)
 	}
-	man := m.(*manager)
-	verifier := man.verifier.(*keyVerifierImpl)
-	if opts.Client != verifier.client {
-		t.Errorf("client want: %v, got: %v", opts.Client, verifier.client)
-	}
-	man.Close()
+	m.Close()
 }
 
 func TestAuthenticate(t *testing.T) {
@@ -96,7 +97,7 @@ func TestAuthenticate(t *testing.T) {
 	} {
 		t.Log(test.desc)
 
-		jwtMan := newJWTManager()
+		jwtVerifier := jwt.NewVerifier(jwt.VerifierOptions{})
 		tv := &testVerifier{
 			keyErrors: map[string]error{
 				goodAPIKey: nil,
@@ -105,8 +106,8 @@ func TestAuthenticate(t *testing.T) {
 			},
 		}
 		authMan := &manager{
-			jwtMan:   jwtMan,
-			verifier: tv,
+			jwtVerifier: jwtVerifier,
+			keyVerifier: tv,
 		}
 		authMan.start()
 		defer authMan.Close()
