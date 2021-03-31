@@ -41,6 +41,7 @@ const (
 	minAllowedRefreshInterval    = 10 * time.Minute
 )
 
+// NewVerifier creates a Verifier. Call Start() after creation.
 func NewVerifier(opts VerifierOptions) Verifier {
 	if opts.CacheTTL == 0 {
 		opts.CacheTTL = defaultCacheTTL
@@ -88,6 +89,7 @@ type verifier struct {
 	knownBad      cache.ExpiringCache
 }
 
+// Start begins JWKS polling. Call Stop() when done.
 func (a *verifier) Start() {
 	a.cancelContext, a.cancelFunc = context.WithCancel(context.Background())
 	a.jwks = jwk.NewAutoRefresh(a.cancelContext)
@@ -100,7 +102,7 @@ func (a *verifier) Start() {
 	}
 }
 
-// EnsureProvidersLoaded ensures all JWKs certs are ready
+// EnsureProvidersLoaded ensures all JWKs certs have been retrieved for the first time.
 func (a *verifier) EnsureProvidersLoaded(ctx context.Context) error {
 	for i := range a.providers {
 		p := a.providers[i]
@@ -111,6 +113,7 @@ func (a *verifier) EnsureProvidersLoaded(ctx context.Context) error {
 	return nil
 }
 
+// Stop all background tasks.
 func (a *verifier) Stop() {
 	if a != nil && a.cancelFunc != nil {
 		a.cancelFunc()
@@ -144,7 +147,7 @@ func (a *verifier) AddProvider(provider Provider) {
 	}
 }
 
-func (a *verifier) FetchJWKs(provider Provider) (jwk.Set, error) {
+func (a *verifier) fetchJWKs(provider Provider) (jwk.Set, error) {
 	if provider.JWKSURL != "" {
 		return a.jwks.Fetch(a.cancelContext, provider.JWKSURL)
 	}
@@ -171,7 +174,7 @@ func (a *verifier) Parse(raw string, provider Provider) (map[string]interface{},
 	parseOptions := []jwt.ParseOption{jwt.WithAcceptableSkew(acceptableSkew), jwt.WithValidate(true)}
 
 	if provider.JWKSURL != "" {
-		set, err := a.FetchJWKs(provider)
+		set, err := a.fetchJWKs(provider)
 		if err != nil {
 			return nil, err
 		}
