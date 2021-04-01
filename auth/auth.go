@@ -22,6 +22,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/apigee/apigee-remote-service-golib/v2/auth/jwt"
+	"github.com/apigee/apigee-remote-service-golib/v2/auth/key"
 	"github.com/apigee/apigee-remote-service-golib/v2/context"
 	"github.com/apigee/apigee-remote-service-golib/v2/log"
 	"github.com/apigee/apigee-remote-service-golib/v2/util"
@@ -49,15 +51,18 @@ func NewManager(options Options) (Manager, error) {
 	if err := options.validate(); err != nil {
 		return nil, err
 	}
-	jwtMan := newJWTManager()
-	v := newVerifier(jwtMan, keyVerifierOpts{
-		Client:   options.Client,
-		CacheTTL: options.APIKeyCacheDuration,
-		Org:      options.Org,
+	jwtVerifier := jwt.NewVerifier(jwt.VerifierOptions{
+		Providers: options.JWTProviders,
+	})
+	v := key.NewVerifier(key.VerifierOpts{
+		JwtVerifier: jwtVerifier,
+		Client:      options.Client,
+		CacheTTL:    options.APIKeyCacheDuration,
+		Org:         options.Org,
 	})
 	am := &manager{
-		jwtMan:   jwtMan,
-		verifier: v,
+		jwtVerifier: jwtVerifier,
+		keyVerifier: v,
 	}
 	am.start()
 	return am, nil
@@ -65,14 +70,14 @@ func NewManager(options Options) (Manager, error) {
 
 // An Manager handles all things related to authentication.
 type manager struct {
-	jwtMan   *jwtManager
-	verifier keyVerifier
+	jwtVerifier jwt.Verifier
+	keyVerifier key.Verifier
 }
 
 // Close shuts down the Manager.
 func (m *manager) Close() {
 	if m != nil {
-		m.jwtMan.stop()
+		m.jwtVerifier.Stop()
 	}
 }
 
@@ -106,7 +111,7 @@ func (m *manager) Authenticate(ctx context.Context, apiKey string,
 	if claims[apiKeyClaimKey] != nil {
 		authAttempted = true
 		if apiKey, ok := claims[apiKeyClaimKey].(string); ok {
-			verifiedClaims, authenticationError = m.verifier.Verify(ctx, apiKey)
+			verifiedClaims, authenticationError = m.keyVerifier.Verify(ctx, apiKey)
 			if authenticationError == nil {
 				log.Debugf("using api key from jwt claim %s", apiKeyClaimKey)
 				authContext.APIKey = apiKey
@@ -118,7 +123,7 @@ func (m *manager) Authenticate(ctx context.Context, apiKey string,
 	// else, use API Key if available
 	if !authAttempted && apiKey != "" {
 		authAttempted = true
-		verifiedClaims, authenticationError = m.verifier.Verify(ctx, apiKey)
+		verifiedClaims, authenticationError = m.keyVerifier.Verify(ctx, apiKey)
 		if authenticationError == nil {
 			log.Debugf("using api key from request")
 			authContext.APIKey = apiKey
@@ -162,7 +167,7 @@ func (m *manager) Authenticate(ctx context.Context, apiKey string,
 }
 
 func (m *manager) start() {
-	m.jwtMan.start()
+	m.jwtVerifier.Start()
 }
 
 // Options allows us to specify options for how this auth manager will run
@@ -173,6 +178,8 @@ type Options struct {
 	APIKeyCacheDuration time.Duration
 	// Org is organization
 	Org string
+	// JWKSProviders
+	JWTProviders []jwt.Provider
 }
 
 func (o *Options) validate() error {
