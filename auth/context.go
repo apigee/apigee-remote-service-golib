@@ -17,7 +17,6 @@ package auth
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -26,22 +25,12 @@ import (
 )
 
 const (
-	apiProductListClaim  = "api_product_list"
-	audienceClaim        = "audience"
-	clientIDClaim        = "client_id"
-	applicationNameClaim = "application_name"
-	scopeClaim           = "scope"
-	expClaim             = "exp"
-	developerEmailClaim  = "developer_email"
-	accessTokenClaim     = "access_token"
-)
-
-var (
-	// AllValidClaims is a list of the claims expected from a JWT token
-	AllValidClaims = []string{
-		apiProductListClaim, audienceClaim, clientIDClaim, applicationNameClaim,
-		scopeClaim, expClaim, developerEmailClaim,
-	}
+	apiProductListKey  = "api_product_list"
+	clientIDKey        = "client_id"
+	applicationNameKey = "application_name"
+	scopeKey           = "scope"
+	developerEmailKey  = "developer_email"
+	accessTokenKey     = "access_token"
 )
 
 // A Context wraps all the various information that is needed to make requests
@@ -58,61 +47,39 @@ type Context struct {
 	APIKey         string
 }
 
-func parseExp(claims map[string]interface{}) (time.Time, error) {
-	// JSON decodes this struct to either float64 or string, so we won't
-	// need to check anything else.
-	switch exp := claims[expClaim].(type) {
-	case float64:
-		return time.Unix(int64(exp), 0), nil
-	case string:
-		var expi int64
-		var err error
-		if expi, err = strconv.ParseInt(exp, 10, 64); err != nil {
-			return time.Time{}, err
-		}
-		return time.Unix(expi, 0), nil
-	}
-	return time.Time{}, fmt.Errorf("unknown type %T for exp %v", claims[expClaim], claims[expClaim])
-}
-
 // if claims can't be processed, returns error and sets no fields
 func (a *Context) setClaims(claims map[string]interface{}) error {
-	if claims[apiProductListClaim] == nil {
+	if claims[apiProductListKey] == nil {
 		return fmt.Errorf("api_product_list claim is required")
 	}
 
-	products, err := parseArrayOfStrings(claims[apiProductListClaim])
+	products, err := parseArrayOfStrings(claims[apiProductListKey])
 	if err != nil {
-		return errors.Wrapf(err, "unable to interpret api_product_list: %v", claims[apiProductListClaim])
+		return errors.Wrapf(err, "unable to interpret api_product_list: %v", claims[apiProductListKey])
 	}
 
-	if _, ok := claims[scopeClaim].(string); !ok {
-		if claims[scopeClaim] == nil { // nil is ok
-			claims[scopeClaim] = ""
+	if _, ok := claims[scopeKey].(string); !ok {
+		if claims[scopeKey] == nil { // nil is ok
+			claims[scopeKey] = ""
 		} else {
-			return fmt.Errorf("unable to interpret %s: %v", scopeClaim, claims[scopeClaim])
+			return fmt.Errorf("unable to interpret %s: %v", scopeKey, claims[scopeKey])
 		}
 	}
-	scopes := strings.Split(claims[scopeClaim].(string), " ")
+	scopes := strings.Split(claims[scopeKey].(string), " ")
 
-	exp, err := parseExp(claims)
-	if err != nil {
-		return err
+	if _, ok := claims[clientIDKey].(string); !ok {
+		return fmt.Errorf("unable to interpret %s: %v", clientIDKey, claims[clientIDKey])
 	}
-
-	if _, ok := claims[clientIDClaim].(string); !ok {
-		return fmt.Errorf("unable to interpret %s: %v", clientIDClaim, claims[clientIDClaim])
+	if _, ok := claims[applicationNameKey].(string); !ok {
+		return fmt.Errorf("unable to interpret %s: %v", applicationNameKey, claims[applicationNameKey])
 	}
-	if _, ok := claims[applicationNameClaim].(string); !ok {
-		return fmt.Errorf("unable to interpret %s: %v", applicationNameClaim, claims[applicationNameClaim])
-	}
-	a.ClientID = claims[clientIDClaim].(string)
-	a.Application = claims[applicationNameClaim].(string)
+	a.ClientID = claims[clientIDKey].(string)
+	a.Application = claims[applicationNameKey].(string)
 	a.APIProducts = products
 	a.Scopes = scopes
-	a.Expires = exp
-	a.DeveloperEmail, _ = claims[developerEmailClaim].(string)
-	a.AccessToken, _ = claims[accessTokenClaim].(string)
+	a.Expires, _ = claims[developerEmailKey].(time.Time)
+	a.DeveloperEmail, _ = claims[developerEmailKey].(string)
+	a.AccessToken, _ = claims[accessTokenKey].(string)
 
 	return nil
 }

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package auth
+package key
 
 import (
 	"crypto/rand"
@@ -20,14 +20,17 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"path"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/apigee/apigee-remote-service-golib/v2/auth/jwt"
 	"github.com/apigee/apigee-remote-service-golib/v2/authtest"
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
-	"github.com/lestrrat-go/jwx/jwt"
+	jwx "github.com/lestrrat-go/jwx/jwt"
 )
 
 var (
@@ -41,30 +44,30 @@ func goodHandler(apiKey string, t *testing.T) http.HandlerFunc {
 		t.Fatal(err)
 	}
 
+	key, err := jwk.New(&privateKey.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := key.Set("kid", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := key.Set("alg", jwa.RS256.String()); err != nil {
+		t.Fatal(err)
+	}
+
+	type JWKS struct {
+		Keys []jwk.Key `json:"keys"`
+	}
+
+	jwks := JWKS{
+		Keys: []jwk.Key{
+			key,
+		},
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, certsPath) {
 			// Handling the JWK verifier
-			key, err := jwk.New(&privateKey.PublicKey)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := key.Set("kid", "1"); err != nil {
-				t.Fatal(err)
-			}
-			if err := key.Set("alg", jwa.RS256.String()); err != nil {
-				t.Fatal(err)
-			}
-
-			type JWKS struct {
-				Keys []jwk.Key `json:"keys"`
-			}
-
-			jwks := JWKS{
-				Keys: []jwk.Key{
-					key,
-				},
-			}
-
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(jwks); err != nil {
 				t.Fatal(err)
@@ -99,18 +102,29 @@ func goodHandler(apiKey string, t *testing.T) http.HandlerFunc {
 
 func generateAPIKeyJWT(privateKey *rsa.PrivateKey) (string, error) {
 
-	token := jwt.New()
-	_ = token.Set(jwt.AudienceKey, "remote-service-client")
-	_ = token.Set(jwt.JwtIDKey, "29e2320b-787c-4625-8599-acc5e05c68d0")
-	_ = token.Set(jwt.IssuerKey, "https://theganyo1-eval-test.apigee.net/remote-service/token")
-	_ = token.Set(jwt.NotBeforeKey, time.Now().Add(-10*time.Minute).Unix())
-	_ = token.Set(jwt.IssuedAtKey, time.Now().Unix())
-	_ = token.Set(jwt.ExpirationKey, (time.Now().Add(50 * time.Millisecond)).Unix())
+	key, err := jwk.New(privateKey)
+	if err != nil {
+		return "", err
+	}
+	if err := key.Set("kid", "1"); err != nil {
+		return "", err
+	}
+	if err := key.Set("alg", jwa.RS256.String()); err != nil {
+		return "", err
+	}
+
+	token := jwx.New()
+	_ = token.Set(jwx.AudienceKey, "remote-service-client")
+	_ = token.Set(jwx.JwtIDKey, "29e2320b-787c-4625-8599-acc5e05c68d0")
+	_ = token.Set(jwx.IssuerKey, "https://theganyo1-eval-test.apigee.net/remote-service/token")
+	_ = token.Set(jwx.NotBeforeKey, time.Now().Add(-10*time.Minute).Unix())
+	_ = token.Set(jwx.IssuedAtKey, time.Now().Unix())
+	_ = token.Set(jwx.ExpirationKey, (time.Now().Add(50 * time.Millisecond)).Unix())
 	_ = token.Set("access_token", "8E7Az3ZgPHKrgzcQA54qAzXT3Z1G")
 	_ = token.Set("client_id", "yBQ5eXZA8rSoipYEi1Rmn0Z8RKtkGI4H")
 	_ = token.Set("application_name", "61cd4d83-06b5-4270-a9ee-cf9255ef45c3")
 	_ = token.Set("api_product_list", []string{"TestProduct"})
-	payload, err := jwt.Sign(token, jwa.RS256, privateKey)
+	payload, err := jwx.Sign(token, jwa.RS256, key)
 
 	return string(payload), err
 }
@@ -124,18 +138,25 @@ func badHandler() http.HandlerFunc {
 	}
 }
 
-func TestVerifyAPIKeyValid(t *testing.T) {
-	jwtMan := newJWTManager()
-	jwtMan.start()
-	defer jwtMan.stop()
-	v := newVerifier(jwtMan, keyVerifierOpts{
-		Client: http.DefaultClient,
-	})
+// note: call Stop() on returned jwt.Verifier
+func testVerifier(t *testing.T, baseURL string, opts VerifierOpts) (Verifier, jwt.Verifier) {
+	jwtVerifier := jwt.NewVerifier(jwt.VerifierOptions{})
+	jwtVerifier.Start()
+	opts.Client = http.DefaultClient
+	opts.JwtVerifier = jwtVerifier
+	jwks, _ := url.Parse(baseURL)
+	jwks.Path = path.Join(jwks.Path, certsPath)
+	return NewVerifier(opts), jwtVerifier
+}
 
+func TestVerifyAPIKeyValid(t *testing.T) {
 	apiKey := "testID"
 
 	ts := httptest.NewServer(goodHandler(apiKey, t))
 	defer ts.Close()
+
+	v, j := testVerifier(t, ts.URL, VerifierOpts{})
+	defer j.Stop()
 
 	ctx := authtest.NewContext(ts.URL)
 
@@ -154,13 +175,6 @@ func TestVerifyAPIKeyValid(t *testing.T) {
 }
 
 func TestVerifyAPIKeyCacheWithClear(t *testing.T) {
-	jwtMan := newJWTManager()
-	jwtMan.start()
-	defer jwtMan.stop()
-	v := newVerifier(jwtMan, keyVerifierOpts{
-		Client: http.DefaultClient,
-	})
-
 	apiKey := "testID"
 
 	// On the first iteration, use a normal HTTP handler that will return good
@@ -178,6 +192,9 @@ func TestVerifyAPIKeyCacheWithClear(t *testing.T) {
 		}
 	}))
 	defer ts.Close()
+
+	v, j := testVerifier(t, ts.URL, VerifierOpts{})
+	defer j.Stop()
 
 	ctx := authtest.NewContext(ts.URL)
 
@@ -197,7 +214,7 @@ func TestVerifyAPIKeyCacheWithClear(t *testing.T) {
 	}
 
 	// Clear the cache.
-	v.(*keyVerifierImpl).cache.RemoveAll()
+	v.(*verifierImpl).cache.RemoveAll()
 
 	if _, err := v.Verify(ctx, apiKey); err == nil {
 		t.Errorf("expected error result on cleared cache")
@@ -205,15 +222,6 @@ func TestVerifyAPIKeyCacheWithClear(t *testing.T) {
 }
 
 func TestVerifyAPIKeyCacheWithExpiry(t *testing.T) {
-	jwtMan := newJWTManager()
-	jwtMan.start()
-	defer jwtMan.stop()
-	v := newVerifier(jwtMan, keyVerifierOpts{
-		CacheTTL:              50 * time.Millisecond,
-		CacheEvictionInterval: 50 * time.Millisecond,
-		Client:                http.DefaultClient,
-	})
-
 	apiKey := "testID"
 
 	// On the first iteration, use a normal HTTP handler that will return good
@@ -236,6 +244,13 @@ func TestVerifyAPIKeyCacheWithExpiry(t *testing.T) {
 		}
 	}))
 	defer ts.Close()
+
+	v, j := testVerifier(t, ts.URL, VerifierOpts{
+		CacheTTL:              50 * time.Millisecond,
+		CacheEvictionInterval: 50 * time.Millisecond,
+		Client:                http.DefaultClient,
+	})
+	defer j.Stop()
 
 	ctx := authtest.NewContext(ts.URL)
 
@@ -265,15 +280,11 @@ func TestVerifyAPIKeyCacheWithExpiry(t *testing.T) {
 }
 
 func TestVerifyAPIKeyFail(t *testing.T) {
-	jwtMan := newJWTManager()
-	jwtMan.start()
-	defer jwtMan.stop()
-	v := newVerifier(jwtMan, keyVerifierOpts{
-		Client: http.DefaultClient,
-	})
-
 	ts := httptest.NewServer(badHandler())
 	defer ts.Close()
+
+	v, j := testVerifier(t, ts.URL, VerifierOpts{})
+	defer j.Stop()
 
 	ctx := authtest.NewContext(ts.URL)
 	success, err := v.Verify(ctx, "badKey")
@@ -289,56 +300,9 @@ func TestVerifyAPIKeyFail(t *testing.T) {
 	}
 }
 
-func TestVerifyAPIKeyBadExpiration(t *testing.T) {
-	jwtMan := newJWTManager()
-	jwtMan.start()
-	defer jwtMan.stop()
-	v := newVerifier(jwtMan, keyVerifierOpts{
-		Client: http.DefaultClient,
-	})
-
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatal(err)
-	}
-	token := jwt.New()
-	payload, err := jwt.Sign(token, jwa.RS256, privateKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	jwtResponse := APIKeyResponse{Token: string(payload)}
-
-	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(200)
-		_ = json.NewEncoder(w).Encode(jwtResponse)
-	}
-
-	ts := httptest.NewServer(handler)
-	defer ts.Close()
-
-	ctx := authtest.NewContext(ts.URL)
-	success, err := v.Verify(ctx, "badKey")
-
-	if success != nil {
-		t.Errorf("success should be nil, is: %v", success)
-	}
-
-	want := "bad exp: unknown type <nil> for exp <nil>"
-	if err == nil {
-		t.Errorf("error should not be nil")
-	} else if err.Error() != want {
-		t.Errorf("got error: '%s', expected: '%s'", err.Error(), want)
-	}
-}
-
 func TestVerifyAPIKeyError(t *testing.T) {
-	jwtMan := newJWTManager()
-	jwtMan.start()
-	defer jwtMan.stop()
-	v := newVerifier(jwtMan, keyVerifierOpts{
-		Client: http.DefaultClient,
-	})
+	v, j := testVerifier(t, "", VerifierOpts{})
+	defer j.Stop()
 
 	ctx := authtest.NewContext("")
 	success, err := v.Verify(ctx, "badKey")
@@ -353,12 +317,8 @@ func TestVerifyAPIKeyError(t *testing.T) {
 }
 
 func TestVerifyAPIKeyCallFail(t *testing.T) {
-	jwtMan := newJWTManager()
-	jwtMan.start()
-	defer jwtMan.stop()
-	v := newVerifier(jwtMan, keyVerifierOpts{
-		Client: http.DefaultClient,
-	})
+	v, j := testVerifier(t, "", VerifierOpts{})
+	defer j.Stop()
 
 	ctx := authtest.NewContext("http://badhost/badpath")
 	success, err := v.Verify(ctx, "badKey")

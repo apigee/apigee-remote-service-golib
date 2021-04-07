@@ -20,8 +20,8 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/apigee/apigee-remote-service-golib/v2/errorset"
 	"github.com/apigee/apigee-remote-service-golib/v2/log"
-	"github.com/hashicorp/go-multierror"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -54,7 +54,7 @@ func (m *manager) getFilesInStaging() ([]string, error) {
 
 		stagedFiles, err := os.ReadDir(tenantDirPath)
 		if err != nil {
-			errs = multierror.Append(errs, fmt.Errorf("ls %s: %s", tenantDirPath, err))
+			errs = errorset.Append(errs, fmt.Errorf("ls %s: %s", tenantDirPath, err))
 			continue
 		}
 

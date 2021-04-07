@@ -16,65 +16,36 @@ package auth
 
 import (
 	"reflect"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lestrrat-go/jwx/jwt"
 )
-
-func TestParseExp(t *testing.T) {
-	now := time.Unix(time.Now().Unix(), 0)
-
-	claims := map[string]interface{}{
-		expClaim: float64(now.Unix()),
-	}
-	exp, err := parseExp(claims)
-	if err != nil {
-		t.Errorf("parseExp: %v", err)
-	}
-	if exp != now {
-		t.Errorf("parseExp float got: %v, want: %v", exp, now)
-	}
-
-	claims[expClaim] = strconv.FormatInt(time.Now().Unix(), 10)
-	exp, err = parseExp(claims)
-	if err != nil {
-		t.Errorf("parseExp: %v", err)
-	}
-	if exp != now {
-		t.Errorf("parseExp string got: %v, want: %v", exp, now)
-	}
-
-	claims[expClaim] = "badexp"
-	_, err = parseExp(claims)
-	if err == nil {
-		t.Error("parseExp should have gotten an error")
-	}
-}
 
 func TestSetClaims(t *testing.T) {
 	c := Context{}
 	now := time.Unix(time.Now().Unix(), 0)
 	claims := map[string]interface{}{
-		apiProductListClaim:  time.Now(),
-		audienceClaim:        "aud",
-		clientIDClaim:        nil,
-		applicationNameClaim: "app",
-		scopeClaim:           nil,
-		expClaim:             float64(now.Unix()),
-		developerEmailClaim:  "email",
+		jwt.AudienceKey:    "aud",
+		jwt.ExpirationKey:  float64(now.Unix()),
+		apiProductListKey:  time.Now(),
+		clientIDKey:        nil,
+		applicationNameKey: "app",
+		scopeKey:           nil,
+		developerEmailKey:  "email",
 	}
 	if err := c.setClaims(claims); err == nil {
 		t.Errorf("setClaims without client_id should get error")
 	}
 
-	claims[clientIDClaim] = "clientID"
+	claims[clientIDKey] = "clientID"
 	if err := c.setClaims(claims); err == nil {
 		t.Errorf("bad product list should error")
 	}
 
 	productsWant := []string{"product 1", "product 2"}
-	claims[apiProductListClaim] = `["product 1", "product 2"]`
+	claims[apiProductListKey] = `["product 1", "product 2"]`
 	if err := c.setClaims(claims); err != nil {
 		t.Errorf("valid setClaims, got: %v", err)
 	}
@@ -83,12 +54,12 @@ func TestSetClaims(t *testing.T) {
 	}
 
 	claimsWant := []string{"scope1", "scope2"}
-	claims[scopeClaim] = "scope1 scope2"
+	claims[scopeKey] = "scope1 scope2"
 	if err := c.setClaims(claims); err != nil {
 		t.Errorf("valid setClaims, got: %v", err)
 	}
 	if !reflect.DeepEqual(claimsWant, c.Scopes) {
-		t.Errorf("claims want: %s, got: %v", claimsWant, claims[scopeClaim])
+		t.Errorf("claims want: %s, got: %v", claimsWant, claims[scopeKey])
 	}
 }
 
