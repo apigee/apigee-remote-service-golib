@@ -12,16 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package classification
+package path_test
 
 import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/apigee/apigee-remote-service-golib/v2/path"
 )
 
 func TestTree(t *testing.T) {
-	tree := NewTree()
+	tree := path.NewTree()
 	add := []struct {
 		path  string
 		value string
@@ -83,7 +85,7 @@ func TestTree(t *testing.T) {
 }
 
 func TestTreeEmpty(t *testing.T) {
-	tree := NewTree()
+	tree := path.NewTree()
 	got := tree.Find([]string{""}, 0)
 	if got != nil {
 		t.Errorf("got: %v, want: %v", got, nil)
@@ -104,7 +106,7 @@ func TestTreeEmpty(t *testing.T) {
 }
 
 func TestTreeSkipEmpty(t *testing.T) {
-	tree := NewTree()
+	tree := path.NewTree()
 	tree.AddChild([]string{"a", "", "b"}, 0, "y")
 	want := "y"
 	got := tree.Find([]string{"a", "b"}, 0)
@@ -118,7 +120,7 @@ func TestTreeSkipEmpty(t *testing.T) {
 }
 
 func TestTreeTooShort(t *testing.T) {
-	tree := NewTree()
+	tree := path.NewTree()
 	tree.AddChild([]string{"a", "b"}, 0, "x")
 	got := tree.Find([]string{"a", "b"}, 2)
 	if got != nil {
@@ -127,7 +129,7 @@ func TestTreeTooShort(t *testing.T) {
 }
 
 func TestTreeString(t *testing.T) {
-	tree := NewTree()
+	tree := path.NewTree()
 	tree.AddChild([]string{"a", "b"}, 0, "x")
 	tree.AddChild([]string{"a", "c"}, 0, "y")
 	got := fmt.Sprintf("%s", tree)

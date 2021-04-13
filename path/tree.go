@@ -12,30 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package classification
+package path
 
 import (
 	"fmt"
 	"strings"
 )
 
-// NewTree creates a new tree root.
+// NewTree creates a new Tree.
 func NewTree() Tree {
 	return &tree{}
 }
 
-// Tree searches for a path match using a "best match" strategy
+// A Tree searches for a path match using a "best match" strategy
 // where best match is the greatest number of path segments matched.
+// The matcher supports wildcard ("*") and double wildcard ("**")
+// path segments anywhere in the path (but not partial segments).
+// Empty path elements are ignored.
 type Tree interface {
 
 	// AddChild appends a child tree expressed by the path at the index provided.
 	// Any existing value will be replaced and the prior value will be returned.
-	// Empty path elements are ignored.
 	AddChild(path []string, index int, value interface{}) interface{}
 
 	// Find the value stored at subpath starting from given index in the path array.
-	// The matcher supports wildcard ("*") and double wildcard ("**")
-	// path segments anywhere in the path (but not partial segments).
 	Find(path []string, index int) interface{}
 }
 
@@ -48,6 +48,44 @@ type tree struct {
 	name     string
 	value    interface{}
 	children map[interface{}]interface{}
+}
+
+// AddChild appends a child tree expressed by the path at the index provided.
+// Any existing value will be replaced and the prior value will be returned.
+func (t *tree) AddChild(path []string, index int, value interface{}) interface{} {
+	if index >= len(path) {
+		old := t.value
+		t.value = value
+		return old
+	}
+	name := path[index]
+	if name == "" { // skip empty
+		return t.AddChild(path, 1+index, value)
+	}
+
+	node, ok := t.children[name]
+	if !ok {
+		node = &tree{name: name}
+		if t.children == nil {
+			t.children = make(map[interface{}]interface{})
+		}
+		t.children[name] = node
+	}
+	return node.(*tree).AddChild(path, 1+index, value)
+}
+
+// String returns a string representation of the tree.
+func (t *tree) String() string {
+	b := &strings.Builder{}
+	t.string(b, "")
+	return b.String()
+}
+
+func (t *tree) string(b *strings.Builder, indent string) {
+	b.WriteString(fmt.Sprintf("%sname: %v, value: %v\n", indent, t.name, t.value))
+	for _, val := range t.children {
+		val.(*tree).string(b, indent+"  ")
+	}
 }
 
 // Find the value stored at subpath starting from given index in the path array.
@@ -118,43 +156,4 @@ func (t *tree) findAnyInPath(path []string, index, matchCount int) (*tree, int) 
 		}
 	}
 	return t, matchCount
-}
-
-// AddChild appends a child tree expressed by the path at the index provided.
-// Any existing value will be replaced and the prior value will be returned.
-// Empty path elements are ignored.
-func (t *tree) AddChild(path []string, index int, value interface{}) interface{} {
-	if index >= len(path) {
-		old := t.value
-		t.value = value
-		return old
-	}
-	name := path[index]
-	if name == "" { // skip empty
-		return t.AddChild(path, 1+index, value)
-	}
-
-	node, ok := t.children[name]
-	if !ok {
-		node = &tree{name: name}
-		if t.children == nil {
-			t.children = make(map[interface{}]interface{})
-		}
-		t.children[name] = node
-	}
-	return node.(*tree).AddChild(path, 1+index, value)
-}
-
-// String returns a string representation of the tree.
-func (t *tree) String() string {
-	b := &strings.Builder{}
-	t.string(b, "")
-	return b.String()
-}
-
-func (t *tree) string(b *strings.Builder, indent string) {
-	b.WriteString(fmt.Sprintf("%sname: %v, value: %v\n", indent, t.name, t.value))
-	for _, val := range t.children {
-		val.(*tree).string(b, indent+"  ")
-	}
 }
