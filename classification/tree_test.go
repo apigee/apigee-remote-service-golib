@@ -15,6 +15,7 @@
 package classification
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -78,5 +79,64 @@ func TestTree(t *testing.T) {
 		if test.value != got {
 			t.Errorf("for: %v, want: %v, got: %v", test.path, test.value, got)
 		}
+	}
+}
+
+func TestTreeEmpty(t *testing.T) {
+	tree := NewTree()
+	got := tree.Find([]string{""}, 0)
+	if got != nil {
+		t.Errorf("got: %v, want: %v", got, nil)
+	}
+	got = tree.Find([]string{"a", "b"}, 0)
+	if got != nil {
+		t.Errorf("got: %v, want: %v", got, nil)
+	}
+	tree.AddChild([]string{"a"}, 0, nil)
+	got = tree.Find([]string{""}, 0)
+	if got != nil {
+		t.Errorf("got: %v, want: %v", got, nil)
+	}
+	got = tree.Find([]string{"a"}, 0)
+	if got != nil {
+		t.Errorf("got: %v, want: %v", got, nil)
+	}
+}
+
+func TestTreeSkipEmpty(t *testing.T) {
+	tree := NewTree()
+	tree.AddChild([]string{"a", "", "b"}, 0, "y")
+	want := "y"
+	got := tree.Find([]string{"a", "b"}, 0)
+	if got != want {
+		t.Errorf("got: %v, want: %v", got, want)
+	}
+	got = tree.Find([]string{"a", "", "b"}, 0)
+	if got != want {
+		t.Errorf("got: %v, want: %v", got, want)
+	}
+}
+
+func TestTreeTooShort(t *testing.T) {
+	tree := NewTree()
+	tree.AddChild([]string{"a", "b"}, 0, "x")
+	got := tree.Find([]string{"a", "b"}, 2)
+	if got != nil {
+		t.Errorf("got: %v, want: %v", got, nil)
+	}
+}
+
+func TestTreeString(t *testing.T) {
+	tree := NewTree()
+	tree.AddChild([]string{"a", "b"}, 0, "x")
+	tree.AddChild([]string{"a", "c"}, 0, "y")
+	got := fmt.Sprintf("%s", tree)
+	want := `name: , value: <nil>
+  name: a, value: <nil>
+    name: b, value: x
+    name: c, value: y
+`
+	if got != want {
+		t.Errorf("\ngot: %s\nwant: %s", got, want)
 	}
 }

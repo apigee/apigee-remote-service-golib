@@ -153,10 +153,8 @@ func (t *tree) String() string {
 }
 
 func (t *tree) string(b *strings.Builder, indent string) {
-	b.WriteString(fmt.Sprintf("%s  name: %v, value: %v\n", indent, t.name, t.value))
-	if t.name != "" {
-		for _, val := range t.children {
-			val.(*tree).string(b, indent+"  ")
-		}
+	b.WriteString(fmt.Sprintf("%sname: %v, value: %v\n", indent, t.name, t.value))
+	for _, val := range t.children {
+		val.(*tree).string(b, indent+"  ")
 	}
 }
