@@ -80,6 +80,7 @@ func TestAuthorize(t *testing.T) {
 	}
 
 	testCases := []struct {
+		name        string
 		ctx         *auth.Context
 		productsMap map[string]*APIProduct
 		api         string
@@ -90,6 +91,7 @@ func TestAuthorize(t *testing.T) {
 		wantAuthOp  *AuthorizedOperation
 	}{
 		{ // good
+			name: "good",
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "prod"},
 				APIProducts: []string{"Name 1", "Name 2", "Name 3", "Invalid"},
@@ -118,6 +120,7 @@ func TestAuthorize(t *testing.T) {
 				`,
 		},
 		{ // specific path
+			name: "specific path",
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "prod"},
 				APIProducts: []string{"Name 1", "Name 2", "Name 3", "Invalid"},
@@ -146,6 +149,7 @@ func TestAuthorize(t *testing.T) {
 				`,
 		},
 		{ // bad api
+			name: "bad api",
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "prod"},
 				APIProducts: []string{"Name 1", "Name 2", "Name 3", "Invalid"},
@@ -174,6 +178,7 @@ func TestAuthorize(t *testing.T) {
 				`,
 		},
 		{ // specific scope
+			name: "specific scope",
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "prod"},
 				APIProducts: []string{"Name 1", "Name 2", "Name 3", "Invalid"},
@@ -206,6 +211,7 @@ func TestAuthorize(t *testing.T) {
 				`,
 		},
 		{ // specifc product
+			name: "specific product",
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "prod"},
 				APIProducts: []string{"Name 1"},
@@ -228,6 +234,7 @@ func TestAuthorize(t *testing.T) {
 			`,
 		},
 		{ // API key - no scopes required!
+			name: "api key",
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "prod"},
 				APIProducts: []string{"Name 1", "Name 2", "Name 3"},
@@ -259,6 +266,7 @@ func TestAuthorize(t *testing.T) {
 				`,
 		},
 		{ // API key - no scopes required!
+			name: "api key 2",
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "prod"},
 				APIProducts: []string{"Name 1", "Name 2", "Name 3"},
@@ -286,6 +294,7 @@ func TestAuthorize(t *testing.T) {
 				`,
 		},
 		{ // invalid environment
+			name: "invalid environment",
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "test"},
 				APIProducts: []string{"Name 1", "Name 2", "Name 3"},
@@ -314,18 +323,18 @@ func TestAuthorize(t *testing.T) {
 		},
 	}
 
-	for i, tc := range testCases {
+	for _, tc := range testCases {
 		apis, hints := authorize(tc.ctx, tc.productsMap, tc.api, tc.path, tc.method, true)
 		if len(apis) != tc.wantAPIsLen {
-			t.Errorf("test %d: number of apis wrong; want: %d, got: %d", i, tc.wantAPIsLen, len(apis))
+			t.Errorf("test '%s': number of apis wrong; want: %d, got: %d", tc.name, tc.wantAPIsLen, len(apis))
 		} else if tc.wantAuthOp != nil {
 			got := apis[0]
 			if !reflect.DeepEqual(*tc.wantAuthOp, got) {
-				t.Errorf("test %d: \nwant: %v\n got: %v", i, tc.wantAuthOp, got)
+				t.Errorf("test '%s': \nwant: %v\n got: %v", tc.name, tc.wantAuthOp, got)
 			}
 		}
 		if noSymbols(tc.wantHints) != noSymbols(hints) {
-			t.Errorf("test %d: want: '%s', got: '%s'", i, tc.wantHints, hints)
+			t.Errorf("test '%s': want: '%s', got: '%s'", tc.name, tc.wantHints, hints)
 		}
 	}
 }
@@ -422,6 +431,7 @@ func TestAuthorizeOperations(t *testing.T) {
 	}
 
 	testCases := []struct {
+		name        string
 		ctx         *auth.Context
 		productsMap map[string]*APIProduct
 		api         string
@@ -434,6 +444,7 @@ func TestAuthorizeOperations(t *testing.T) {
 		wantAuthOp  *AuthorizedOperation
 	}{
 		{ // good
+			name: "good",
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "prod"},
 				APIProducts: []string{"Name 1", "Name 2", "Invalid"},
@@ -458,7 +469,7 @@ func TestAuthorizeOperations(t *testing.T) {
 					0: authorized
 			- product: Name 2
 				operation configs:
-					0: no path: /operation1
+					0: no operation: GET /operation1
 					1: no api: host
 					2: no api: host
 			- product: Invalid
@@ -466,6 +477,7 @@ func TestAuthorizeOperations(t *testing.T) {
 				`,
 		},
 		{ // quota override
+			name: "quota override",
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "prod"},
 				APIProducts: []string{"Name 1", "Name 2", "Invalid"},
@@ -487,7 +499,7 @@ func TestAuthorizeOperations(t *testing.T) {
 			api: host
 			- product: Name 1
 				operation configs:
-					0: no path: /operation2
+					0: no operation: GET /operation2
 			- product: Name 2
 				operation configs:
 					0: authorized
@@ -498,6 +510,7 @@ func TestAuthorizeOperations(t *testing.T) {
 				`,
 		},
 		{ // no method
+			name: "no method",
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "prod"},
 				APIProducts: []string{"Name 1", "Name 2", "Invalid"},
@@ -517,10 +530,10 @@ func TestAuthorizeOperations(t *testing.T) {
 			api: host
 			- product: Name 1
 				operation configs:
-					0: no method: POST
+					0: no operation: POST /operation2
 			- product: Name 2
 				operation configs:
-					0: no method: POST
+					0: no operation: POST /operation2
 					1: no api: host
 					2: no api: host
 			- product: Invalid
@@ -528,6 +541,7 @@ func TestAuthorizeOperations(t *testing.T) {
 				`,
 		},
 		{ // all methods allowed if none specified
+			name: "all allowed",
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "prod"},
 				APIProducts: []string{"Name 1", "Name 2", "Invalid"},
@@ -560,6 +574,7 @@ func TestAuthorizeOperations(t *testing.T) {
 				`,
 		},
 		{ // no api
+			name: "no api",
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "prod"},
 				APIProducts: []string{"Name 1", "Name 2", "Invalid"},
@@ -591,26 +606,26 @@ func TestAuthorizeOperations(t *testing.T) {
 		},
 	}
 
-	for i, tc := range testCases {
+	for _, tc := range testCases {
 		apis, hints := authorize(tc.ctx, tc.productsMap, tc.api, tc.path, tc.method, true)
 		if len(apis) != tc.wantAPIsLen {
-			t.Errorf("test %d: number of apis wrong; want: %d, got: %d", i, tc.wantAPIsLen, len(apis))
+			t.Errorf("test '%s': number of apis wrong; want: %d, got: %d", tc.name, tc.wantAPIsLen, len(apis))
 		} else if tc.wantQuota != nil {
 			if tc.wantAPIID != apis[0].ID {
-				t.Errorf("test %d: want: '%s', got: '%s'", i, tc.wantAPIID, apis[0].ID)
+				t.Errorf("test '%s': want: '%s', got: '%s'", tc.name, tc.wantAPIID, apis[0].ID)
 			}
 			if tc.wantQuota.TimeUnit != apis[0].QuotaTimeUnit {
-				t.Errorf("test %d: want: '%s', got: '%s'", i, tc.wantQuota.TimeUnit, apis[0].QuotaTimeUnit)
+				t.Errorf("test '%s': want: '%s', got: '%s'", tc.name, tc.wantQuota.TimeUnit, apis[0].QuotaTimeUnit)
 			}
 			if tc.wantQuota.IntervalInt != apis[0].QuotaInterval {
-				t.Errorf("test %d: want: '%d', got: '%d'", i, tc.wantQuota.IntervalInt, apis[0].QuotaInterval)
+				t.Errorf("test '%s': want: '%d', got: '%d'", tc.name, tc.wantQuota.IntervalInt, apis[0].QuotaInterval)
 			}
 			if tc.wantQuota.LimitInt != apis[0].QuotaLimit {
-				t.Errorf("test %d: want: '%d', got: '%d'", i, tc.wantQuota.LimitInt, apis[0].QuotaLimit)
+				t.Errorf("test '%s': want: '%d', got: '%d'", tc.name, tc.wantQuota.LimitInt, apis[0].QuotaLimit)
 			}
 		}
 		if noSymbols(tc.wantHints) != noSymbols(hints) {
-			t.Errorf("test %d: want: '%s', got: '%s'", i, tc.wantHints, hints)
+			t.Errorf("test '%s': want: '%s', got: '%s'", tc.name, tc.wantHints, hints)
 		}
 	}
 }
