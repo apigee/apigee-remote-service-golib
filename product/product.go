@@ -101,7 +101,7 @@ func (oc *OperationConfig) UnmarshalJSON(data []byte) error {
 		resourcePath := makeChildPath(op.Resource)
 		for _, method := range methods {
 			fullPath := append([]string{method}, resourcePath...)
-			oc.PathTree.AddChild(fullPath, 0, "x")
+			oc.PathTree.AddChild(fullPath, 0, "x") // value doesn't matter
 		}
 	}
 
@@ -262,7 +262,7 @@ func (p *APIProduct) UnmarshalJSON(data []byte) error {
 	p.PathTree = path.NewTree()
 	for _, resource := range p.Resources {
 		fullPath := makeChildPath(resource)
-		p.PathTree.AddChild(fullPath, 0, "x")
+		p.PathTree.AddChild(fullPath, 0, "x") // value doesn't matter
 	}
 
 	return nil
@@ -347,7 +347,12 @@ func (p *APIProduct) authorize(authContext *auth.Context, api, path, method stri
 func (p *APIProduct) isValidOperation(api, path string, hints bool) (valid bool, hint string) {
 	for _, v := range p.APIs {
 		if v == api {
-			resourcePath := strings.Split(path, "/")
+			var resourcePath []string
+			if path == "/" {
+				resourcePath = []string{"/"}
+			} else {
+				resourcePath = strings.Split(path, "/")
+			}
 			valid = p.PathTree.Find(resourcePath, 0) != nil
 			if hints {
 				hint = fmt.Sprintf("    no path: %s\n", path)

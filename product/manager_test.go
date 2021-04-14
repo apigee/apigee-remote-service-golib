@@ -387,7 +387,7 @@ func TestBadResponseCode(t *testing.T) {
 func TestBadResponseBody(t *testing.T) {
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("hi"))
+		_, _ = w.Write([]byte("bad response"))
 	}))
 	defer ts.Close()
 
@@ -409,7 +409,7 @@ func TestBadResponseBody(t *testing.T) {
 	if err == nil {
 		t.Error("should have received error")
 	}
-	if !strings.Contains(err.Error(), "invalid character 'h' looking for beginning of value") {
-		t.Errorf("want 'invalid character 'h' looking for beginning of value got %v", err)
+	if !strings.Contains(err.Error(), "invalid character 'b' looking for beginning of value") {
+		t.Errorf("want 'invalid character 'b' looking for beginning of value got %v", err)
 	}
 }
