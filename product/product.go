@@ -18,13 +18,13 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/auth"
 	"github.com/apigee/apigee-remote-service-golib/v2/log"
+	"github.com/apigee/apigee-remote-service-golib/v2/path"
 )
 
 // APIResponse is the response from the Apigee products API
@@ -51,7 +51,7 @@ type APIProduct struct {
 	EnvironmentMap   map[string]struct{}
 	QuotaLimitInt    int64
 	QuotaIntervalInt int64
-	resourceRegexps  []*regexp.Regexp // APIProduct-level only
+	PathTree         path.Tree // APIProduct-level only
 }
 
 // An Attribute is a name-value-pair attribute of an API product.
@@ -68,12 +68,12 @@ type OperationGroup struct {
 
 // An OperationConfig is a group of Operations
 type OperationConfig struct {
-	ID                      string      `json:"-"`
-	APISource               string      `json:"apiSource"`
-	Attributes              []Attribute `json:"attributes,omitempty"`
-	Operations              []Operation `json:"operations"`
-	Quota                   *Quota      `json:"quota"`
-	resourceRegexpsByMethod map[string][]*regexp.Regexp
+	ID         string      `json:"-"`
+	APISource  string      `json:"apiSource"`
+	Attributes []Attribute `json:"attributes,omitempty"`
+	Operations []Operation `json:"operations"`
+	Quota      *Quota      `json:"quota"`
+	PathTree   path.Tree
 }
 
 // list of all HTTP verbs
@@ -88,23 +88,20 @@ func (oc *OperationConfig) UnmarshalJSON(data []byte) error {
 	}
 	*oc = OperationConfig(un)
 
-	oc.resourceRegexpsByMethod = map[string][]*regexp.Regexp{}
+	oc.PathTree = path.NewTree()
 	for i, op := range oc.Operations {
 		// sort operation's methods lexicographically to make sure
 		// the later hashing always yields consistent results
 		sort.Strings(oc.Operations[i].Methods)
 
-		reg, err := makeResourceRegex(op.Resource)
-		if err != nil {
-			log.Errorf("unable to create resource matcher: %#v", op.Resource)
-			continue
-		}
 		methods := op.Methods
 		if len(methods) == 0 { // no method in the operation means all methods are allowed
 			methods = allMethods
 		}
+		resourcePath := makeChildPath(op.Resource)
 		for _, method := range methods {
-			oc.resourceRegexpsByMethod[method] = append(oc.resourceRegexpsByMethod[method], reg)
+			fullPath := append([]string{method}, resourcePath...)
+			oc.PathTree.AddChild(fullPath, 0, "x") // value doesn't matter
 		}
 	}
 
@@ -126,21 +123,11 @@ func (oc *OperationConfig) isValidOperation(api, path, method string, hints bool
 		}
 		return
 	}
-	regexps, ok := oc.resourceRegexpsByMethod[method]
-	if !ok {
-		if hints {
-			hint = fmt.Sprintf("no method: %s", method)
-		}
-		return
-	}
-	for _, regexp := range regexps {
-		if regexp.MatchString(path) {
-			valid = true
-			break
-		}
-	}
+	resourcePath := strings.Split(path, "/")
+	fullPath := append([]string{method}, resourcePath...)
+	valid = oc.PathTree.Find(fullPath, 0) != nil
 	if !valid && hints {
-		hint = fmt.Sprintf("no path: %s", path)
+		hint = fmt.Sprintf("no operation: %s %s", method, path)
 	}
 	return
 }
@@ -272,13 +259,10 @@ func (p *APIProduct) UnmarshalJSON(data []byte) error {
 		}
 	}
 
+	p.PathTree = path.NewTree()
 	for _, resource := range p.Resources {
-		reg, err := makeResourceRegex(resource)
-		if err != nil {
-			log.Errorf("unable to create resource matcher: %#v", p)
-			continue
-		}
-		p.resourceRegexps = append(p.resourceRegexps, reg)
+		fullPath := makeChildPath(resource)
+		p.PathTree.AddChild(fullPath, 0, "x") // value doesn't matter
 	}
 
 	return nil
@@ -363,12 +347,13 @@ func (p *APIProduct) authorize(authContext *auth.Context, api, path, method stri
 func (p *APIProduct) isValidOperation(api, path string, hints bool) (valid bool, hint string) {
 	for _, v := range p.APIs {
 		if v == api {
-			for _, reg := range p.resourceRegexps {
-				if reg.MatchString(path) {
-					valid = true
-					return
-				}
+			var resourcePath []string
+			if path == "/" {
+				resourcePath = []string{"/"}
+			} else {
+				resourcePath = strings.Split(path, "/")
 			}
+			valid = p.PathTree.Find(resourcePath, 0) != nil
 			if hints {
 				hint = fmt.Sprintf("    no path: %s\n", path)
 			}
@@ -397,36 +382,12 @@ func (p *APIProduct) isValidScopes(ac *auth.Context) bool {
 	return false
 }
 
-// - A single slash by itself matches any path
-// - * is valid anywhere and matches within a segment (between slashes)
-// - ** is valid only at the end and matches anything to EOL
-func makeResourceRegex(resource string) (*regexp.Regexp, error) {
-
+// A single slash by itself matches any path
+func makeChildPath(resource string) []string {
 	if resource == "/" {
-		return regexp.Compile(".*")
+		resource = "/**"
 	}
-
-	// only allow ** as suffix
-	doubleStarIndex := strings.Index(resource, "**")
-	if doubleStarIndex >= 0 && doubleStarIndex != len(resource)-2 {
-		return nil, fmt.Errorf("bad resource specification")
-	}
-
-	// remove ** suffix if exists
-	pattern := resource
-	if doubleStarIndex >= 0 {
-		pattern = pattern[:len(pattern)-2]
-	}
-
-	// let * = any non-slash
-	pattern = strings.Replace(pattern, "*", "[^/]*", -1)
-
-	// if ** suffix, allow anything at end
-	if doubleStarIndex >= 0 {
-		pattern = pattern + ".*"
-	}
-
-	return regexp.Compile("^" + pattern + "$")
+	return strings.Split(resource, "/")
 }
 
 // md5hash returns a md5 signature based on oc.APISource and oc.Operations
