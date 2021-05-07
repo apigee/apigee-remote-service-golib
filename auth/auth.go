@@ -33,7 +33,8 @@ import (
 // A Manager wraps all things related to auth processing
 type Manager interface {
 	Close()
-	Authenticate(ctx context.Context, apiKey string, claims map[string]interface{}, apiKeyClaimKey string) (*Context, error)
+	Authenticate(ctx context.Context, apiKey string, claims map[string]interface{}, apiKeyClaimKey string) (authContext *Context, err error)
+	ParseJWT(jwtString string, provider jwt.Provider) (claims map[string]interface{}, err error)
 }
 
 // ErrNoAuth is an error because of missing auth
@@ -164,6 +165,10 @@ func (m *manager) Authenticate(ctx context.Context, apiKey string,
 	}
 
 	return authContext, authenticationError
+}
+
+func (m *manager) ParseJWT(jwtString string, provider jwt.Provider) (map[string]interface{}, error) {
+	return m.jwtVerifier.Parse(jwtString, provider)
 }
 
 func (m *manager) start() {
