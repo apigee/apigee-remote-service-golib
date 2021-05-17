@@ -246,8 +246,8 @@ func TestVerifyAPIKeyCacheWithExpiry(t *testing.T) {
 	defer ts.Close()
 
 	v, j := testVerifier(t, ts.URL, VerifierOpts{
-		CacheTTL:              time.Second,
-		CacheEvictionInterval: time.Second,
+		CacheTTL:              100 * time.Millisecond,
+		CacheEvictionInterval: 100 * time.Millisecond,
 		Client:                http.DefaultClient,
 	})
 	defer j.Stop()
