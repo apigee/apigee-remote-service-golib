@@ -295,8 +295,8 @@ func TestVerifyAPIKeyFail(t *testing.T) {
 
 	if err == nil {
 		t.Errorf("error should not be nil")
-	} else if err.Error() != ErrBadAuth.Error() {
-		t.Errorf("got error: '%s', expected: '%s'", err.Error(), ErrBadAuth.Error())
+	} else if err.Error() != ErrBadKeyAuth.Error() {
+		t.Errorf("got error: '%s', expected: '%s'", err.Error(), ErrBadKeyAuth.Error())
 	}
 }
 
