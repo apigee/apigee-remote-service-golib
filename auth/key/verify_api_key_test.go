@@ -246,8 +246,8 @@ func TestVerifyAPIKeyCacheWithExpiry(t *testing.T) {
 	defer ts.Close()
 
 	v, j := testVerifier(t, ts.URL, VerifierOpts{
-		CacheTTL:              50 * time.Millisecond,
-		CacheEvictionInterval: 50 * time.Millisecond,
+		CacheTTL:              100 * time.Millisecond,
+		CacheEvictionInterval: 100 * time.Millisecond,
 		Client:                http.DefaultClient,
 	})
 	defer j.Stop()
@@ -295,8 +295,8 @@ func TestVerifyAPIKeyFail(t *testing.T) {
 
 	if err == nil {
 		t.Errorf("error should not be nil")
-	} else if err.Error() != ErrBadAuth.Error() {
-		t.Errorf("got error: '%s', expected: '%s'", err.Error(), ErrBadAuth.Error())
+	} else if err.Error() != ErrBadKeyAuth.Error() {
+		t.Errorf("got error: '%s', expected: '%s'", err.Error(), ErrBadKeyAuth.Error())
 	}
 }
 

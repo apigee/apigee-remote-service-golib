@@ -51,9 +51,10 @@ const (
 	defaultBadEntryCacheTTL      = 10 * time.Second
 )
 
-var ErrBadAuth = errors.New("permission denied")
+// ErrBadKeyAuth will be translated into auth.ErrBadAuth for external consumption.
+var ErrBadKeyAuth = errors.New("api key permission denied")
 
-// keyVerifier encapsulates API key verification logic.
+// Verifier encapsulates API key verification logic.
 type Verifier interface {
 	Verify(ctx context.Context, apiKey string) (map[string]interface{}, error)
 }
@@ -150,9 +151,9 @@ func (kv *verifierImpl) fetchToken(ctx context.Context, apiKey string) (map[stri
 
 	token := apiKeyResp.Token
 	if token == "" { // bad API Key
-		kv.knownBad.Set(apiKey, ErrBadAuth)
+		kv.knownBad.Set(apiKey, ErrBadKeyAuth)
 		kv.cache.Remove(apiKey)
-		return nil, ErrBadAuth
+		return nil, ErrBadKeyAuth
 	}
 
 	// Parse will not verify empty provider
@@ -208,7 +209,7 @@ func (kv *verifierImpl) Verify(ctx context.Context, apiKey string) (claims map[s
 				c, cancel := contex.WithCancel(contex.Background())
 				work := func(c contex.Context) error {
 					claims, err = kv.singleFetchToken(ctx, apiKey)
-					if err != nil && err != ErrBadAuth {
+					if err != nil && err != ErrBadKeyAuth {
 						log.Debugf("fetchToken error: %s", err)
 						return err
 					}
