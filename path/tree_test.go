@@ -138,7 +138,14 @@ func TestTreeString(t *testing.T) {
     name: b, value: x
     name: c, value: y
 `
-	if got != want {
+	// child order doesn't matter
+	want2 := `name: , value: <nil>
+  name: a, value: <nil>
+    name: c, value: y
+    name: b, value: x
+`
+
+	if got != want && got != want2 {
 		t.Errorf("\ngot: %s\nwant: %s", got, want)
 	}
 }

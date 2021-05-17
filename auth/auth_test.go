@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/auth/jwt"
+	"github.com/apigee/apigee-remote-service-golib/v2/auth/key"
 	"github.com/apigee/apigee-remote-service-golib/v2/authtest"
 	"github.com/apigee/apigee-remote-service-golib/v2/context"
 	"github.com/apigee/apigee-remote-service-golib/v2/log"
@@ -95,32 +96,33 @@ func TestAuthenticate(t *testing.T) {
 		}, missingProductListError},
 		{"error verifying API key", errAPIKey, "", nil, ErrInternalError.Error()},
 	} {
-		t.Log(test.desc)
+		t.Run(test.desc, func(t *testing.T) {
 
-		jwtVerifier := jwt.NewVerifier(jwt.VerifierOptions{})
-		tv := &testVerifier{
-			keyErrors: map[string]error{
-				goodAPIKey: nil,
-				badAPIKey:  ErrBadAuth,
-				errAPIKey:  ErrInternalError,
-			},
-		}
-		authMan := &manager{
-			jwtVerifier: jwtVerifier,
-			keyVerifier: tv,
-		}
-		authMan.start()
-		defer authMan.Close()
-
-		ctx := authtest.NewContext("")
-		_, err := authMan.Authenticate(ctx, test.apiKey, test.claims, test.apiKeyClaimKey)
-		if err != nil {
-			if test.wantError != err.Error() {
-				t.Errorf("wanted error: %s, got: %s", test.wantError, err.Error())
+			jwtVerifier := jwt.NewVerifier(jwt.VerifierOptions{})
+			tv := &testVerifier{
+				keyErrors: map[string]error{
+					goodAPIKey: nil,
+					badAPIKey:  key.ErrBadKeyAuth,
+					errAPIKey:  ErrInternalError,
+				},
 			}
-		} else if test.wantError != "" {
-			t.Errorf("wanted error, got none")
-		}
+			authMan := &manager{
+				jwtVerifier: jwtVerifier,
+				keyVerifier: tv,
+			}
+			authMan.start()
+			defer authMan.Close()
+
+			ctx := authtest.NewContext("")
+			_, err := authMan.Authenticate(ctx, test.apiKey, test.claims, test.apiKeyClaimKey)
+			if err != nil {
+				if test.wantError != err.Error() {
+					t.Errorf("wanted error: %s, got: %s", test.wantError, err.Error())
+				}
+			} else if test.wantError != "" {
+				t.Errorf("wanted error, got none")
+			}
+		})
 	}
 }
 

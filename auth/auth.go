@@ -142,6 +142,11 @@ func (m *manager) Authenticate(ctx context.Context, apiKey string,
 		authAttempted = true
 	}
 
+	// translate key.ErrBadKeyAuth to auth.ErrBadAuth
+	if authenticationError == key.ErrBadKeyAuth {
+		authenticationError = ErrBadAuth
+	}
+
 	if authenticationError != nil && authenticationError != ErrBadAuth {
 		authenticationError = ErrInternalError
 	}
