@@ -20,6 +20,7 @@ package auth
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/auth/jwt"
@@ -45,6 +46,9 @@ var ErrBadAuth = errors.New("permission denied")
 
 // ErrInternalError is an error because of internal error
 var ErrInternalError = errors.New("internal error")
+
+// ErrNetworkError is an error because of network
+var ErrNetworkError = errors.New("network error")
 
 // NewManager constructs a new Manager for JWT functions.
 // Call Close() when done.
@@ -90,6 +94,7 @@ func (m *manager) Close() {
 // 3. Has JWT token - use JWT claims
 // If any method is provided but fails, the next available one(s) will be attempted. If all provided methods fail,
 // the request will be rejected.
+// May return errors: ErrNoAuth, ErrBadAuth, ErrNetworkError, ErrInternalError
 func (m *manager) Authenticate(ctx context.Context, apiKey string,
 	claims map[string]interface{}, apiKeyClaimKey string) (*Context, error) {
 	if log.DebugEnabled() {
@@ -142,21 +147,19 @@ func (m *manager) Authenticate(ctx context.Context, apiKey string,
 		authAttempted = true
 	}
 
-	// translate key.ErrBadKeyAuth to auth.ErrBadAuth
-	if authenticationError == key.ErrBadKeyAuth {
-		authenticationError = ErrBadAuth
-	}
-
-	if authenticationError != nil && authenticationError != ErrBadAuth {
-		authenticationError = ErrInternalError
-	}
-
-	if authenticationError == nil && claimsError != nil {
-		authenticationError = claimsError
-	}
-
+	// translate errors to auth.Err* types
 	if !authAttempted {
 		authenticationError = ErrNoAuth
+	} else if authenticationError != nil {
+		if authenticationError == key.ErrBadKeyAuth {
+			authenticationError = ErrBadAuth
+		} else if _, ok := authenticationError.(*url.Error); ok {
+			authenticationError = ErrNetworkError
+		} else {
+			authenticationError = ErrInternalError
+		}
+	} else if claimsError != nil {
+		authenticationError = claimsError
 	}
 
 	if log.DebugEnabled() {

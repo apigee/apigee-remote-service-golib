@@ -16,6 +16,7 @@ package auth
 
 import (
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/auth/jwt"
@@ -68,6 +69,7 @@ func TestAuthenticate(t *testing.T) {
 	goodAPIKey := "good"
 	badAPIKey := "bad"
 	errAPIKey := "error"
+	netErrKey := "net"
 	missingProductListError := "api_product_list claim is required"
 
 	for _, test := range []struct {
@@ -95,6 +97,7 @@ func TestAuthenticate(t *testing.T) {
 			"exp": "1",
 		}, missingProductListError},
 		{"error verifying API key", errAPIKey, "", nil, ErrInternalError.Error()},
+		{"network error verifying API key", netErrKey, "", nil, ErrNetworkError.Error()},
 	} {
 		t.Run(test.desc, func(t *testing.T) {
 
@@ -104,6 +107,7 @@ func TestAuthenticate(t *testing.T) {
 					goodAPIKey: nil,
 					badAPIKey:  key.ErrBadKeyAuth,
 					errAPIKey:  ErrInternalError,
+					netErrKey:  &url.Error{},
 				},
 			}
 			authMan := &manager{
