@@ -327,9 +327,7 @@ func TestVerifyAPIKeyCallFail(t *testing.T) {
 		t.Errorf("success should be nil, is: %v", success)
 	}
 
-	if err == nil {
-		t.Errorf("error should not be nil")
-	} else if err.Error() == "invalid api key" {
-		t.Errorf("error should not be %s", err.Error())
+	if _, ok := err.(*url.Error); !ok {
+		t.Errorf("error should be a *url.Error")
 	}
 }
