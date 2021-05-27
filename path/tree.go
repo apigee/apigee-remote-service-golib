@@ -120,6 +120,8 @@ func (t *tree) Find(path []string, index int) interface{} {
 	return nil
 }
 
+// Find the value stored at subpath starting from given index in the path array.
+// Also returns a map of extracted template vars.
 func (t *tree) FindAndExtract(path []string, index int) (val interface{}, varMap map[string]interface{}) {
 	varMap = make(map[string]interface{})
 	if index >= len(path) {
