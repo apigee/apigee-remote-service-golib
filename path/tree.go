@@ -28,6 +28,10 @@ func NewTree() Tree {
 // where best match is the greatest number of path segments matched.
 // The matcher supports wildcard ("*") and double wildcard ("**")
 // path segments anywhere in the path (but not partial segments).
+// Wildcards may also be expressed as template variables, thus {var}
+// or {var=*} is a single wildcard and {var=**} is a double wildcard.
+// Note: To extract the values for the templated variables use
+// FindAndExtract() instead of Find().
 // Empty path elements are ignored.
 type Tree interface {
 
@@ -37,6 +41,10 @@ type Tree interface {
 
 	// Find the value stored at subpath starting from given index in the path array.
 	Find(path []string, index int) interface{}
+
+	// Find the value stored at subpath starting from given index in the path array.
+	// Also returns a map of extracted template vars.
+	FindAndExtract(path []string, index int) (val interface{}, varMap map[string]interface{})
 }
 
 const (
@@ -46,7 +54,7 @@ const (
 
 type tree struct {
 	name     string
-	alias    string // we may need an array
+	alias    string
 	value    interface{}
 	children map[interface{}]interface{}
 }
@@ -105,49 +113,64 @@ func (t *tree) Find(path []string, index int) interface{} {
 	if index >= len(path) {
 		return t.value
 	}
-	node, _ := t.findNode(path, index, 0)
+	node, _ := t.findNode(path, index, 0, nil)
 	if node != nil {
 		return node.value
 	}
 	return nil
 }
 
-func (t *tree) findNode(path []string, index, matchCount int) (found *tree, foundMatchCount int) {
+func (t *tree) FindAndExtract(path []string, index int) (val interface{}, varMap map[string]interface{}) {
+	varMap = make(map[string]interface{})
 	if index >= len(path) {
-		return t, matchCount
+		return t.value, varMap
+	}
+	node, _ := t.findNode(path, index, 0, varMap)
+	if node != nil {
+		return node.value, varMap
+	}
+	return nil, varMap
+}
+
+func (t *tree) findNode(path []string, index, matchCount int, varMap map[string]interface{}) (found *tree, foundMatchCount int) {
+	if index >= len(path) {
+		return t, matchCount + 1
 	}
 	name := path[index]
 	if name == "" { // skip empty
-		return t.findNode(path, 1+index, matchCount)
+		return t.findNode(path, 1+index, matchCount, varMap)
 	}
 
 	// non-wildcard match
 	if child, ok := t.children[name]; ok {
 		found = child.(*tree)
-		if node, mc := child.(*tree).findNode(path, 1+index, 1+matchCount); node != nil && node.value != nil {
+		if node, mc := child.(*tree).findNode(path, 1+index, 1+matchCount, varMap); node != nil && node.value != nil {
 			found = node
 			foundMatchCount = mc
 		}
 	}
-	if foundMatchCount == len(path) { // exact match optimization
+	if foundMatchCount >= len(path) { // exact match optimization
 		return found, foundMatchCount
 	}
 
 	// check wildcard segment
 	if child, ok := t.children[wildcard]; ok {
-		node, mc := child.(*tree).findNode(path, 1+index, 1+matchCount)
+		node, mc := child.(*tree).findNode(path, 1+index, 1+matchCount, varMap)
 		if node != nil && node.value != nil && mc > foundMatchCount {
 			found = node
 			foundMatchCount = mc
+			if varMap != nil {
+				varMap[child.(*tree).alias] = name
+			}
 		}
 	}
-	if foundMatchCount == len(path) { // complete path optimization
+	if foundMatchCount >= len(path) { // complete path optimization
 		return found, foundMatchCount
 	}
 
 	// check double wildcard
 	if child, ok := t.children[doubleWildcard]; ok {
-		node, mc := child.(*tree).findAnyInPath(path, index, 1+matchCount)
+		node, mc := child.(*tree).findAnyInPath(path, index, 1+matchCount, varMap)
 		if node != nil && node.value != nil && mc > foundMatchCount {
 			found = node
 			foundMatchCount = mc
@@ -158,14 +181,31 @@ func (t *tree) findNode(path []string, index, matchCount int) (found *tree, foun
 }
 
 // find double wildcard matches by consuming path elements until match
-func (t *tree) findAnyInPath(path []string, index, matchCount int) (*tree, int) {
+func (t *tree) findAnyInPath(path []string, index, matchCount int, varMap map[string]interface{}) (*tree, int) {
 	for i := index; i < len(path); i++ {
 		name := path[i]
 		if child, ok := t.children[name]; ok {
-			if node, d := child.(*tree).findNode(path, i+1, matchCount); node != nil && node.value != nil {
+			if node, d := child.(*tree).findNode(path, i+1, matchCount, varMap); node != nil && node.value != nil {
+				if varMap != nil {
+					varMap[t.alias] = collectSegments(index, i, path)
+				}
 				return node, d
 			}
 		}
 	}
+	if varMap != nil {
+		varMap[t.alias] = collectSegments(index, len(path), path)
+	}
 	return t, matchCount
+}
+
+func collectSegments(start, end int, path []string) string {
+	s := strings.Builder{}
+	for j := start; j < end; j++ {
+		s.WriteString(path[j])
+		if j < end-1 {
+			s.WriteString("/")
+		}
+	}
+	return s.String()
 }
