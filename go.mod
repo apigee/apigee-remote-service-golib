@@ -3,6 +3,7 @@ module github.com/apigee/apigee-remote-service-golib/v2
 go 1.16
 
 require (
+	github.com/google/go-cmp v0.5.5
 	github.com/google/uuid v1.2.0
 	github.com/lestrrat-go/backoff/v2 v2.0.8
 	github.com/lestrrat-go/jwx v1.2.0

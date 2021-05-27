@@ -20,9 +20,10 @@ import (
 	"testing"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/path"
+	"github.com/google/go-cmp/cmp"
 )
 
-func TestTree(t *testing.T) {
+func TestWildcardTree(t *testing.T) {
 	tree := path.NewTree()
 	add := []struct {
 		path  string
@@ -80,6 +81,76 @@ func TestTree(t *testing.T) {
 		got := tree.Find(path, 0)
 		if test.value != got {
 			t.Errorf("for: %v, want: %v, got: %v", test.path, test.value, got)
+		}
+	}
+}
+
+func TestTemplateTree(t *testing.T) {
+	tree := path.NewTree()
+	add := []struct {
+		path  string
+		value string
+	}{
+		{path: "{a}", value: "{a}"},
+		{path: "{a=*}", value: "{a=*}"},
+		{path: "{a=*}/{b=*}", value: "{a=*}/{b=*}"},
+		{path: "a", value: "a"},
+		{path: "a/{b=*}", value: "a/{b=*}"},
+		{path: "a/{b=**}", value: "a/{b=**}"},
+		{path: "a/b", value: "a/b"},
+		{path: "{a=*}/a", value: "{a=*}/a"},
+		{path: "{a=*}/b", value: "{a=*}/b"},
+		{path: "a/b/c", value: "a/b/c"},
+		{path: "a/b/{c=*}", value: "a/b/{c=*}"},
+		{path: "a/{b=*}/c", value: "a/{b=*}/c"},
+		{path: "a/{b=**}/f", value: "a/{b=**}/f"},
+		{path: "a/{b=*}/c/d", value: "a/{b=*}/c/d"},
+		{path: "a/{b=**}/c/{d=**}", value: "a/{b=**}/c/{d=**}"},
+		{path: "a/{b=**}/c/{d=**}/c", value: "a/{b=**}/c/{d=**}/c"},
+		{path: "a/{b=**}/c/{d=**}/f", value: "a/{b=**}/c/{d=**}/f"},
+	}
+	for _, test := range add {
+		path := strings.Split(test.path, "/")
+		tree.AddChild(path, 0, test.value)
+	}
+	t.Logf("tree:\n%v", tree)
+
+	find := []struct {
+		path   string
+		value  string
+		values map[string]interface{}
+	}{
+		{path: "/a", value: "a"},
+		{path: "a", value: "a"},
+		{path: "a/b", value: "a/b"},
+		{path: "a/b/", value: "a/b"},
+		{path: "a//b", value: "a/b"},
+		{path: "x/b", value: "{a=*}/b", values: map[string]interface{}{"a": "x"}},
+		{path: "a/c", value: "a/{b=*}", values: map[string]interface{}{"b": "c"}},
+		{path: "a/b/c", value: "a/b/c"},
+		{path: "a/b/x", value: "a/b/{c=*}", values: map[string]interface{}{"c": "x"}},
+		{path: "a/x/c", value: "a/{b=*}/c", values: map[string]interface{}{"b": "x"}},
+		{path: "x", value: "{a=*}", values: map[string]interface{}{"a": "x"}},
+		{path: "x/b", value: "{a=*}/b", values: map[string]interface{}{"a": "x"}},
+		{path: "x/x", value: "{a=*}/{b=*}", values: map[string]interface{}{"a": "x", "b": "x"}},
+		{path: "a/b/c/d", value: "a/{b=*}/c/d", values: map[string]interface{}{"b": "b"}},
+		{path: "a/b/c/d/e/f", value: "a/{b=**}/c/{d=**}/f", values: map[string]interface{}{"b": "b", "d": "d/e"}},
+		{path: "a/x/x/d/e/x/f", value: "a/{b=**}/f", values: map[string]interface{}{"b": "x/x/d/e/x"}},
+		{path: "a/x/x/x/c/x/g", value: "a/{b=**}/c/{d=**}", values: map[string]interface{}{"b": "x/x/x", "d": "x/g"}},
+		{path: "a/x/x/x", value: "a/{b=**}", values: map[string]interface{}{"b": "x/x/x"}},
+		{path: "a/x/x/x/c/x/c/c", value: "a/{b=**}/c/{d=**}/c", values: map[string]interface{}{"b": "x/x/x", "d": "x/c"}},
+	}
+	for _, test := range find {
+		path := strings.Split(test.path, "/")
+		got, values := tree.FindAndExtract(path, 0)
+		if test.value != got {
+			t.Errorf("for: %v, want: %v, got: %v", test.path, test.value, got)
+		}
+		if test.values == nil {
+			test.values = map[string]interface{}{}
+		}
+		if diff := cmp.Diff(test.values, values); diff != "" {
+			t.Errorf("for: %v (-want +got):\n%s", test.path, diff)
 		}
 	}
 }
