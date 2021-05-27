@@ -84,6 +84,69 @@ func TestTree(t *testing.T) {
 	}
 }
 
+func TestTemplatedTree(t *testing.T) {
+	tree := path.NewTree()
+	add := []struct {
+		path  string
+		value string
+	}{
+		{path: "{a}", value: "{a}"},
+		{path: "{a=*}", value: "{a=*}"},
+		{path: "{a=*}/{b=*}", value: "{a=*}/{b=*}"},
+		{path: "a", value: "a"},
+		{path: "a/{b=*}", value: "a/{b=*}"},
+		{path: "a/{b=**}", value: "a/{b=**}"},
+		{path: "a/b", value: "a/b"},
+		{path: "{a=*}/a", value: "{a=*}/a"},
+		{path: "{a=*}/b", value: "{a=*}/b"},
+		{path: "a/b/c", value: "a/b/c"},
+		{path: "a/b/{c=*}", value: "a/b/{c=*}"},
+		{path: "a/{b=*}/c", value: "a/{b=*}/c"},
+		{path: "a/{b=**}/f", value: "a/{b=**}/f"}, // illegal per https://cloud.google.com/api-gateway/docs/path-templating
+		{path: "a/{b=*}/c/d", value: "a/{b=*}/c/d"},
+		{path: "a/{b=**}/c/{d=**}", value: "a/{b=**}/c/{d=**}"},
+		{path: "a/{b=**}/c/{d=**}/c", value: "a/{b=**}/c/{d=**}/c"},
+		{path: "a/{b=**}/c/{d=**}/f", value: "a/{b=**}/c/{d=**}/f"},
+	}
+	for _, test := range add {
+		path := strings.Split(test.path, "/")
+		tree.AddChild(path, 0, test.value)
+	}
+	t.Logf("tree:\n%v", tree)
+
+	find := []struct {
+		path  string
+		value string
+	}{
+		{path: "/a", value: "a"},
+		{path: "a", value: "a"},
+		{path: "a/b", value: "a/b"},
+		{path: "a/b/", value: "a/b"},
+		{path: "a//b", value: "a/b"},
+		{path: "x/b", value: "{a=*}/b"},
+		{path: "a/c", value: "a/{b=*}"},
+		{path: "a/b/c", value: "a/b/c"},
+		{path: "a/b/x", value: "a/b/{c=*}"},
+		{path: "a/x/c", value: "a/{b=*}/c"},
+		{path: "x", value: "{a=*}"},
+		{path: "x/b", value: "{a=*}/b"},
+		{path: "x/x", value: "{a=*}/{b=*}"},
+		{path: "a/b/c/d", value: "a/{b=*}/c/d"},
+		{path: "a/b/c/d/e/f", value: "a/{b=**}/c/{d=**}/f"},
+		{path: "a/x/x/d/e/x/f", value: "a/{b=**}/f"},
+		{path: "a/x/x/x/c/x/g", value: "a/{b=**}/c/{d=**}"},
+		{path: "a/x/x/x", value: "a/{b=**}"},
+		{path: "a/x/x/x/c/x/c/c", value: "a/{b=**}/c/{d=**}/c"},
+	}
+	for _, test := range find {
+		path := strings.Split(test.path, "/")
+		got := tree.Find(path, 0)
+		if test.value != got {
+			t.Errorf("for: %v, want: %v, got: %v", test.path, test.value, got)
+		}
+	}
+}
+
 func TestTreeEmpty(t *testing.T) {
 	tree := path.NewTree()
 	got := tree.Find([]string{""}, 0)

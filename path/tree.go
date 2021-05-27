@@ -46,6 +46,7 @@ const (
 
 type tree struct {
 	name     string
+	alias    string // we may need an array
 	value    interface{}
 	children map[interface{}]interface{}
 }
@@ -63,9 +64,20 @@ func (t *tree) AddChild(path []string, index int, value interface{}) interface{}
 		return t.AddChild(path, 1+index, value)
 	}
 
+	var alias string
+	if strings.HasPrefix(name, "{") && strings.HasSuffix(name, "}") {
+		name = name[1 : len(name)-1]
+		splits := strings.SplitN(name, "=", 2)
+		alias = splits[0]
+		if len(splits) > 1 && splits[1] == "**" {
+			name = "**"
+		} else {
+			name = "*"
+		}
+	}
 	node, ok := t.children[name]
 	if !ok {
-		node = &tree{name: name}
+		node = &tree{name: name, alias: alias}
 		if t.children == nil {
 			t.children = make(map[interface{}]interface{})
 		}
