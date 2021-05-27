@@ -24,15 +24,18 @@ func NewTree() Tree {
 	return &tree{}
 }
 
-// A Tree searches for a path match using a "best match" strategy
-// where best match is the greatest number of path segments matched.
-// The matcher supports wildcard ("*") and double wildcard ("**")
-// path segments anywhere in the path (but not partial segments).
-// Wildcards may also be expressed as template variables, thus {var}
-// or {var=*} is a single wildcard and {var=**} is a double wildcard.
-// Note: To extract the values for the templated variables use
-// FindAndExtract() instead of Find().
-// Empty path elements are ignored.
+// This Tree searches for a path match using a "best match" strategy
+// where best match is the most specific match that can be made - ie.
+// the greatest number of segments matched. In the case of wildcards
+// creating a tie, the search will prefer an exact segment match to a
+// wildcard segment and a wildcard segment to a double wildcard.
+// Wildcard ("*") and double wildcard ("**") path segments can be anywhere
+// in the path (but not in partial segments).
+// Wildcards may also be expressed as template variables: {var} or {var=*}
+// represents a single wildcard and {var=**} a double wildcard.
+// To extract the values for the templated variables use FindAndExtract()
+// instead of Find().
+// Empty path segments are ignored.
 type Tree interface {
 
 	// AddChild appends a child tree expressed by the path at the index provided.
