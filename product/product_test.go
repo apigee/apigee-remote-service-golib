@@ -355,7 +355,7 @@ func TestAuthorizeOperations(t *testing.T) {
 			QuotaLimit:    "2",
 			QuotaTimeUnit: "second",
 			OperationGroup: &OperationGroup{
-				OperationConfigType: "remoteservice",
+				OperationConfigType: RemoteOperationConfigType,
 				OperationConfigs: []OperationConfig{
 					{
 						APISource: "host",
@@ -387,7 +387,7 @@ func TestAuthorizeOperations(t *testing.T) {
 			QuotaLimit:    "2",
 			QuotaTimeUnit: "second",
 			OperationGroup: &OperationGroup{
-				OperationConfigType: "remoteservice",
+				OperationConfigType: RemoteOperationConfigType,
 				OperationConfigs: []OperationConfig{
 					{
 						APISource: "host",
@@ -708,8 +708,8 @@ func TestParseJSONWithOperations(t *testing.T) {
 	if product.OperationGroup == nil {
 		t.Fatalf("want OperationGroup")
 	}
-	if product.OperationGroup.OperationConfigType != "remoteservice" {
-		t.Errorf("want: 'remote-service', got: '%s'", product.OperationGroup.OperationConfigType)
+	if product.OperationGroup.OperationConfigType != RemoteOperationConfigType {
+		t.Errorf("want: '%s', got: '%s'", RemoteOperationConfigType, product.OperationGroup.OperationConfigType)
 	}
 
 	if len(product.OperationGroup.OperationConfigs) != 2 {
