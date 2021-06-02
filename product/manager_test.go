@@ -158,7 +158,8 @@ func TestManagerProxyName(t *testing.T) {
 
 	apiProducts := []APIProduct{
 		{
-			Name: "Name 1",
+			Name:    "Name 1",
+			Proxies: []string{"proxy1"},
 		},
 	}
 
@@ -194,7 +195,7 @@ func TestManagerProxyName(t *testing.T) {
 		if len(apis) != 1 {
 			t.Fatalf("num apis want: %d, got: %d", len(apis), 1)
 		}
-		if apis[0] != want.Name {
+		if apis[0] != want.Proxies[0] {
 			t.Errorf("want proxy name %q bound as an API", want.Name)
 		}
 	}
