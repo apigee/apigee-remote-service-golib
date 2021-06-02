@@ -28,7 +28,7 @@ import (
 	"github.com/apigee/apigee-remote-service-golib/v2/auth"
 )
 
-func TestManager(t *testing.T) {
+func TestManagerRemoteService(t *testing.T) {
 
 	apiProducts := []APIProduct{
 		{
@@ -150,6 +150,54 @@ func TestManager(t *testing.T) {
 
 	if len(pm.Products()["Name 3"].Scopes) != 0 {
 		t.Errorf("empty scopes should be removed")
+	}
+}
+
+// Test special case of Proxy name binding for ProxyOperationConfigType.
+func TestManagerProxyName(t *testing.T) {
+
+	apiProducts := []APIProduct{
+		{
+			Name:    "Name 1",
+			Proxies: []string{"proxy1"},
+		},
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var result = APIResponse{
+			APIProducts: apiProducts,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(result); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer ts.Close()
+
+	serverURL, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	opts := Options{
+		BaseURL:              serverURL,
+		RefreshRate:          time.Hour,
+		Client:               http.DefaultClient,
+		OperationConfigTypes: []string{ProxyOperationConfigType},
+	}
+	pm := createManager(opts)
+	pm.start()
+	defer pm.Close()
+
+	for _, want := range apiProducts {
+		got := pm.Products()[want.Name]
+		apis := got.GetBoundAPIs()
+		if len(apis) != 1 {
+			t.Fatalf("num apis want: %d, got: %d", len(apis), 1)
+		}
+		if apis[0] != want.Proxies[0] {
+			t.Errorf("want proxy name %q bound as an API", want.Name)
+		}
 	}
 }
 
