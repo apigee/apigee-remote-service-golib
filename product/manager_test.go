@@ -126,7 +126,7 @@ func TestManagerRemoteService(t *testing.T) {
 
 	for _, want := range apiProducts {
 		got := pm.Products()[want.Name]
-		if len(want.Attributes) > 0 && want.Attributes[0].Value != got.APIs[0] {
+		if len(want.Attributes) > 0 && !got.APIs[want.Attributes[0].Value] {
 			t.Errorf("apis not created: %v", got)
 		}
 		if got.Name != want.Name {
