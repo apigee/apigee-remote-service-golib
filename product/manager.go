@@ -240,12 +240,22 @@ func (m *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error
 
 		// parses products and creates name -> product lookup map
 		pm := ProductsNameMap{}
-		for i, p := range res.APIProducts {
+		for i := range res.APIProducts {
 			if ctx.Err() != nil {
 				log.Debugf("product polling canceled, exiting")
 				return nil
 			}
-			pm[p.Name] = &res.APIProducts[i]
+			p := res.APIProducts[i]
+			// Only match against proxy name when dealing with Proxy types
+			// We can't rely on p.OperationGroup.OperationConfigType because it
+			// may not be set if there are no operations so we have to do this
+			// here where we can check m.operationConfigTypes instead of in the
+			// Unmarshal function.
+			if (p.OperationGroup == nil || len(p.OperationGroup.OperationConfigs) == 0) &&
+				strings.Contains(m.operationConfigTypes, ProxyOperationConfigType) {
+				p.APIs = append(p.APIs, p.Name)
+			}
+			pm[p.Name] = &p
 		}
 		m.productsMux.Set(pm)
 
