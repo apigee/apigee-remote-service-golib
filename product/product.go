@@ -116,16 +116,14 @@ func (oc *OperationConfig) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (oc *OperationConfig) isValidOperation(api, path, method string, hints bool) (valid bool, hint string) {
+func (oc *OperationConfig) isValidOperation(api, path, method string, treePath []string, hints bool) (valid bool, hint string) {
 	if oc.APISource != api {
 		if hints {
 			hint = fmt.Sprintf("no api: %s", api)
 		}
 		return
 	}
-	resourcePath := strings.Split(path, "/")
-	fullPath := append([]string{method}, resourcePath...)
-	valid = oc.PathTree.Find(fullPath, 0) != nil
+	valid = oc.PathTree.Find(treePath, 0) != nil
 	if !valid && hints {
 		hint = fmt.Sprintf("no operation: %s %s", method, path)
 	}
@@ -297,9 +295,10 @@ func (p *APIProduct) authorize(authContext *auth.Context, api, path, method stri
 		if hints {
 			hintsBuilder.WriteString("    operation configs:\n")
 		}
+		treePath := append([]string{method}, strings.Split(path, "/")...)
 		for i, oc := range p.OperationGroup.OperationConfigs {
 			var valid bool
-			valid, hint = oc.isValidOperation(api, path, method, hints)
+			valid, hint = oc.isValidOperation(api, path, method, treePath, hints)
 			if valid {
 				// api is already defined outside this block as a string so ao is used here to avoid confusion
 				ao := AuthorizedOperation{
