@@ -253,6 +253,7 @@ func (m *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error
 			// Unmarshal function.
 			if p.OperationGroup == nil &&
 				strings.Contains(m.operationConfigTypes, ProxyOperationConfigType) {
+				p.APIs = make(map[string]bool, len(p.Proxies))
 				for _, proxy := range p.Proxies {
 					p.APIs[proxy] = true
 				}

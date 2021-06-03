@@ -160,6 +160,9 @@ func TestManagerProxyName(t *testing.T) {
 		{
 			Name:    "Name 1",
 			Proxies: []string{"proxy1"},
+			Attributes: []Attribute{
+				{Name: TargetsAttr, Value: "attr value"}, // should be ignored
+			},
 		},
 	}
 
