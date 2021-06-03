@@ -47,8 +47,8 @@ type APIProduct struct {
 	QuotaTimeUnit    string          `json:"quotaTimeUnit,omitempty"`
 	Resources        []string        `json:"apiResources"`
 	Scopes           []string        `json:"scopes"`
-	APIs             []string
-	EnvironmentMap   map[string]struct{}
+	APIs             map[string]bool // api name -> true
+	EnvironmentMap   map[string]bool // env name -> true
 	QuotaLimitInt    int64
 	QuotaIntervalInt int64
 	PathTree         path.Tree // APIProduct-level only
@@ -116,16 +116,14 @@ func (oc *OperationConfig) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (oc *OperationConfig) isValidOperation(api, path, method string, hints bool) (valid bool, hint string) {
+func (oc *OperationConfig) isValidOperation(api, path, method string, treePath []string, hints bool) (valid bool, hint string) {
 	if oc.APISource != api {
 		if hints {
 			hint = fmt.Sprintf("no api: %s", api)
 		}
 		return
 	}
-	resourcePath := strings.Split(path, "/")
-	fullPath := append([]string{method}, resourcePath...)
-	valid = oc.PathTree.Find(fullPath, 0) != nil
+	valid = oc.PathTree.Find(treePath, 0) != nil
 	if !valid && hints {
 		hint = fmt.Sprintf("no operation: %s %s", method, path)
 	}
@@ -189,7 +187,11 @@ func (q *Quota) UnmarshalJSON(data []byte) error {
 
 // GetBoundAPIs returns an array of api names bound to this product
 func (p *APIProduct) GetBoundAPIs() []string {
-	return p.APIs
+	keys := make([]string, 0, len(p.APIs))
+	for k := range p.APIs {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 func (p *APIProduct) UnmarshalJSON(data []byte) error {
@@ -202,18 +204,18 @@ func (p *APIProduct) UnmarshalJSON(data []byte) error {
 	*p = APIProduct(un)
 
 	// put Environments into EnvironmentMap
-	p.EnvironmentMap = make(map[string]struct{})
+	p.EnvironmentMap = make(map[string]bool)
 	for _, e := range p.Environments {
-		p.EnvironmentMap[e] = struct{}{}
+		p.EnvironmentMap[e] = true
 	}
 
 	// parse TargetsAttr, if exists
-	p.APIs = []string{}
+	p.APIs = make(map[string]bool)
 	for _, attr := range p.Attributes {
 		if attr.Name == TargetsAttr {
 			apis := strings.Split(attr.Value, ",")
 			for _, t := range apis {
-				p.APIs = append(p.APIs, strings.TrimSpace(t))
+				p.APIs[strings.TrimSpace(t)] = true
 			}
 			break
 		}
@@ -222,7 +224,7 @@ func (p *APIProduct) UnmarshalJSON(data []byte) error {
 	// add APIs from Operations
 	if p.OperationGroup != nil {
 		for _, oc := range p.OperationGroup.OperationConfigs {
-			p.APIs = append(p.APIs, oc.APISource)
+			p.APIs[oc.APISource] = true
 		}
 	}
 
@@ -272,7 +274,7 @@ func (p *APIProduct) UnmarshalJSON(data []byte) error {
 // if no OperationGroup, the API Product if it matches
 func (p *APIProduct) authorize(authContext *auth.Context, api, path, method string, hints bool) (authorizedOps []AuthorizedOperation, hint string) {
 	env := authContext.Environment()
-	if _, ok := p.EnvironmentMap[env]; !ok { // the product is not authorized in context environment
+	if !p.EnvironmentMap[env] { // the product is not authorized in context environment
 		if hints {
 			hint = fmt.Sprintf("    incorrect environments: %#v\n", p.Environments)
 		}
@@ -293,9 +295,10 @@ func (p *APIProduct) authorize(authContext *auth.Context, api, path, method stri
 		if hints {
 			hintsBuilder.WriteString("    operation configs:\n")
 		}
+		treePath := append([]string{method}, strings.Split(path, "/")...)
 		for i, oc := range p.OperationGroup.OperationConfigs {
 			var valid bool
-			valid, hint = oc.isValidOperation(api, path, method, hints)
+			valid, hint = oc.isValidOperation(api, path, method, treePath, hints)
 			if valid {
 				// api is already defined outside this block as a string so ao is used here to avoid confusion
 				ao := AuthorizedOperation{
@@ -327,7 +330,7 @@ func (p *APIProduct) authorize(authContext *auth.Context, api, path, method stri
 
 	// no OperationGroup
 	var valid bool
-	valid, hint = p.isValidOperation(api, path, hints)
+	valid, hint = p.isValidAPI(api, path, hints)
 	if !valid {
 		return
 	}
@@ -344,21 +347,19 @@ func (p *APIProduct) authorize(authContext *auth.Context, api, path, method stri
 }
 
 // true if valid api for API Product
-func (p *APIProduct) isValidOperation(api, path string, hints bool) (valid bool, hint string) {
-	for _, v := range p.APIs {
-		if v == api {
-			var resourcePath []string
-			if path == "/" {
-				resourcePath = []string{"/"}
-			} else {
-				resourcePath = strings.Split(path, "/")
-			}
-			valid = p.PathTree.Find(resourcePath, 0) != nil
-			if hints {
-				hint = fmt.Sprintf("    no path: %s\n", path)
-			}
-			return
+func (p *APIProduct) isValidAPI(api, path string, hints bool) (valid bool, hint string) {
+	if p.APIs[api] {
+		var resourcePath []string
+		if path == "/" {
+			resourcePath = []string{"/"}
+		} else {
+			resourcePath = strings.Split(path, "/")
 		}
+		valid = p.PathTree.Find(resourcePath, 0) != nil
+		if hints {
+			hint = fmt.Sprintf("    no path: %s\n", path)
+		}
+		return
 	}
 	if hints {
 		hint = fmt.Sprintf("    no apis: %s\n", api)
