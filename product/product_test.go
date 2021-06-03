@@ -45,7 +45,7 @@ func TestAuthorize(t *testing.T) {
 			Name:         "Name 1",
 			Resources:    []string{"/"},
 			Scopes:       []string{"scope1"},
-			APIs:         []string{"service1.test", "shared.test"},
+			APIs:         map[string]bool{"service1.test": true, "shared.test": true},
 		},
 		"Name 2": {
 			Attributes: []Attribute{
@@ -55,7 +55,7 @@ func TestAuthorize(t *testing.T) {
 			Name:         "Name 2",
 			Resources:    []string{"/**"},
 			Scopes:       []string{"scope2"},
-			APIs:         []string{"service2.test", "shared.test"},
+			APIs:         map[string]bool{"service2.test": true, "shared.test": true},
 		},
 		"Name 3": {
 			Attributes: []Attribute{
@@ -65,7 +65,7 @@ func TestAuthorize(t *testing.T) {
 			Name:         "Name 3",
 			Resources:    []string{"/name3"},
 			Scopes:       []string{},
-			APIs:         []string{"shared.test"},
+			APIs:         map[string]bool{"shared.test": true},
 		},
 	}
 
@@ -350,7 +350,7 @@ func TestAuthorizeOperations(t *testing.T) {
 			Name:          "Name 1",
 			Resources:     []string{"/"},
 			Scopes:        []string{"scope1"},
-			APIs:          []string{"service1.test", "shared.test"},
+			APIs:          map[string]bool{"service1.test": true, "shared.test": true},
 			QuotaInterval: "2",
 			QuotaLimit:    "2",
 			QuotaTimeUnit: "second",
@@ -382,7 +382,7 @@ func TestAuthorizeOperations(t *testing.T) {
 			Name:          "Name 2",
 			Resources:     []string{"/"},
 			Scopes:        []string{"scope1"},
-			APIs:          []string{"service1.test", "shared.test"},
+			APIs:          map[string]bool{"service1.test": true, "shared.test": true},
 			QuotaInterval: "2",
 			QuotaLimit:    "2",
 			QuotaTimeUnit: "second",
