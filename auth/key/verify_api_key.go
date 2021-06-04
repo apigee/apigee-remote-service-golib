@@ -188,6 +188,7 @@ func (kv *verifierImpl) singleFetchToken(ctx context.Context, apiKey string) (ma
 }
 
 // verify returns the list of claims that an API key has.
+// claims map must not be written to: treat as const
 func (kv *verifierImpl) Verify(ctx context.Context, apiKey string) (claims map[string]interface{}, err error) {
 	if existing, ok := kv.cache.Get(apiKey); ok {
 		claims = existing.(map[string]interface{})
