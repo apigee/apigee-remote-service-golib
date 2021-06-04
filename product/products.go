@@ -21,8 +21,16 @@ import (
 	"time"
 )
 
-// TargetsAttr is the name of the Product attribute that lists the targets (apis) it binds to (comma delim)
-const TargetsAttr = "apigee-remote-service-targets"
+const (
+	// TargetsAttr is the name of the Product attribute that lists the targets (apis) it binds to (comma delim)
+	TargetsAttr = "apigee-remote-service-targets"
+
+	// RemoteOperationConfigType is a OperationConfigType filter for remote service operations.
+	RemoteOperationConfigType = "remoteservice"
+
+	// ProxyOperationConfigType is a OperationConfigType filter for proxy operations.
+	ProxyOperationConfigType = "proxy"
+)
 
 // NewManager creates a new product.Manager. Call Close() when done.
 func NewManager(options Options) (Manager, error) {
@@ -46,6 +54,8 @@ type Options struct {
 	Org string
 	// Env is environment, "*" means multi-tenant
 	Env string
+	// OperationConfigType filters retrieved operations by type. Empty retrieves all.
+	OperationConfigTypes []string
 }
 
 func (o *Options) validate() error {

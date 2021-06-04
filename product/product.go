@@ -18,13 +18,13 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/auth"
 	"github.com/apigee/apigee-remote-service-golib/v2/log"
+	"github.com/apigee/apigee-remote-service-golib/v2/path"
 )
 
 // APIResponse is the response from the Apigee products API
@@ -47,11 +47,11 @@ type APIProduct struct {
 	QuotaTimeUnit    string          `json:"quotaTimeUnit,omitempty"`
 	Resources        []string        `json:"apiResources"`
 	Scopes           []string        `json:"scopes"`
-	APIs             []string
-	EnvironmentMap   map[string]struct{}
+	APIs             map[string]bool // api name -> true
+	EnvironmentMap   map[string]bool // env name -> true
 	QuotaLimitInt    int64
 	QuotaIntervalInt int64
-	resourceRegexps  []*regexp.Regexp // APIProduct-level only
+	PathTree         path.Tree // APIProduct-level only
 }
 
 // An Attribute is a name-value-pair attribute of an API product.
@@ -68,12 +68,12 @@ type OperationGroup struct {
 
 // An OperationConfig is a group of Operations
 type OperationConfig struct {
-	ID                      string      `json:"-"`
-	APISource               string      `json:"apiSource"`
-	Attributes              []Attribute `json:"attributes,omitempty"`
-	Operations              []Operation `json:"operations"`
-	Quota                   *Quota      `json:"quota"`
-	resourceRegexpsByMethod map[string][]*regexp.Regexp
+	ID         string      `json:"-"`
+	APISource  string      `json:"apiSource"`
+	Attributes []Attribute `json:"attributes,omitempty"`
+	Operations []Operation `json:"operations"`
+	Quota      *Quota      `json:"quota"`
+	PathTree   path.Tree
 }
 
 // list of all HTTP verbs
@@ -88,23 +88,20 @@ func (oc *OperationConfig) UnmarshalJSON(data []byte) error {
 	}
 	*oc = OperationConfig(un)
 
-	oc.resourceRegexpsByMethod = map[string][]*regexp.Regexp{}
+	oc.PathTree = path.NewTree()
 	for i, op := range oc.Operations {
 		// sort operation's methods lexicographically to make sure
 		// the later hashing always yields consistent results
 		sort.Strings(oc.Operations[i].Methods)
 
-		reg, err := makeResourceRegex(op.Resource)
-		if err != nil {
-			log.Errorf("unable to create resource matcher: %#v", op.Resource)
-			continue
-		}
 		methods := op.Methods
 		if len(methods) == 0 { // no method in the operation means all methods are allowed
 			methods = allMethods
 		}
+		resourcePath := makeChildPath(op.Resource)
 		for _, method := range methods {
-			oc.resourceRegexpsByMethod[method] = append(oc.resourceRegexpsByMethod[method], reg)
+			fullPath := append([]string{method}, resourcePath...)
+			oc.PathTree.AddChild(fullPath, 0, "x") // value doesn't matter
 		}
 	}
 
@@ -119,28 +116,16 @@ func (oc *OperationConfig) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (oc *OperationConfig) isValidOperation(api, path, method string, hints bool) (valid bool, hint string) {
+func (oc *OperationConfig) isValidOperation(api, path, method string, treePath []string, hints bool) (valid bool, hint string) {
 	if oc.APISource != api {
 		if hints {
 			hint = fmt.Sprintf("no api: %s", api)
 		}
 		return
 	}
-	regexps, ok := oc.resourceRegexpsByMethod[method]
-	if !ok {
-		if hints {
-			hint = fmt.Sprintf("no method: %s", method)
-		}
-		return
-	}
-	for _, regexp := range regexps {
-		if regexp.MatchString(path) {
-			valid = true
-			break
-		}
-	}
+	valid = oc.PathTree.Find(treePath, 0) != nil
 	if !valid && hints {
-		hint = fmt.Sprintf("no path: %s", path)
+		hint = fmt.Sprintf("no operation: %s %s", method, path)
 	}
 	return
 }
@@ -202,7 +187,11 @@ func (q *Quota) UnmarshalJSON(data []byte) error {
 
 // GetBoundAPIs returns an array of api names bound to this product
 func (p *APIProduct) GetBoundAPIs() []string {
-	return p.APIs
+	keys := make([]string, 0, len(p.APIs))
+	for k := range p.APIs {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 func (p *APIProduct) UnmarshalJSON(data []byte) error {
@@ -215,18 +204,18 @@ func (p *APIProduct) UnmarshalJSON(data []byte) error {
 	*p = APIProduct(un)
 
 	// put Environments into EnvironmentMap
-	p.EnvironmentMap = make(map[string]struct{})
+	p.EnvironmentMap = make(map[string]bool)
 	for _, e := range p.Environments {
-		p.EnvironmentMap[e] = struct{}{}
+		p.EnvironmentMap[e] = true
 	}
 
 	// parse TargetsAttr, if exists
-	p.APIs = []string{}
+	p.APIs = make(map[string]bool)
 	for _, attr := range p.Attributes {
 		if attr.Name == TargetsAttr {
 			apis := strings.Split(attr.Value, ",")
 			for _, t := range apis {
-				p.APIs = append(p.APIs, strings.TrimSpace(t))
+				p.APIs[strings.TrimSpace(t)] = true
 			}
 			break
 		}
@@ -235,7 +224,7 @@ func (p *APIProduct) UnmarshalJSON(data []byte) error {
 	// add APIs from Operations
 	if p.OperationGroup != nil {
 		for _, oc := range p.OperationGroup.OperationConfigs {
-			p.APIs = append(p.APIs, oc.APISource)
+			p.APIs[oc.APISource] = true
 		}
 	}
 
@@ -272,13 +261,10 @@ func (p *APIProduct) UnmarshalJSON(data []byte) error {
 		}
 	}
 
+	p.PathTree = path.NewTree()
 	for _, resource := range p.Resources {
-		reg, err := makeResourceRegex(resource)
-		if err != nil {
-			log.Errorf("unable to create resource matcher: %#v", p)
-			continue
-		}
-		p.resourceRegexps = append(p.resourceRegexps, reg)
+		fullPath := makeChildPath(resource)
+		p.PathTree.AddChild(fullPath, 0, "x") // value doesn't matter
 	}
 
 	return nil
@@ -288,7 +274,7 @@ func (p *APIProduct) UnmarshalJSON(data []byte) error {
 // if no OperationGroup, the API Product if it matches
 func (p *APIProduct) authorize(authContext *auth.Context, api, path, method string, hints bool) (authorizedOps []AuthorizedOperation, hint string) {
 	env := authContext.Environment()
-	if _, ok := p.EnvironmentMap[env]; !ok { // the product is not authorized in context environment
+	if !p.EnvironmentMap[env] { // the product is not authorized in context environment
 		if hints {
 			hint = fmt.Sprintf("    incorrect environments: %#v\n", p.Environments)
 		}
@@ -309,9 +295,10 @@ func (p *APIProduct) authorize(authContext *auth.Context, api, path, method stri
 		if hints {
 			hintsBuilder.WriteString("    operation configs:\n")
 		}
+		treePath := append([]string{method}, strings.Split(path, "/")...)
 		for i, oc := range p.OperationGroup.OperationConfigs {
 			var valid bool
-			valid, hint = oc.isValidOperation(api, path, method, hints)
+			valid, hint = oc.isValidOperation(api, path, method, treePath, hints)
 			if valid {
 				// api is already defined outside this block as a string so ao is used here to avoid confusion
 				ao := AuthorizedOperation{
@@ -343,7 +330,7 @@ func (p *APIProduct) authorize(authContext *auth.Context, api, path, method stri
 
 	// no OperationGroup
 	var valid bool
-	valid, hint = p.isValidOperation(api, path, hints)
+	valid, hint = p.isValidAPI(api, path, hints)
 	if !valid {
 		return
 	}
@@ -360,20 +347,19 @@ func (p *APIProduct) authorize(authContext *auth.Context, api, path, method stri
 }
 
 // true if valid api for API Product
-func (p *APIProduct) isValidOperation(api, path string, hints bool) (valid bool, hint string) {
-	for _, v := range p.APIs {
-		if v == api {
-			for _, reg := range p.resourceRegexps {
-				if reg.MatchString(path) {
-					valid = true
-					return
-				}
-			}
-			if hints {
-				hint = fmt.Sprintf("    no path: %s\n", path)
-			}
-			return
+func (p *APIProduct) isValidAPI(api, path string, hints bool) (valid bool, hint string) {
+	if p.APIs[api] {
+		var resourcePath []string
+		if path == "/" {
+			resourcePath = []string{"/"}
+		} else {
+			resourcePath = strings.Split(path, "/")
 		}
+		valid = p.PathTree.Find(resourcePath, 0) != nil
+		if hints {
+			hint = fmt.Sprintf("    no path: %s\n", path)
+		}
+		return
 	}
 	if hints {
 		hint = fmt.Sprintf("    no apis: %s\n", api)
@@ -397,36 +383,12 @@ func (p *APIProduct) isValidScopes(ac *auth.Context) bool {
 	return false
 }
 
-// - A single slash by itself matches any path
-// - * is valid anywhere and matches within a segment (between slashes)
-// - ** is valid only at the end and matches anything to EOL
-func makeResourceRegex(resource string) (*regexp.Regexp, error) {
-
+// A single slash by itself matches any path
+func makeChildPath(resource string) []string {
 	if resource == "/" {
-		return regexp.Compile(".*")
+		resource = "/**"
 	}
-
-	// only allow ** as suffix
-	doubleStarIndex := strings.Index(resource, "**")
-	if doubleStarIndex >= 0 && doubleStarIndex != len(resource)-2 {
-		return nil, fmt.Errorf("bad resource specification")
-	}
-
-	// remove ** suffix if exists
-	pattern := resource
-	if doubleStarIndex >= 0 {
-		pattern = pattern[:len(pattern)-2]
-	}
-
-	// let * = any non-slash
-	pattern = strings.Replace(pattern, "*", "[^/]*", -1)
-
-	// if ** suffix, allow anything at end
-	if doubleStarIndex >= 0 {
-		pattern = pattern + ".*"
-	}
-
-	return regexp.Compile("^" + pattern + "$")
+	return strings.Split(resource, "/")
 }
 
 // md5hash returns a md5 signature based on oc.APISource and oc.Operations

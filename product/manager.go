@@ -32,7 +32,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-const productsURL = "/products"
+const (
+	productsURL                 = "/products"
+	productsEnvParam            = "env"
+	productsOperationTypesParam = "types"
+	multiTenantEnv              = "*"
+)
 
 /*
 Usage:
@@ -52,28 +57,30 @@ type Manager interface {
 
 func createManager(options Options) *manager {
 	return &manager{
-		baseURL:          options.BaseURL,
-		closedChan:       make(chan bool),
-		returnChan:       make(chan map[string]*APIProduct),
-		closed:           util.NewAtomicBool(false),
-		refreshRate:      options.RefreshRate,
-		client:           options.Client,
-		env:              options.Env, // note: "*" means multitenant
-		prometheusLabels: prometheus.Labels{"org": options.Org},
+		baseURL:              options.BaseURL,
+		closedChan:           make(chan bool),
+		returnChan:           make(chan map[string]*APIProduct),
+		closed:               util.NewAtomicBool(false),
+		refreshRate:          options.RefreshRate,
+		client:               options.Client,
+		env:                  options.Env,
+		prometheusLabels:     prometheus.Labels{"org": options.Org},
+		operationConfigTypes: strings.Join(options.OperationConfigTypes, ","),
 	}
 }
 
 type manager struct {
-	baseURL          *url.URL
-	closed           *util.AtomicBool
-	closedChan       chan bool
-	returnChan       chan map[string]*APIProduct
-	refreshRate      time.Duration
-	client           *http.Client
-	productsMux      productsMux
-	cancelPolling    context.CancelFunc
-	prometheusLabels prometheus.Labels
-	env              string
+	baseURL              *url.URL
+	closed               *util.AtomicBool
+	closedChan           chan bool
+	returnChan           chan map[string]*APIProduct
+	refreshRate          time.Duration
+	client               *http.Client
+	productsMux          productsMux
+	cancelPolling        context.CancelFunc
+	prometheusLabels     prometheus.Labels
+	env                  string
+	operationConfigTypes string // comma-delimited
 }
 
 // AuthorizedOperation is the result of Authorize including Quotas
@@ -161,8 +168,11 @@ func (m *manager) start() {
 	}
 	apiURL := *m.baseURL
 	apiURL.Path = path.Join(apiURL.Path, productsURL)
-	if m.env != "*" { // if env is not *, pull specified env
-		apiURL.Query().Add("env", m.env)
+	if m.env != multiTenantEnv { // if not multi-tenant, request specified env
+		apiURL.Query().Add(productsEnvParam, m.env)
+	}
+	if m.operationConfigTypes != "" { // request specified operation types (empty is all)
+		apiURL.Query().Add(productsOperationTypesParam, m.operationConfigTypes)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancelPolling = cancel
@@ -230,12 +240,25 @@ func (m *manager) pollingClosure(apiURL url.URL) func(ctx context.Context) error
 
 		// parses products and creates name -> product lookup map
 		pm := ProductsNameMap{}
-		for i, p := range res.APIProducts {
+		for i := range res.APIProducts {
 			if ctx.Err() != nil {
 				log.Debugf("product polling canceled, exiting")
 				return nil
 			}
-			pm[p.Name] = &res.APIProducts[i]
+			p := &res.APIProducts[i]
+			// Only match against proxy name when dealing with Proxy types
+			// We can't rely on p.OperationGroup.OperationConfigType because it
+			// will not be set if there are no operations so we have to do this
+			// here where we can check m.operationConfigTypes instead of in the
+			// Unmarshal function.
+			if p.OperationGroup == nil &&
+				strings.Contains(m.operationConfigTypes, ProxyOperationConfigType) {
+				p.APIs = make(map[string]bool, len(p.Proxies))
+				for _, proxy := range p.Proxies {
+					p.APIs[proxy] = true
+				}
+			}
+			pm[p.Name] = p
 		}
 		m.productsMux.Set(pm)
 

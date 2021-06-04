@@ -28,7 +28,7 @@ import (
 	"github.com/apigee/apigee-remote-service-golib/v2/auth"
 )
 
-func TestManager(t *testing.T) {
+func TestManagerRemoteService(t *testing.T) {
 
 	apiProducts := []APIProduct{
 		{
@@ -126,7 +126,7 @@ func TestManager(t *testing.T) {
 
 	for _, want := range apiProducts {
 		got := pm.Products()[want.Name]
-		if len(want.Attributes) > 0 && want.Attributes[0].Value != got.APIs[0] {
+		if len(want.Attributes) > 0 && !got.APIs[want.Attributes[0].Value] {
 			t.Errorf("apis not created: %v", got)
 		}
 		if got.Name != want.Name {
@@ -150,6 +150,57 @@ func TestManager(t *testing.T) {
 
 	if len(pm.Products()["Name 3"].Scopes) != 0 {
 		t.Errorf("empty scopes should be removed")
+	}
+}
+
+// Test special case of Proxy name binding for ProxyOperationConfigType.
+func TestManagerProxyName(t *testing.T) {
+
+	apiProducts := []APIProduct{
+		{
+			Name:    "Name 1",
+			Proxies: []string{"proxy1"},
+			Attributes: []Attribute{
+				{Name: TargetsAttr, Value: "attr value"}, // should be ignored
+			},
+		},
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var result = APIResponse{
+			APIProducts: apiProducts,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(result); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	defer ts.Close()
+
+	serverURL, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	opts := Options{
+		BaseURL:              serverURL,
+		RefreshRate:          time.Hour,
+		Client:               http.DefaultClient,
+		OperationConfigTypes: []string{ProxyOperationConfigType},
+	}
+	pm := createManager(opts)
+	pm.start()
+	defer pm.Close()
+
+	for _, want := range apiProducts {
+		got := pm.Products()[want.Name]
+		apis := got.GetBoundAPIs()
+		if len(apis) != 1 {
+			t.Fatalf("num apis want: %d, got: %d", len(apis), 1)
+		}
+		if apis[0] != want.Proxies[0] {
+			t.Errorf("want proxy name %q bound as an API", want.Name)
+		}
 	}
 }
 
@@ -274,60 +325,6 @@ func TestManagerHandlingEtag(t *testing.T) {
 	pp.Close()
 }
 
-// Path matching is similar to wildcard semantics described in the Apigee product documentation here:
-// https://docs.apigee.com/developer-services/content/create-api-products#resourcebehavior.
-// However, as there is no base path, it is simplified as follows:
-// 1. A single slash (/) by itself matches any path.
-// 2. * is valid anywhere and matches within a segment (between slashes).
-// 3. ** is valid at the end and matches anything to the end of line.
-func TestResources(t *testing.T) {
-	matchTests := []struct {
-		spec  string
-		path  string
-		match bool
-	}{
-		{spec: "/", path: "/", match: true},
-		{spec: "/", path: "/foo", match: true},
-		{spec: "/", path: "/foo/bar", match: true},
-		{spec: "/", path: "/foo/bar/baz", match: true},
-		{spec: "/**", path: "/", match: true},
-		{spec: "/**", path: "/foo", match: true},
-		{spec: "/**", path: "/foo/bar", match: true},
-		{spec: "/**", path: "/foo/bar/baz", match: true},
-		{spec: "/*", path: "/", match: true},
-		{spec: "/*", path: "/foo", match: true},
-		{spec: "/*", path: "/foo/bar", match: false},
-		{spec: "/foo", path: "/", match: false},
-		{spec: "/foo", path: "/foo", match: true},
-		{spec: "/foo", path: "/foo/bar", match: false},
-		{spec: "/foo/*", path: "/foo/bar", match: true},
-		{spec: "/foo/*", path: "/foo/bar/baz", match: false},
-		{spec: "/foo/**", path: "/foo/bar/baz", match: true},
-		{spec: "/*/bar", path: "/foo/bar", match: true},
-		{spec: "/*/bar", path: "/foo/bar/baz", match: false},
-		{spec: "/*/*/baz", path: "/foo/bar/baz", match: true},
-	}
-	for _, m := range matchTests {
-		r, e := makeResourceRegex(m.spec)
-		if e != nil {
-			t.Fatalf("invalid resource: %s", m.spec)
-		}
-		if r.MatchString(m.path) != m.match {
-			if m.match {
-				t.Errorf("spec %s should match path %s (regexp: %s)", m.spec, m.path, r)
-			} else {
-				t.Errorf("spec %s should not match path %s (regexp: %s)", m.spec, m.path, r)
-			}
-		}
-	}
-}
-
-func TestBadResource(t *testing.T) {
-	if _, e := makeResourceRegex("/**/bad"); e == nil {
-		t.Errorf("expected error for resource: %s", "/**/bad")
-	}
-}
-
 func TestUnreachable(t *testing.T) {
 
 	serverURL, err := url.Parse("http://localhost:9999")
@@ -387,7 +384,7 @@ func TestBadResponseCode(t *testing.T) {
 func TestBadResponseBody(t *testing.T) {
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("hi"))
+		_, _ = w.Write([]byte("bad response"))
 	}))
 	defer ts.Close()
 
@@ -409,7 +406,7 @@ func TestBadResponseBody(t *testing.T) {
 	if err == nil {
 		t.Error("should have received error")
 	}
-	if !strings.Contains(err.Error(), "invalid character 'h' looking for beginning of value") {
-		t.Errorf("want 'invalid character 'h' looking for beginning of value got %v", err)
+	if !strings.Contains(err.Error(), "invalid character 'b' looking for beginning of value") {
+		t.Errorf("want 'invalid character 'b' looking for beginning of value got %v", err)
 	}
 }

@@ -20,6 +20,7 @@ package auth
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/auth/jwt"
@@ -33,7 +34,8 @@ import (
 // A Manager wraps all things related to auth processing
 type Manager interface {
 	Close()
-	Authenticate(ctx context.Context, apiKey string, claims map[string]interface{}, apiKeyClaimKey string) (*Context, error)
+	Authenticate(ctx context.Context, apiKey string, claims map[string]interface{}, apiKeyClaimKey string) (authContext *Context, err error)
+	ParseJWT(jwtString string, provider jwt.Provider) (claims map[string]interface{}, err error)
 }
 
 // ErrNoAuth is an error because of missing auth
@@ -44,6 +46,9 @@ var ErrBadAuth = errors.New("permission denied")
 
 // ErrInternalError is an error because of internal error
 var ErrInternalError = errors.New("internal error")
+
+// ErrNetworkError is an error because of network
+var ErrNetworkError = errors.New("network error")
 
 // NewManager constructs a new Manager for JWT functions.
 // Call Close() when done.
@@ -89,6 +94,7 @@ func (m *manager) Close() {
 // 3. Has JWT token - use JWT claims
 // If any method is provided but fails, the next available one(s) will be attempted. If all provided methods fail,
 // the request will be rejected.
+// May return errors: ErrNoAuth, ErrBadAuth, ErrNetworkError, ErrInternalError
 func (m *manager) Authenticate(ctx context.Context, apiKey string,
 	claims map[string]interface{}, apiKeyClaimKey string) (*Context, error) {
 	if log.DebugEnabled() {
@@ -141,16 +147,19 @@ func (m *manager) Authenticate(ctx context.Context, apiKey string,
 		authAttempted = true
 	}
 
-	if authenticationError != nil && authenticationError != ErrBadAuth {
-		authenticationError = ErrInternalError
-	}
-
-	if authenticationError == nil && claimsError != nil {
-		authenticationError = claimsError
-	}
-
+	// translate errors to auth.Err* types
 	if !authAttempted {
 		authenticationError = ErrNoAuth
+	} else if authenticationError != nil {
+		if authenticationError == key.ErrBadKeyAuth {
+			authenticationError = ErrBadAuth
+		} else if _, ok := authenticationError.(*url.Error); ok {
+			authenticationError = ErrNetworkError
+		} else {
+			authenticationError = ErrInternalError
+		}
+	} else if claimsError != nil {
+		authenticationError = claimsError
 	}
 
 	if log.DebugEnabled() {
@@ -164,6 +173,10 @@ func (m *manager) Authenticate(ctx context.Context, apiKey string,
 	}
 
 	return authContext, authenticationError
+}
+
+func (m *manager) ParseJWT(jwtString string, provider jwt.Provider) (map[string]interface{}, error) {
+	return m.jwtVerifier.Parse(jwtString, provider)
 }
 
 func (m *manager) start() {
