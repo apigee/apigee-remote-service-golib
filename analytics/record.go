@@ -30,9 +30,12 @@ import (
 )
 
 const (
-	attributePrefix        = "dc."
-	maxNumAttributes       = 100
-	maxAttributeValueBytes = 400
+	// the prefix that customers expect for data collection variables
+	customerDataCollectorPrefix = "dc_"
+	// the prefix that analytics expects for attributes
+	internalDataCollectorPrefix = "dc."
+	maxNumAttributes            = 100
+	maxAttributeValueBytes      = 400
 )
 
 // An Attribute is used to record custom Record values.
@@ -139,7 +142,7 @@ func (r Record) validate(now time.Time) error {
 }
 
 // MarshalJSON marshalls Attributes with keys that must
-// begin with a "dc." prefix and values that are limited
+// begin with a "dc_" prefix and values that are limited
 // to 400 bytes.
 func (r Record) MarshalJSON() ([]byte, error) {
 	type alias Record
@@ -161,10 +164,8 @@ func (r Record) MarshalJSON() ([]byte, error) {
 			continue
 		}
 
-		// ensure prefix
-		if !strings.HasPrefix(key, attributePrefix) {
-			key = attributePrefix + key
-		}
+		// translate from external prefix, add internal prefix
+		key = internalDataCollectorPrefix + strings.TrimPrefix(key, customerDataCollectorPrefix)
 
 		// format time as int (ms since epoch)
 		if t, ok := val.(time.Time); ok {
