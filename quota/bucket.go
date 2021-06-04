@@ -183,11 +183,11 @@ func (b *bucket) sync() error {
 			b.request.Weight -= r.Weight // same window, keep accumulated Weight
 		}
 		b.result = &quotaResult
+		log.Debugf("quota synced: %#v", quotaResult)
 		b.lock.Unlock()
 
 		prometheusBucketSynced.With(b.prometheusLabels).SetToCurrentTime()
 
-		log.Debugf("quota synced: %#v", quotaResult)
 		return nil
 
 	default:
@@ -210,6 +210,7 @@ func (b *bucket) needToSync() bool {
 	return b.request.Weight > 0 || b.now().After(b.synced.Add(b.refreshAfter))
 }
 
+// does not lock b.lock! lock before calling.
 func (b *bucket) windowExpired() bool {
 	if b.result != nil {
 		return b.now().After(time.Unix(b.result.ExpiryTime, 0))

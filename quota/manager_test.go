@@ -38,7 +38,7 @@ func TestQuota(t *testing.T) {
 	}
 
 	serverResult := Result{}
-	ts := testServer(&serverResult, time.Now, nil)
+	ts, _ := testServer(&serverResult, time.Now, nil)
 
 	context := authtest.NewContext(ts.URL)
 	authContext := &auth.Context{
@@ -142,7 +142,7 @@ func TestSync(t *testing.T) {
 
 	fakeTime := newClock()
 	serverResult := Result{}
-	ts := testServer(&serverResult, fakeTime.now, nil)
+	ts, resultLock := testServer(&serverResult, fakeTime.now, nil)
 	defer ts.Close()
 
 	context := authtest.NewContext(ts.URL)
@@ -185,15 +185,19 @@ func TestSync(t *testing.T) {
 	b.refreshAfter = time.Hour
 	b.lock.Unlock()
 
+	resultLock.Lock()
 	serverResult.ExpiryTime /= 1000 // convert back to seconds for comparison
+	resultLock.Unlock()
 
 	b.lock.RLock()
 	if b.request.Weight != 0 {
 		t.Errorf("pending request weight got: %d, want: %d", b.request.Weight, 0)
 	}
+	resultLock.Lock()
 	if !reflect.DeepEqual(*b.result, serverResult) {
 		t.Errorf("result got: %#v, want: %#v", *b.result, serverResult)
 	}
+	resultLock.Unlock()
 	if b.synced != m.now() {
 		t.Errorf("synced got: %#v, want: %#v", b.synced, m.now())
 	}
@@ -220,15 +224,19 @@ func TestSync(t *testing.T) {
 		t.Errorf("should not have received error on sync: %v", err)
 	}
 
+	resultLock.Lock()
 	serverResult.ExpiryTime /= 1000 // convert back to seconds for comparison
+	resultLock.Unlock()
 
 	b.lock.Lock()
 	if b.request.Weight != 0 {
 		t.Errorf("pending request weight got: %d, want: %d", b.request.Weight, 0)
 	}
+	resultLock.Lock()
 	if !reflect.DeepEqual(*b.result, serverResult) {
 		t.Errorf("result got: %#v, want: %#v", *b.result, serverResult)
 	}
+	resultLock.Unlock()
 	if b.synced != m.now() {
 		t.Errorf("synced got: %#v, want: %#v", b.synced, m.now())
 	}
@@ -250,7 +258,7 @@ func TestDisconnected(t *testing.T) {
 		send: 404,
 	}
 	serverResult := Result{}
-	ts := testServer(&serverResult, fakeTime.now, errC)
+	ts, _ := testServer(&serverResult, fakeTime.now, errC)
 	ts.Close()
 
 	context := authtest.NewContext(ts.URL)
@@ -346,7 +354,7 @@ func TestWindowExpired(t *testing.T) {
 		send: 200,
 	}
 	serverResult := Result{}
-	ts := testServer(&serverResult, fakeTime.now, errC)
+	ts, _ := testServer(&serverResult, fakeTime.now, errC)
 	defer ts.Close()
 
 	context := authtest.NewContext(ts.URL)
@@ -452,8 +460,9 @@ type errControl struct {
 	send int
 }
 
-func testServer(serverResult *Result, now func() time.Time, errC *errControl) *httptest.Server {
+func testServer(serverResult *Result, now func() time.Time, errC *errControl) (*httptest.Server, *sync.Mutex) {
 
+	resultLock := &sync.Mutex{}
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if errC != nil && errC.send != 200 {
 			w.WriteHeader(errC.send)
@@ -461,6 +470,8 @@ func testServer(serverResult *Result, now func() time.Time, errC *errControl) *h
 			return
 		}
 
+		resultLock.Lock()
+		defer resultLock.Unlock()
 		req := Request{}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		serverResult.Allowed = req.Allow
@@ -473,7 +484,7 @@ func testServer(serverResult *Result, now func() time.Time, errC *errControl) *h
 		serverResult.ExpiryTime = now().Unix() * 1000 // milliseconds needed
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(serverResult)
-	}))
+	})), resultLock
 }
 
 // ignores if no matching quota bucket
