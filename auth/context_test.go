@@ -61,9 +61,34 @@ func TestSetClaims(t *testing.T) {
 	if !reflect.DeepEqual(claimsWant, c.Scopes) {
 		t.Errorf("claims want: %s, got: %v", claimsWant, claims[scopeKey])
 	}
+
+	claims[scopeKey] = 12
+	if err := c.setClaims(claims); err == nil {
+		t.Errorf("bad scope should error")
+	}
+	claims[scopeKey] = nil
+
+	claims[clientIDKey] = 12
+	if err := c.setClaims(claims); err == nil {
+		t.Errorf("bad ClientID should error")
+	}
+	claims[clientIDKey] = nil
+
+	claims[applicationNameKey] = 12
+	if err := c.setClaims(claims); err == nil {
+		t.Errorf("bad applicationName should error")
+	}
 }
 
 func TestParseArrays(t *testing.T) {
+	res, err := parseArrayOfStrings(nil)
+	if err != nil {
+		t.Errorf("nil array should not error")
+	}
+	if res != nil {
+		t.Errorf("nil array should return nil")
+	}
+
 	arr := []interface{}{
 		"this",
 		"is",
@@ -72,7 +97,7 @@ func TestParseArrays(t *testing.T) {
 		123,
 	}
 
-	res, err := parseArrayOfStrings(arr)
+	res, err = parseArrayOfStrings(arr)
 	if err == nil || err.Error() != "unable to interpret: 123" {
 		t.Errorf("wanted 'unable to interpret: 123', got %v", err)
 	}

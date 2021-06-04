@@ -48,6 +48,7 @@ type Context struct {
 }
 
 // if claims can't be processed, returns error and sets no fields
+// claims map must not be written to: treat as const
 func (a *Context) setClaims(claims map[string]interface{}) error {
 	if claims[apiProductListKey] == nil {
 		return fmt.Errorf("api_product_list claim is required")
@@ -58,14 +59,12 @@ func (a *Context) setClaims(claims map[string]interface{}) error {
 		return errors.Wrapf(err, "unable to interpret api_product_list: %v", claims[apiProductListKey])
 	}
 
-	if _, ok := claims[scopeKey].(string); !ok {
-		if claims[scopeKey] == nil { // nil is ok
-			claims[scopeKey] = ""
-		} else {
-			return fmt.Errorf("unable to interpret %s: %v", scopeKey, claims[scopeKey])
-		}
+	var scope string
+	var ok bool
+	if scope, ok = claims[scopeKey].(string); !ok && claims[scopeKey] != nil { // nil is ok
+		return fmt.Errorf("unable to interpret %s: %v", scopeKey, claims[scopeKey])
 	}
-	scopes := strings.Split(claims[scopeKey].(string), " ")
+	scopes := strings.Split(scope, " ")
 
 	if _, ok := claims[clientIDKey].(string); !ok {
 		return fmt.Errorf("unable to interpret %s: %v", clientIDKey, claims[clientIDKey])
