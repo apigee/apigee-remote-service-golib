@@ -167,10 +167,6 @@ func (kv *verifierImpl) fetchToken(ctx context.Context, apiKey string) (map[stri
 	kv.cache.Set(apiKey, claims)
 	kv.knownBad.Remove(apiKey)
 
-	stats := kv.cache.Stats()
-	prometheusAPIKeysCacheHits.With(kv.prometheusLabels).Set(float64(stats.Hits))
-	prometheusAPIKeysCacheMisses.With(kv.prometheusLabels).Set(float64(stats.Misses))
-
 	return claims, nil
 }
 
@@ -190,8 +186,10 @@ func (kv *verifierImpl) singleFetchToken(ctx context.Context, apiKey string) (ma
 // verify returns the list of claims that an API key has.
 // claims map must not be written to: treat as const
 func (kv *verifierImpl) Verify(ctx context.Context, apiKey string) (claims map[string]interface{}, err error) {
+
 	if existing, ok := kv.cache.Get(apiKey); ok {
 		claims = existing.(map[string]interface{})
+		prometheusAPIKeysCacheHits.With(kv.prometheusLabels).Add(1)
 	}
 
 	// if token is expired, initiate a background refresh
@@ -228,6 +226,7 @@ func (kv *verifierImpl) Verify(ctx context.Context, apiKey string) (claims map[s
 	}
 
 	// not found, force new request
+	prometheusAPIKeysCacheMisses.With(kv.prometheusLabels).Add(1)
 	return kv.singleFetchToken(ctx, apiKey)
 }
 
