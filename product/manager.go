@@ -168,12 +168,16 @@ func (m *manager) start() {
 	}
 	apiURL := *m.baseURL
 	apiURL.Path = path.Join(apiURL.Path, productsURL)
+
+	q := apiURL.Query()
 	if m.env != multiTenantEnv { // if not multi-tenant, request specified env
-		apiURL.Query().Add(productsEnvParam, m.env)
+		q.Set(productsEnvParam, m.env)
 	}
 	if m.operationConfigTypes != "" { // request specified operation types (empty is all)
-		apiURL.Query().Add(productsOperationTypesParam, m.operationConfigTypes)
+		q.Set(productsOperationTypesParam, m.operationConfigTypes)
 	}
+	apiURL.RawQuery = q.Encode()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancelPolling = cancel
 	poller.Start(ctx, m.pollingClosure(apiURL), m.refreshRate, func(err error) error {
