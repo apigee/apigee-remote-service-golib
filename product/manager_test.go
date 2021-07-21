@@ -167,8 +167,9 @@ func TestManagerProxyName(t *testing.T) {
 	}
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var result = APIResponse{
-			APIProducts: apiProducts,
+		var result APIResponse
+		if v := r.URL.Query().Get(productsOperationTypesParam); v == "proxy" {
+			result.APIProducts = apiProducts
 		}
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(result); err != nil {
@@ -193,7 +194,10 @@ func TestManagerProxyName(t *testing.T) {
 	defer pm.Close()
 
 	for _, want := range apiProducts {
-		got := pm.Products()[want.Name]
+		got, ok := pm.Products()[want.Name]
+		if !ok {
+			t.Fatalf("product %q not found", want.Name)
+		}
 		apis := got.GetBoundAPIs()
 		if len(apis) != 1 {
 			t.Fatalf("num apis want: %d, got: %d", len(apis), 1)
