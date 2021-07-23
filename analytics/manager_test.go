@@ -98,3 +98,41 @@ func TestStandardBadOptions(t *testing.T) {
 		m.Close()
 	}
 }
+
+func TestIsGCPManaged(t *testing.T) {
+	tests := []struct {
+		desc string
+		url  string
+		want bool
+	}{
+		{
+			desc: "not gcp managed",
+			url:  "https://www.apigee.com",
+		},
+		{
+			desc: "gcp managed in prod",
+			url:  "https://apigee.googleapis.com",
+			want: true,
+		},
+		{
+			desc: "gcp managed in staging",
+			url:  "https://apigee-staging.sandbox.googleapis.com",
+			want: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			u, err := url.Parse(test.url)
+			if err != nil {
+				t.Fatal(err)
+			}
+			o := Options{
+				BaseURL: u,
+			}
+			if got := o.isGCPManaged(); got != test.want {
+				t.Errorf("Options.isGCPManaged() = %v, wanted %v", got, test.want)
+			}
+		})
+	}
+}
