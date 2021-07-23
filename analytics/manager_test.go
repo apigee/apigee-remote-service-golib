@@ -116,7 +116,7 @@ func TestIsGCPManaged(t *testing.T) {
 		},
 		{
 			desc: "gcp managed in staging",
-			url:  "https://apigee-staging.sandbox.googleapis.com",
+			url:  "https://staging-apigee.sandbox.googleapis.com",
 			want: true,
 		},
 	}
