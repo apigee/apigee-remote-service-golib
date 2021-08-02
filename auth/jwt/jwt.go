@@ -102,8 +102,8 @@ func (a *verifier) Start() {
 		a.AddProvider(p)
 	}
 
-	ch := make(chan jwk.AutoRefreshFetchError)
-	a.jwks.FetchErrorChannel(ch)
+	ch := make(chan jwk.AutoRefreshError)
+	a.jwks.ErrorSink(ch)
 
 	go func() {
 		for {
