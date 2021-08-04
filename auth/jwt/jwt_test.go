@@ -52,7 +52,8 @@ func TestJWTCaching(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	provider := Provider{JWKSURL: ts.URL}
+	// Refresh time is too small and will be overriden.
+	provider := Provider{JWKSURL: ts.URL, Refresh: 10 * time.Second}
 	jwtVerifier := NewVerifier(VerifierOptions{
 		Providers: []Provider{provider},
 	})
@@ -85,9 +86,11 @@ func TestEnsureProvidersLoaded(t *testing.T) {
 
 	provider := Provider{JWKSURL: ts.URL}
 	jwtVerifier := NewVerifier(VerifierOptions{
-		Providers: []Provider{provider},
+		// Duplicates will be ignored when added.
+		Providers: []Provider{provider, provider},
 	})
 	jwtVerifier.Start()
+	time.Sleep(time.Second)
 	defer jwtVerifier.Stop()
 
 	jwt, err := generateJWT(privateKey)
