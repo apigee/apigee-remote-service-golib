@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/cache"
+	"github.com/apigee/apigee-remote-service-golib/v2/log"
 	"github.com/lestrrat-go/backoff/v2"
 	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/lestrrat-go/jwx/jwt"
@@ -100,6 +101,21 @@ func (a *verifier) Start() {
 	for _, p := range providers {
 		a.AddProvider(p)
 	}
+
+	ch := make(chan jwk.AutoRefreshError)
+	a.jwks.ErrorSink(ch)
+
+	go func() {
+		for {
+			select {
+			case <-a.cancelContext.Done():
+				close(ch)
+				return
+			case fetchError := <-ch:
+				log.Errorf("fetching jwks from %s error: %v", fetchError.URL, fetchError.Error)
+			}
+		}
+	}()
 }
 
 // EnsureProvidersLoaded ensures all JWKs certs have been retrieved for the first time.
@@ -136,7 +152,9 @@ func (a *verifier) AddProvider(provider Provider) {
 	a.providers = append(a.providers, provider)
 
 	if !jwksConfigured || minRefresh != provider.Refresh {
-		options := []jwk.AutoRefreshOption{jwk.WithFetchBackoff(backoff.Exponential())}
+		options := []jwk.AutoRefreshOption{
+			jwk.WithFetchBackoff(backoff.Exponential()),
+		}
 		if minRefresh > 0 {
 			if minRefresh < minAllowedRefreshInterval {
 				minRefresh = minAllowedRefreshInterval
