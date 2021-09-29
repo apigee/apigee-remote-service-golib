@@ -16,6 +16,7 @@ package path
 
 import (
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -43,7 +44,14 @@ type Tree interface {
 	AddChild(path []string, index int, value interface{}) interface{}
 
 	// Find the value stored at subpath starting from given index in the path array.
+	// It returns nil if the subpath cannot be all matched.
 	Find(path []string, index int) interface{}
+
+	// FindPrefix searches the tree given the subpath starting from given index in
+	// the path array.
+	// It returns the value stored at the last matched node as well as the length of
+	// the matched path segments.
+	FindPrefix(path []string, index int) (interface{}, int)
 
 	// Find the value stored at subpath starting from given index in the path array.
 	// Also returns a map of extracted template vars.
@@ -116,11 +124,20 @@ func (t *tree) Find(path []string, index int) interface{} {
 	if index >= len(path) {
 		return t.value
 	}
-	node, _ := t.findNode(path, index, 0, nil)
+	node, _ := t.findNode(path, index, 0, nil, true)
 	if node != nil {
 		return node.value
 	}
 	return nil
+}
+
+// FindPrefix searches the tree given the subpath starting from given index in
+// the path array.
+// It returns the value stored at the last matched node as well as the length of
+// the matched path segments.
+// Double wildcard will not be matched.
+func (t *tree) FindPrefix(path []string, index int) (interface{}, int) {
+	return nil, 0
 }
 
 // Find the value stored at subpath starting from given index in the path array.
@@ -130,26 +147,29 @@ func (t *tree) FindAndExtract(path []string, index int) (val interface{}, varMap
 	if index >= len(path) {
 		return t.value, varMap
 	}
-	node, _ := t.findNode(path, index, 0, varMap)
+	node, _ := t.findNode(path, index, 0, varMap, true)
 	if node != nil {
 		return node.value, varMap
 	}
 	return nil, varMap
 }
 
-func (t *tree) findNode(path []string, index, matchCount int, varMap map[string]interface{}) (found *tree, foundMatchCount int) {
+func (t *tree) findNode(path []string, index, matchCount int, varMap map[string]interface{}, allowDoubleWildcard bool) (found *tree, foundMatchCount int) {
 	if index >= len(path) {
-		return t, matchCount + 1
+		// This indicates a complete match. Return MaxInt to ensure it beats others.
+		return t, math.MaxInt
 	}
+
 	name := path[index]
 	if name == "" { // skip empty
-		return t.findNode(path, 1+index, matchCount, varMap)
+		return t.findNode(path, 1+index, matchCount, varMap, allowDoubleWildcard)
 	}
+	found = t
+	foundMatchCount = matchCount
 
 	// non-wildcard match
 	if child, ok := t.children[name]; ok {
-		found = child.(*tree)
-		if node, mc := child.(*tree).findNode(path, 1+index, 1+matchCount, varMap); node != nil && node.value != nil {
+		if node, mc := child.(*tree).findNode(path, 1+index, 1+matchCount, varMap, allowDoubleWildcard); node != nil && node.value != nil {
 			found = node
 			foundMatchCount = mc
 		}
@@ -160,7 +180,7 @@ func (t *tree) findNode(path []string, index, matchCount int, varMap map[string]
 
 	// check wildcard segment
 	if child, ok := t.children[wildcard]; ok {
-		node, mc := child.(*tree).findNode(path, 1+index, 1+matchCount, varMap)
+		node, mc := child.(*tree).findNode(path, 1+index, 1+matchCount, varMap, allowDoubleWildcard)
 		if node != nil && node.value != nil && mc > foundMatchCount {
 			found = node
 			foundMatchCount = mc
@@ -174,7 +194,7 @@ func (t *tree) findNode(path []string, index, matchCount int, varMap map[string]
 	}
 
 	// check double wildcard
-	if child, ok := t.children[doubleWildcard]; ok {
+	if child, ok := t.children[doubleWildcard]; ok && allowDoubleWildcard {
 		node, mc := child.(*tree).findAnyInPath(path, index, 1+matchCount, varMap)
 		if node != nil && node.value != nil && mc > foundMatchCount {
 			found = node
@@ -190,7 +210,7 @@ func (t *tree) findAnyInPath(path []string, index, matchCount int, varMap map[st
 	for i := index; i < len(path); i++ {
 		name := path[i]
 		if child, ok := t.children[name]; ok {
-			if node, d := child.(*tree).findNode(path, i+1, matchCount, varMap); node != nil && node.value != nil {
+			if node, d := child.(*tree).findNode(path, i+1, matchCount, varMap, true); node != nil && node.value != nil {
 				if varMap != nil {
 					varMap[t.alias] = collectSegments(index, i, path)
 				}
@@ -200,6 +220,11 @@ func (t *tree) findAnyInPath(path []string, index, matchCount int, varMap map[st
 	}
 	if varMap != nil {
 		varMap[t.alias] = collectSegments(index, len(path), path)
+	}
+	if t.value != nil {
+		// This indicates a complete match since there is value at this node.
+		// Return MaxInt to ensure it beats others.
+		return t, math.MaxInt
 	}
 	return t, matchCount
 }

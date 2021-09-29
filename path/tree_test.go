@@ -45,6 +45,7 @@ func TestWildcardTree(t *testing.T) {
 		{path: "a/**/c/**", value: "a/**/c/**"},
 		{path: "a/**/c/**/c", value: "a/**/c/**/c"},
 		{path: "a/**/c/**/f", value: "a/**/c/**/f"},
+		{path: "s/*/d", value: "s/*/d"},
 	}
 	for _, test := range add {
 		path := strings.Split(test.path, "/")
@@ -75,6 +76,7 @@ func TestWildcardTree(t *testing.T) {
 		{path: "a/x/x/x/c/x/g", value: "a/**/c/**"},
 		{path: "a/x/x/x", value: "a/**"},
 		{path: "a/x/x/x/c/x/c/c", value: "a/**/c/**/c"},
+		{path: "s/c/d/a", value: "s/*/d"},
 	}
 	for _, test := range find {
 		path := strings.Split(test.path, "/")
