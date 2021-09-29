@@ -46,10 +46,9 @@ type Tree interface {
 	// It returns nil if the subpath cannot be all matched.
 	Find(path []string, index int) interface{}
 
-	// FindPrefix searches the tree given the subpath starting from given index in
+	// FindPrefix searches "best" prefix in the tree given the subpath starting from given index in
 	// the path array.
-	// It returns the value stored at the last matched node as well as the length of
-	// the matched path segments.
+	// It returns the value stored at the matched node as well as the length of the matched path segments.
 	FindPrefix(path []string, index int) (interface{}, int)
 
 	// Find the value stored at subpath starting from given index in the path array.
@@ -134,6 +133,13 @@ func (t *tree) Find(path []string, index int) interface{} {
 // the path array.
 // It returns the value stored at the last matched node as well as the length of
 // the matched path segments.
+// "Best" is defined as such:
+//   * Exact match wins - explicity segments (e.g. "/abc") wins over wildcard "*" at the same depth.
+//   * Longest match wins when the above rule gives a tie, for example:
+//     1. "/a/b/c" wins over "/a/b" for path "/a/b/c/d",
+//     2. "/a/*/c" wins over "/a/*" for path "/a/b/c/d",
+//     3. "/a/b" wins over "/*/b/c" for path "/a/b/c",
+//     4. "/a/*" wins over "/*/b/c" for path "/a/b/c".
 func (t *tree) FindPrefix(path []string, index int) (interface{}, int) {
 	return t.findPrefix(path, index, index)
 }
