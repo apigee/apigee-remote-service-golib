@@ -134,7 +134,6 @@ func (t *tree) Find(path []string, index int) interface{} {
 // the path array.
 // It returns the value stored at the last matched node as well as the length of
 // the matched path segments.
-// Double wildcard will not be matched.
 func (t *tree) FindPrefix(path []string, index int) (interface{}, int) {
 	return t.findPrefix(path, index, index)
 }
@@ -149,16 +148,22 @@ func (t *tree) findPrefix(path []string, start, current int) (interface{}, int) 
 		return t.findPrefix(path, start, current+1)
 	}
 	if child, ok := t.children[name]; ok {
-		value, length := child.(*tree).findPrefix(path, start, current+1)
-		if value != nil {
+		if value, length := child.(*tree).findPrefix(path, start, current+1); value != nil {
 			return value, length
 		}
 	}
 
 	if child, ok := t.children[wildcard]; ok {
-		value, length := child.(*tree).findPrefix(path, start, current+1)
-		if value != nil {
+		if value, length := child.(*tree).findPrefix(path, start, current+1); value != nil {
 			return value, length
+		}
+	}
+
+	if child, ok := t.children[doubleWildcard]; ok {
+		for i := current + 1; i < len(path); i++ {
+			if value, length := child.(*tree).findPrefix(path, start, i); value != nil {
+				return value, length
+			}
 		}
 	}
 
