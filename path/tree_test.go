@@ -23,6 +23,64 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+func TestFindPrefix(t *testing.T) {
+	tree := path.NewTree()
+	add := []struct {
+		path  string
+		value string
+	}{
+		{path: "*", value: "*"},
+		{path: "*/*", value: "*/*"},
+		{path: "a", value: "a"},
+		{path: "a/*", value: "a/*"},
+		{path: "a/b", value: "a/b"},
+		{path: "*/a", value: "*/a"},
+		{path: "*/b", value: "*/b"},
+		{path: "a/b/c", value: "a/b/c"},
+		{path: "a/b/*", value: "a/b/*"},
+		{path: "a/*/d", value: "a/*/d"},
+		{path: "a/*/c/d", value: "a/*/c/d"},
+	}
+	for _, test := range add {
+		path := strings.Split(test.path, "/")
+		tree.AddChild(path, 0, test.value)
+	}
+	t.Logf("tree:\n%v", tree)
+
+	find := []struct {
+		path   string
+		value  string
+		length int
+	}{
+		{path: "/a", value: "a", length: 2},
+		{path: "a", value: "a", length: 1},
+		{path: "a/b", value: "a/b", length: 2},
+		{path: "a/b/", value: "a/b", length: 3},
+		{path: "a//b", value: "a/b", length: 3},
+		{path: "x/b", value: "*/b", length: 2},
+		{path: "a/c", value: "a/*", length: 2},
+		{path: "a/b/c", value: "a/b/c", length: 3},
+		{path: "a/b/x", value: "a/b/*", length: 3},
+		{path: "a/x/c", value: "a/*", length: 2},
+		{path: "x", value: "*", length: 1},
+		{path: "x/b", value: "*/b", length: 2},
+		{path: "x/x", value: "*/*", length: 2},
+		{path: "a/b/c/d", value: "a/b/c", length: 3},
+		{path: "a/b/x/d/e/f", value: "a/b/*", length: 3},
+		{path: "a/b/d/e/f", value: "a/b/*", length: 3},
+	}
+	for _, test := range find {
+		path := strings.Split(test.path, "/")
+		got, length := tree.FindPrefix(path, 0)
+		if test.value != got {
+			t.Errorf("for: %v, want: %v, got: %v", test.path, test.value, got)
+		}
+		if test.length != length {
+			t.Errorf("for: %v, want: %d segments matched, got: %d", test.path, test.length, length)
+		}
+	}
+}
+
 func TestWildcardTree(t *testing.T) {
 	tree := path.NewTree()
 	add := []struct {
