@@ -42,6 +42,7 @@ func TestFindPrefix(t *testing.T) {
 		{path: "a/*/c/d", value: "a/*/c/d"},
 		{path: "a/**", value: "a/**"},
 		{path: "b/**/x", value: "b/**/x"},
+		{path: "b/**/x/x", value: "b/**/x/x"},
 	}
 	for _, test := range add {
 		path := strings.Split(test.path, "/")
@@ -71,6 +72,8 @@ func TestFindPrefix(t *testing.T) {
 		{path: "a/b/x/d/e/f", value: "a/b/*", length: 3},
 		{path: "a/b/d/e/f", value: "a/b/*", length: 3},
 		{path: "b/d/e/x", value: "b/**/x", length: 4},
+		{path: "b/d/e/x/x", value: "b/**/x/x", length: 5},
+		{path: "b/d/e/x/x/x/x", value: "b/**/x/x", length: 5},
 	}
 	for _, test := range find {
 		path := strings.Split(test.path, "/")
