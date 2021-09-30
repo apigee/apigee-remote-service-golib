@@ -43,7 +43,13 @@ type Tree interface {
 	AddChild(path []string, index int, value interface{}) interface{}
 
 	// Find the value stored at subpath starting from given index in the path array.
+	// It returns nil if the subpath cannot be all matched.
 	Find(path []string, index int) interface{}
+
+	// FindPrefix searches "best" prefix in the tree given the subpath starting from given index in
+	// the path array.
+	// It returns the value stored at the matched node as well as the length of the matched path segments.
+	FindPrefix(path []string, index int) (interface{}, int)
 
 	// Find the value stored at subpath starting from given index in the path array.
 	// Also returns a map of extracted template vars.
@@ -112,6 +118,9 @@ func (t *tree) string(b *strings.Builder, indent string) {
 }
 
 // Find the value stored at subpath starting from given index in the path array.
+// It returns nil if a complete match of the given path array is not found.
+// When multiple matches are available, it picks the one with most matched segments,
+// among which exactly matched segment > single wildcard > double wildcard.
 func (t *tree) Find(path []string, index int) interface{} {
 	if index >= len(path) {
 		return t.value
@@ -121,6 +130,53 @@ func (t *tree) Find(path []string, index int) interface{} {
 		return node.value
 	}
 	return nil
+}
+
+// FindPrefix searches the tree given the subpath starting from given index in
+// the path array.
+// It returns the value stored at the last matched node as well as the length of
+// the matched path segments.
+// "Best" is defined as such:
+//   * Exact match wins - explicity segments (e.g. "/abc") wins over wildcard "*" at the same depth.
+//   * Longest match wins when the above rule gives a tie, for example:
+//     1. "/a/b/c" wins over "/a/b" for path "/a/b/c/d",
+//     2. "/a/*/c" wins over "/a/*" for path "/a/b/c/d",
+//     3. "/a/b" wins over "/*/b/c" for path "/a/b/c",
+//     4. "/a/*" wins over "/*/b/c" for path "/a/b/c".
+func (t *tree) FindPrefix(path []string, index int) (interface{}, int) {
+	return t.findPrefix(path, index, index)
+}
+
+func (t *tree) findPrefix(path []string, start, current int) (interface{}, int) {
+	if current == len(path) {
+		return t.value, current - start
+	}
+
+	name := path[current]
+	if name == "" {
+		return t.findPrefix(path, start, current+1)
+	}
+	if child, ok := t.children[name]; ok {
+		if value, length := child.(*tree).findPrefix(path, start, current+1); value != nil {
+			return value, length
+		}
+	}
+
+	if child, ok := t.children[wildcard]; ok {
+		if value, length := child.(*tree).findPrefix(path, start, current+1); value != nil {
+			return value, length
+		}
+	}
+
+	if child, ok := t.children[doubleWildcard]; ok {
+		for i := current + 1; i < len(path); i++ {
+			if value, length := child.(*tree).findPrefix(path, start, i); value != nil {
+				return value, length
+			}
+		}
+	}
+
+	return t.value, current - start // best match
 }
 
 // Find the value stored at subpath starting from given index in the path array.
@@ -139,8 +195,10 @@ func (t *tree) FindAndExtract(path []string, index int) (val interface{}, varMap
 
 func (t *tree) findNode(path []string, index, matchCount int, varMap map[string]interface{}) (found *tree, foundMatchCount int) {
 	if index >= len(path) {
+		// This indicates a complete match. Return a larger count to ensure it beats others.
 		return t, matchCount + 1
 	}
+
 	name := path[index]
 	if name == "" { // skip empty
 		return t.findNode(path, 1+index, matchCount, varMap)
@@ -148,7 +206,6 @@ func (t *tree) findNode(path []string, index, matchCount int, varMap map[string]
 
 	// non-wildcard match
 	if child, ok := t.children[name]; ok {
-		found = child.(*tree)
 		if node, mc := child.(*tree).findNode(path, 1+index, 1+matchCount, varMap); node != nil && node.value != nil {
 			found = node
 			foundMatchCount = mc
