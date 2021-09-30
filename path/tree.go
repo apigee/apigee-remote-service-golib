@@ -192,7 +192,7 @@ func (t *tree) FindAndExtract(path []string, index int) (val interface{}, varMap
 
 func (t *tree) findNode(path []string, index, matchCount int, varMap map[string]interface{}) (found *tree, foundMatchCount int) {
 	if index >= len(path) {
-		// This indicates a complete match. Return MaxInt to ensure it beats others.
+		// This indicates a complete match. Return a larger count to ensure it beats others.
 		return t, matchCount + 1
 	}
 
