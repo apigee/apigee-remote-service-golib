@@ -139,11 +139,17 @@ func TestWildcardTree(t *testing.T) {
 		{path: "a/x/x/x/c/x/g", value: "a/**/c/**"},
 		{path: "a/x/x/x", value: "a/**"},
 		{path: "a/x/x/x/c/x/c/c", value: "a/**/c/**/c"},
+		{path: "c/b/a", value: ""},
+		{path: "d/c/b/a", value: ""},
 	}
 	for _, test := range find {
 		path := strings.Split(test.path, "/")
 		got := tree.Find(path, 0)
-		if test.value != got {
+		if test.value == "" {
+			if got != nil {
+				t.Errorf("for: %v, want: <nil>, got: %v", test.path, got)
+			}
+		} else if test.value != got {
 			t.Errorf("for: %v, want: %v, got: %v", test.path, test.value, got)
 		}
 	}

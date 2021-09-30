@@ -118,6 +118,9 @@ func (t *tree) string(b *strings.Builder, indent string) {
 }
 
 // Find the value stored at subpath starting from given index in the path array.
+// It returns nil if a complete match of the given path array is not found.
+// When multiple matches are available, it picks the one with most matched segments,
+// among which exactly matched segment > single wildcard > double wildcard.
 func (t *tree) Find(path []string, index int) interface{} {
 	if index >= len(path) {
 		return t.value
