@@ -29,7 +29,7 @@ import (
 const (
 	defaultRefreshInterval = 30 * time.Minute
 
-	serviceAccountNameFormat = "/projects/-/serviceaccounts/%s"
+	serviceAccountNameFormat = "projects/-/serviceAccounts/%s"
 )
 
 // AccessTokenSource defines an access token source.
@@ -60,11 +60,12 @@ type IdentityTokenSource struct {
 // TokenSourceOption contains configurations for ID and/or access token sources.
 type TokenSourceOption struct {
 	Client          *http.Client
-	RefreshInterval time.Time
+	RefreshInterval time.Duration
 	ServiceAccount  string
 	Scopes          []string
 	Audience        string
 	IncludeEmail    bool
+	Endpoint        string
 }
 
 // NewAccessTokenSource returns a new access token source.
@@ -75,6 +76,9 @@ func NewAccessTokenSource(ctx context.Context, opt TokenSourceOption) (*AccessTo
 	var opts []option.ClientOption
 	if opt.Client != nil {
 		opts = append(opts, option.WithHTTPClient(opt.Client))
+	}
+	if opt.Endpoint != "" {
+		opts = append(opts, option.WithEndpoint(opt.Endpoint))
 	}
 	iamsvc, err := iam.NewService(ctx, opts...)
 	if err != nil {
@@ -93,6 +97,9 @@ func NewAccessTokenSource(ctx context.Context, opt TokenSourceOption) (*AccessTo
 	}
 
 	refreshInterval := defaultRefreshInterval
+	if opt.RefreshInterval > 0 {
+		refreshInterval = opt.RefreshInterval
+	}
 	go func() {
 		tick := time.NewTicker(refreshInterval)
 		for {
@@ -106,6 +113,7 @@ func NewAccessTokenSource(ctx context.Context, opt TokenSourceOption) (*AccessTo
 		}
 	}()
 
+	ats.refresh()
 	return ats, nil
 }
 
@@ -117,6 +125,9 @@ func NewIdentityTokenSource(ctx context.Context, opt TokenSourceOption) (*Identi
 	var opts []option.ClientOption
 	if opt.Client != nil {
 		opts = append(opts, option.WithHTTPClient(opt.Client))
+	}
+	if opt.Endpoint != "" {
+		opts = append(opts, option.WithEndpoint(opt.Endpoint))
 	}
 	iamsvc, err := iam.NewService(ctx, opts...)
 	if err != nil {
@@ -136,6 +147,9 @@ func NewIdentityTokenSource(ctx context.Context, opt TokenSourceOption) (*Identi
 	}
 
 	refreshInterval := defaultRefreshInterval
+	if opt.RefreshInterval > 0 {
+		refreshInterval = opt.RefreshInterval
+	}
 	go func() {
 		tick := time.NewTicker(refreshInterval)
 		for {
@@ -149,6 +163,7 @@ func NewIdentityTokenSource(ctx context.Context, opt TokenSourceOption) (*Identi
 		}
 	}()
 
+	its.refresh()
 	return its, nil
 }
 
@@ -170,6 +185,7 @@ func (ats *AccessTokenSource) refresh() {
 	resp, err := ats.iamsvc.Projects.ServiceAccounts.GenerateAccessToken(ats.saName, req).Do()
 	if err != nil {
 		log.Errorf("failed to fetch access token for %q: %v", ats.saName, err)
+		return
 	}
 	ats.mu.Lock()
 	ats.token = resp.AccessToken
@@ -199,7 +215,8 @@ func (its *IdentityTokenSource) refresh() {
 	}
 	resp, err := its.iamsvc.Projects.ServiceAccounts.GenerateIdToken(its.saName, req).Do()
 	if err != nil {
-		log.Errorf("failed to fetch access token for %q: %v", its.saName, err)
+		log.Errorf("failed to fetch ID token for %q: %v", its.saName, err)
+		return
 	}
 	its.mu.Lock()
 	its.token = resp.Token
