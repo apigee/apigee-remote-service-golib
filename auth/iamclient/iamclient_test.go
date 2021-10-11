@@ -22,7 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/oauth2/google"
 	iam "google.golang.org/api/iamcredentials/v1"
 )
 
@@ -59,16 +58,10 @@ func TestAccessTokenRefresh(t *testing.T) {
 		}
 	}))
 
-	// scope: "https://www.googleapis.com/auth/cloud-platform"
-	ctx := context.Background()
-	c, err := google.DefaultClient(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctxWithCancel, cancelFunc := context.WithCancel(ctx)
+	ctxWithCancel, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
 	ts, err := NewAccessTokenSource(ctxWithCancel, TokenSourceOption{
-		Client:          c,
+		Client:          http.DefaultClient,
 		Scopes:          []string{"https://www.googleapis.com/auth/cloud-platform"},
 		RefreshInterval: time.Hour,
 		ServiceAccount:  "foo@bar.iam.gserviceaccount.com",
@@ -150,16 +143,10 @@ func TestIdentityTokenRefresh(t *testing.T) {
 		}
 	}))
 
-	// scope: "https://www.googleapis.com/auth/cloud-platform"
-	ctx := context.Background()
-	c, err := google.DefaultClient(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctxWithCancel, cancelFunc := context.WithCancel(ctx)
+	ctxWithCancel, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
 	ts, err := NewIdentityTokenSource(ctxWithCancel, TokenSourceOption{
-		Client:          c,
+		Client:          http.DefaultClient,
 		RefreshInterval: 100 * time.Millisecond,
 		Audience:        "aud",
 		ServiceAccount:  "foo@bar.iam.gserviceaccount.com",
