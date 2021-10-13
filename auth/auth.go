@@ -147,6 +147,17 @@ func (m *manager) Authenticate(ctx context.Context, apiKey string,
 		authAttempted = true
 	}
 
+	// logs the auth result before the potential auth error gets overwritten
+	if log.DebugEnabled() {
+		redacts := []interface{}{authContext.APIKey, authContext.AccessToken, authContext.ClientID}
+		redactedAC := util.SprintfRedacts(redacts, "%#v", authContext)
+		if authenticationError == nil {
+			log.Debugf("Authenticate success: %s", redactedAC)
+		} else {
+			log.Debugf("Authenticate error: %s [%v]", redactedAC, authenticationError)
+		}
+	}
+
 	// translate errors to auth.Err* types
 	if !authAttempted {
 		authenticationError = ErrNoAuth
@@ -160,16 +171,6 @@ func (m *manager) Authenticate(ctx context.Context, apiKey string,
 		}
 	} else if claimsError != nil {
 		authenticationError = claimsError
-	}
-
-	if log.DebugEnabled() {
-		redacts := []interface{}{authContext.APIKey, authContext.AccessToken, authContext.ClientID}
-		redactedAC := util.SprintfRedacts(redacts, "%#v", authContext)
-		if authenticationError == nil {
-			log.Debugf("Authenticate success: %s", redactedAC)
-		} else {
-			log.Debugf("Authenticate error: %s [%v]", redactedAC, authenticationError)
-		}
 	}
 
 	return authContext, authenticationError
