@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/log"
+	"golang.org/x/oauth2"
 	iam "google.golang.org/api/iamcredentials/v1"
 	"google.golang.org/api/option"
 )
@@ -39,9 +40,8 @@ type AccessTokenSource struct {
 	saName string
 	scopes []string
 
-	token      string
-	expireTime time.Time
-	mu         sync.Mutex
+	token *oauth2.Token
+	mu    sync.Mutex
 }
 
 // IdentityTokenSource defines an ID token source.
@@ -52,9 +52,8 @@ type IdentityTokenSource struct {
 	audience     string
 	includeEmail bool
 
-	token      string
-	expireTime time.Time
-	mu         sync.Mutex
+	token *oauth2.Token
+	mu    sync.Mutex
 }
 
 // TokenSourceOption contains configurations for ID and/or access token sources.
@@ -105,7 +104,9 @@ func NewAccessTokenSource(ctx context.Context, opt TokenSourceOption) (*AccessTo
 		for {
 			select {
 			case <-tick.C:
-				ats.refresh()
+				if err := ats.refresh(); err != nil {
+					log.Errorf("%v", err)
+				}
 			case <-ctx.Done():
 				tick.Stop()
 				return
@@ -113,7 +114,9 @@ func NewAccessTokenSource(ctx context.Context, opt TokenSourceOption) (*AccessTo
 		}
 	}()
 
-	ats.refresh()
+	if err := ats.refresh(); err != nil {
+		log.Errorf("%v", err)
+	}
 	return ats, nil
 }
 
@@ -155,7 +158,9 @@ func NewIdentityTokenSource(ctx context.Context, opt TokenSourceOption) (*Identi
 		for {
 			select {
 			case <-tick.C:
-				its.refresh()
+				if err := its.refresh(); err != nil {
+					log.Errorf("%v", err)
+				}
 			case <-ctx.Done():
 				tick.Stop()
 				return
@@ -163,64 +168,80 @@ func NewIdentityTokenSource(ctx context.Context, opt TokenSourceOption) (*Identi
 		}
 	}()
 
-	its.refresh()
+	if err := its.refresh(); err != nil {
+		log.Errorf("%v", err)
+	}
 	return its, nil
 }
 
 // Token returns the access token from the source.
-func (ats *AccessTokenSource) Token() string {
-	// Refresh if the token has expired with 5 minutes skew.
-	if ats.expireTime.Before(time.Now().Add(5 * time.Minute)) {
-		ats.refresh()
+func (ats *AccessTokenSource) Token() (*oauth2.Token, error) {
+	if !ats.token.Valid() {
+		if err := ats.refresh(); err != nil {
+			return nil, err
+		}
 	}
 	ats.mu.Lock()
 	defer ats.mu.Unlock()
-	return ats.token
+	// Deep copy the object to avoid data race.
+	return &oauth2.Token{
+		AccessToken: ats.token.AccessToken,
+		Expiry:      ats.token.Expiry,
+	}, nil
 }
 
-func (ats *AccessTokenSource) refresh() {
+func (ats *AccessTokenSource) refresh() error {
 	req := &iam.GenerateAccessTokenRequest{
 		Scope: ats.scopes,
 	}
 	resp, err := ats.iamsvc.Projects.ServiceAccounts.GenerateAccessToken(ats.saName, req).Do()
 	if err != nil {
-		log.Errorf("failed to fetch access token for %q: %v", ats.saName, err)
-		return
+		return fmt.Errorf("failed to fetch access token for %q: %v", ats.saName, err)
 	}
-	ats.mu.Lock()
-	ats.token = resp.AccessToken
 	t, err := time.Parse(time.RFC3339, resp.ExpireTime)
 	if err != nil {
-		log.Errorf("failed to parse access token expire time for %q: %v", ats.saName, err)
+		return fmt.Errorf("failed to parse access token expire time for %q: %v", ats.saName, err)
 	}
-	ats.expireTime = t
-	ats.mu.Unlock()
+	ats.mu.Lock()
+	defer ats.mu.Unlock()
+	ats.token = &oauth2.Token{
+		AccessToken: resp.AccessToken,
+		Expiry:      t,
+	}
+	return nil
 }
 
 // Token returns the ID token from the source.
-func (its *IdentityTokenSource) Token() string {
-	// Refresh if the token has expired with 5 minutes skew.
-	if its.expireTime.Before(time.Now().Add(5 * time.Minute)) {
-		its.refresh()
+func (its *IdentityTokenSource) Token() (*oauth2.Token, error) {
+	if !its.token.Valid() {
+		if err := its.refresh(); err != nil {
+			return nil, err
+		}
 	}
 	its.mu.Lock()
 	defer its.mu.Unlock()
-	return its.token
+	// Deep copy the object to avoid data race.
+	return &oauth2.Token{
+		AccessToken: its.token.AccessToken,
+		Expiry:      its.token.Expiry,
+	}, nil
 }
 
-func (its *IdentityTokenSource) refresh() {
+func (its *IdentityTokenSource) refresh() error {
 	req := &iam.GenerateIdTokenRequest{
 		Audience:     its.audience,
 		IncludeEmail: its.includeEmail,
 	}
 	resp, err := its.iamsvc.Projects.ServiceAccounts.GenerateIdToken(its.saName, req).Do()
 	if err != nil {
-		log.Errorf("failed to fetch ID token for %q: %v", its.saName, err)
-		return
+		return fmt.Errorf("failed to fetch ID token for %q: %v", its.saName, err)
 	}
 	its.mu.Lock()
-	its.token = resp.Token
-	// ID token expires in one hour by default.
-	its.expireTime = time.Now().Add(time.Hour)
-	its.mu.Unlock()
+	defer its.mu.Unlock()
+	its.token = &oauth2.Token{
+		AccessToken: resp.Token,
+		// ID token expires in one hour by default. Add 5 mins skew.
+		Expiry: time.Now().Add(55 * time.Minute),
+	}
+	return nil
 }

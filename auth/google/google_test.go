@@ -30,7 +30,7 @@ func TestAccessTokenRefresh(t *testing.T) {
 	ready := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !ready {
-			http.Error(w, "server bot ready", http.StatusInternalServerError)
+			http.Error(w, "server not ready", http.StatusInternalServerError)
 			return
 		}
 		req := &iam.GenerateAccessTokenRequest{}
@@ -42,7 +42,7 @@ func TestAccessTokenRefresh(t *testing.T) {
 		if ctr == 0 {
 			resp = &iam.GenerateAccessTokenResponse{
 				AccessToken: "token-1",
-				ExpireTime:  time.Now().Add(time.Second).Format(time.RFC3339),
+				ExpireTime:  time.Now().Add(time.Millisecond).Format(time.RFC3339),
 			}
 		} else {
 			resp = &iam.GenerateAccessTokenResponse{
@@ -53,8 +53,6 @@ func TestAccessTokenRefresh(t *testing.T) {
 		ctr++
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			http.Error(w, "failed to marshal response", http.StatusInternalServerError)
-		} else {
-			w.WriteHeader(http.StatusOK)
 		}
 	}))
 
@@ -63,7 +61,7 @@ func TestAccessTokenRefresh(t *testing.T) {
 	ts, err := NewAccessTokenSource(ctxWithCancel, TokenSourceOption{
 		Client:          http.DefaultClient,
 		Scopes:          []string{"https://www.googleapis.com/auth/cloud-platform"},
-		RefreshInterval: time.Hour,
+		RefreshInterval: 50 * time.Millisecond,
 		ServiceAccount:  "foo@bar.iam.gserviceaccount.com",
 		Endpoint:        srv.URL,
 	})
@@ -71,14 +69,27 @@ func TestAccessTokenRefresh(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if _, err := ts.Token(); err == nil {
+		t.Fatalf("ts.Token() err = nil, wanted error")
+	}
+	// One refresh should happen with error.
+	time.Sleep(55 * time.Millisecond)
 	ready = true
-	if tk := ts.Token(); tk != "token-1" {
+	tk, err := ts.Token()
+	if err != nil {
+		t.Fatalf("ts.Token() err = %v, wanted no error", err)
+	}
+	if tk.AccessToken != "token-1" {
 		t.Errorf("ts.Token() returned %q, wanted %q", tk, "token-1")
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
 	// The token should be refreshed because the previous one expired.
-	if tk := ts.Token(); tk != "token-2" {
+	tk, err = ts.Token()
+	if err != nil {
+		t.Fatalf("ts.Token() err = %v, wanted no error", err)
+	}
+	if tk.AccessToken != "token-2" {
 		t.Errorf("ts.Token() returned %q, wanted %q", tk, "token-2")
 	}
 }
@@ -138,8 +149,6 @@ func TestIdentityTokenRefresh(t *testing.T) {
 		ctr++
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			http.Error(w, "failed to marshal response", http.StatusInternalServerError)
-		} else {
-			w.WriteHeader(http.StatusOK)
 		}
 	}))
 
@@ -147,7 +156,7 @@ func TestIdentityTokenRefresh(t *testing.T) {
 	defer cancelFunc()
 	ts, err := NewIdentityTokenSource(ctxWithCancel, TokenSourceOption{
 		Client:          http.DefaultClient,
-		RefreshInterval: 100 * time.Millisecond,
+		RefreshInterval: 50 * time.Millisecond,
 		Audience:        "aud",
 		ServiceAccount:  "foo@bar.iam.gserviceaccount.com",
 		Endpoint:        srv.URL,
@@ -156,14 +165,27 @@ func TestIdentityTokenRefresh(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if _, err := ts.Token(); err == nil {
+		t.Fatalf("ts.Token() err = nil, wanted error")
+	}
+	// One refresh should happen with error.
+	time.Sleep(55 * time.Millisecond)
 	ready = true
-	if tk := ts.Token(); tk != "token-1" {
+	tk, err := ts.Token()
+	if err != nil {
+		t.Fatalf("ts.Token() err = %v, wanted no error", err)
+	}
+	if tk.AccessToken != "token-1" {
 		t.Errorf("ts.Token() returned %q, wanted %q", tk, "token-1")
 	}
 
-	time.Sleep(200 * time.Millisecond)
-	// The token should be refreshed because the previous one expired.
-	if tk := ts.Token(); tk != "token-2" {
+	time.Sleep(50 * time.Millisecond)
+	// The token should be refreshed because of the refresh interval.
+	tk, err = ts.Token()
+	if err != nil {
+		t.Fatalf("ts.Token() err = %v, wanted no error", err)
+	}
+	if tk.AccessToken != "token-2" {
 		t.Errorf("ts.Token() returned %q, wanted %q", tk, "token-2")
 	}
 }
