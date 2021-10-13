@@ -151,8 +151,14 @@ func (m *manager) Authenticate(ctx context.Context, apiKey string,
 	if log.DebugEnabled() {
 		redacts := []interface{}{authContext.APIKey, authContext.AccessToken, authContext.ClientID}
 		redactedAC := util.SprintfRedacts(redacts, "%#v", authContext)
-		if authenticationError == nil {
-			log.Debugf("Authenticate success: %s", redactedAC)
+		if !authAttempted {
+			log.Debugf("Authenticate error: %s [%v]", redactedAC, ErrNoAuth)
+		} else if authenticationError == nil {
+			if claimsError == nil {
+				log.Debugf("Authenticate success: %s", redactedAC)
+			} else {
+				log.Debugf("Authenticate error: %s [%v]", redactedAC, claimsError)
+			}
 		} else {
 			log.Debugf("Authenticate error: %s [%v]", redactedAC, authenticationError)
 		}
