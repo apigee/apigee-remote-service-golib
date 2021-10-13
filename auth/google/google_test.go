@@ -26,6 +26,27 @@ import (
 	"google.golang.org/api/option"
 )
 
+func TestNewIAMServiceError(t *testing.T) {
+	tests := []struct {
+		desc    string
+		saEmail string
+		opts    []option.ClientOption
+	}{
+		{
+			desc: "missing service account",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			_, err := NewIAMService(context.Background(), test.saEmail, test.opts...)
+			if err == nil {
+				t.Errorf("NewIAMService(...) err = nil, wanted error")
+			}
+		})
+	}
+}
+
 func TestAccessTokenRefresh(t *testing.T) {
 	ctr := 0
 	ready := false
@@ -60,6 +81,7 @@ func TestAccessTokenRefresh(t *testing.T) {
 	ctxWithCancel, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
 	opts := []option.ClientOption{
+		option.WithHTTPClient(http.DefaultClient),
 		option.WithEndpoint(srv.URL),
 	}
 	s, err := NewIAMService(ctxWithCancel, "foo@bar.iam.gserviceaccount.com", opts...)
@@ -106,27 +128,6 @@ func TestAccessTokenRefresh(t *testing.T) {
 	}
 }
 
-func TestNewIAMServiceError(t *testing.T) {
-	tests := []struct {
-		desc    string
-		saEmail string
-		opts    []option.ClientOption
-	}{
-		{
-			desc: "missing service account",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.desc, func(t *testing.T) {
-			_, err := NewIAMService(context.Background(), test.saEmail, test.opts...)
-			if err == nil {
-				t.Errorf("NewIAMService(...) err = nil, wanted error")
-			}
-		})
-	}
-}
-
 func TestIdentityTokenRefresh(t *testing.T) {
 	ctr := 0
 	ready := false
@@ -159,6 +160,7 @@ func TestIdentityTokenRefresh(t *testing.T) {
 	ctxWithCancel, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
 	opts := []option.ClientOption{
+		option.WithHTTPClient(http.DefaultClient),
 		option.WithEndpoint(srv.URL),
 	}
 	s, err := NewIAMService(ctxWithCancel, "foo@bar.iam.gserviceaccount.com", opts...)
