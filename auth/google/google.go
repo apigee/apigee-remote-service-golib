@@ -17,7 +17,6 @@ package google
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"sync"
 	"time"
 
@@ -32,6 +31,13 @@ const (
 
 	serviceAccountNameFormat = "projects/-/serviceAccounts/%s"
 )
+
+// IAMService defines the IAM service for a particular service account.
+type IAMService struct {
+	ctx    context.Context
+	svc    *iam.Service
+	saName string
+}
 
 // AccessTokenSource defines an access token source.
 // It supplies access tokens via Token() method.
@@ -56,48 +62,36 @@ type IdentityTokenSource struct {
 	mu    sync.Mutex
 }
 
-// TokenSourceOption contains configurations for ID and/or access token sources.
-type TokenSourceOption struct {
-	Client          *http.Client
-	RefreshInterval time.Duration
-	ServiceAccount  string
-	Scopes          []string
-	Audience        string
-	IncludeEmail    bool
-	Endpoint        string
-}
-
-// NewAccessTokenSource returns a new access token source.
-// Service account email and scopes are required fields.
-// The http client, which can be specified, needs to have proper authorization information
-// to generate tokens for the given service account.
-func NewAccessTokenSource(ctx context.Context, opt TokenSourceOption) (*AccessTokenSource, error) {
-	var opts []option.ClientOption
-	if opt.Client != nil {
-		opts = append(opts, option.WithHTTPClient(opt.Client))
-	}
-	if opt.Endpoint != "" {
-		opts = append(opts, option.WithEndpoint(opt.Endpoint))
+// NewIAMService creates a new IAM service with given service account email
+// and a list of client options.
+func NewIAMService(ctx context.Context, saEmail string, opts ...option.ClientOption) (*IAMService, error) {
+	if saEmail == "" {
+		return nil, fmt.Errorf("service account is required to create IAM service")
 	}
 	iamsvc, err := iam.NewService(ctx, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new IAM credentials service: %v", err)
 	}
-	if opt.ServiceAccount == "" {
-		return nil, fmt.Errorf("service account is required to create access token source")
-	}
-	if len(opt.Scopes) == 0 {
+	return &IAMService{
+		ctx:    ctx,
+		svc:    iamsvc,
+		saName: fmt.Sprintf(serviceAccountNameFormat, saEmail),
+	}, nil
+}
+
+// AccessTokenSource returns a new access token source. Scopes are required.
+func (s *IAMService) AccessTokenSource(scopes []string, refreshInterval time.Duration) (*AccessTokenSource, error) {
+	if len(scopes) == 0 {
 		return nil, fmt.Errorf("scopes are required to create access token source")
 	}
 	ats := &AccessTokenSource{
-		iamsvc: iamsvc,
-		saName: fmt.Sprintf(serviceAccountNameFormat, opt.ServiceAccount),
-		scopes: opt.Scopes,
+		iamsvc: s.svc,
+		saName: s.saName,
+		scopes: scopes,
 	}
 
-	refreshInterval := defaultRefreshInterval
-	if opt.RefreshInterval > 0 {
-		refreshInterval = opt.RefreshInterval
+	if refreshInterval == 0 {
+		refreshInterval = defaultRefreshInterval
 	}
 	go func() {
 		tick := time.NewTicker(refreshInterval)
@@ -107,7 +101,7 @@ func NewAccessTokenSource(ctx context.Context, opt TokenSourceOption) (*AccessTo
 				if err := ats.refresh(); err != nil {
 					log.Errorf("%v", err)
 				}
-			case <-ctx.Done():
+			case <-s.ctx.Done():
 				tick.Stop()
 				return
 			}
@@ -120,38 +114,20 @@ func NewAccessTokenSource(ctx context.Context, opt TokenSourceOption) (*AccessTo
 	return ats, nil
 }
 
-// NewIdentityTokenSource returns a new ID token source.
-// Service account email and audience are required fields.
-// The http client, which can be specified, needs to have proper authorization information
-// to generate tokens for the given service account.
-func NewIdentityTokenSource(ctx context.Context, opt TokenSourceOption) (*IdentityTokenSource, error) {
-	var opts []option.ClientOption
-	if opt.Client != nil {
-		opts = append(opts, option.WithHTTPClient(opt.Client))
-	}
-	if opt.Endpoint != "" {
-		opts = append(opts, option.WithEndpoint(opt.Endpoint))
-	}
-	iamsvc, err := iam.NewService(ctx, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new IAM credentials service: %v", err)
-	}
-	if opt.ServiceAccount == "" {
-		return nil, fmt.Errorf("service account is required to create identity token source")
-	}
-	if opt.Audience == "" {
+// IdentityTokenSource returns a new ID token source. Audience is required.
+func (s *IAMService) IdentityTokenSource(audience string, includeEmail bool, refreshInterval time.Duration) (*IdentityTokenSource, error) {
+	if audience == "" {
 		return nil, fmt.Errorf("audience is required to create identity token source")
 	}
 	its := &IdentityTokenSource{
-		iamsvc:       iamsvc,
-		saName:       fmt.Sprintf(serviceAccountNameFormat, opt.ServiceAccount),
-		audience:     opt.Audience,
-		includeEmail: opt.IncludeEmail,
+		iamsvc:       s.svc,
+		saName:       s.saName,
+		audience:     audience,
+		includeEmail: includeEmail,
 	}
 
-	refreshInterval := defaultRefreshInterval
-	if opt.RefreshInterval > 0 {
-		refreshInterval = opt.RefreshInterval
+	if refreshInterval == 0 {
+		refreshInterval = defaultRefreshInterval
 	}
 	go func() {
 		tick := time.NewTicker(refreshInterval)
@@ -161,7 +137,7 @@ func NewIdentityTokenSource(ctx context.Context, opt TokenSourceOption) (*Identi
 				if err := its.refresh(); err != nil {
 					log.Errorf("%v", err)
 				}
-			case <-ctx.Done():
+			case <-s.ctx.Done():
 				tick.Stop()
 				return
 			}

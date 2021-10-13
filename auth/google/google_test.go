@@ -23,6 +23,7 @@ import (
 	"time"
 
 	iam "google.golang.org/api/iamcredentials/v1"
+	"google.golang.org/api/option"
 )
 
 func TestAccessTokenRefresh(t *testing.T) {
@@ -58,22 +59,33 @@ func TestAccessTokenRefresh(t *testing.T) {
 
 	ctxWithCancel, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
-	ts, err := NewAccessTokenSource(ctxWithCancel, TokenSourceOption{
-		Client:          http.DefaultClient,
-		Scopes:          []string{"https://www.googleapis.com/auth/cloud-platform"},
-		RefreshInterval: 50 * time.Millisecond,
-		ServiceAccount:  "foo@bar.iam.gserviceaccount.com",
-		Endpoint:        srv.URL,
-	})
+	opts := []option.ClientOption{
+		option.WithEndpoint(srv.URL),
+	}
+	s, err := NewIAMService(ctxWithCancel, "foo@bar.iam.gserviceaccount.com", opts...)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("NewIAMService() err = %v, wanted no error", err)
+	}
+
+	if _, err := s.AccessTokenSource(nil, 0); err == nil {
+		t.Errorf("AccessTokenSource() err = nil, wanted error for empty scopes")
+	}
+
+	scope := "https://www.googleapis.com/auth/cloud-platform"
+	if _, err := s.AccessTokenSource([]string{scope}, 0); err != nil {
+		t.Fatalf("AccessTokenSource() err = %v, wanted no error", err)
+	}
+
+	ts, err := s.AccessTokenSource([]string{scope}, 50*time.Millisecond)
+	if err != nil {
+		t.Fatalf("AccessTokenSource() err = %v, wanted no error", err)
 	}
 
 	if _, err := ts.Token(); err == nil {
 		t.Fatalf("ts.Token() err = nil, wanted error")
 	}
 	// One refresh should happen with error.
-	time.Sleep(55 * time.Millisecond)
+	time.Sleep(60 * time.Millisecond)
 	ready = true
 	tk, err := ts.Token()
 	if err != nil {
@@ -83,7 +95,7 @@ func TestAccessTokenRefresh(t *testing.T) {
 		t.Errorf("ts.Token() returned %q, wanted %q", tk, "token-1")
 	}
 
-	time.Sleep(5 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	// The token should be refreshed because the previous one expired.
 	tk, err = ts.Token()
 	if err != nil {
@@ -94,30 +106,22 @@ func TestAccessTokenRefresh(t *testing.T) {
 	}
 }
 
-func TestNewAccessTokenSourceError(t *testing.T) {
+func TestNewIAMServiceError(t *testing.T) {
 	tests := []struct {
-		desc string
-		opt  TokenSourceOption
+		desc    string
+		saEmail string
+		opts    []option.ClientOption
 	}{
 		{
-			desc: "missing scopes",
-			opt: TokenSourceOption{
-				ServiceAccount: "foo@bar.iam.gserviceaccount.com",
-			},
-		},
-		{
 			desc: "missing service account",
-			opt: TokenSourceOption{
-				Scopes: []string{"scope-1"},
-			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			_, err := NewAccessTokenSource(context.Background(), test.opt)
+			_, err := NewIAMService(context.Background(), test.saEmail, test.opts...)
 			if err == nil {
-				t.Errorf("NewAccessTokenSource(...) err = nil, wanted error")
+				t.Errorf("NewIAMService(...) err = nil, wanted error")
 			}
 		})
 	}
@@ -154,22 +158,32 @@ func TestIdentityTokenRefresh(t *testing.T) {
 
 	ctxWithCancel, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
-	ts, err := NewIdentityTokenSource(ctxWithCancel, TokenSourceOption{
-		Client:          http.DefaultClient,
-		RefreshInterval: 50 * time.Millisecond,
-		Audience:        "aud",
-		ServiceAccount:  "foo@bar.iam.gserviceaccount.com",
-		Endpoint:        srv.URL,
-	})
+	opts := []option.ClientOption{
+		option.WithEndpoint(srv.URL),
+	}
+	s, err := NewIAMService(ctxWithCancel, "foo@bar.iam.gserviceaccount.com", opts...)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("NewIAMService() err = %v, wanted no error", err)
+	}
+
+	if _, err := s.IdentityTokenSource("", false, 0); err == nil {
+		t.Errorf("IdentityTokenSource() err = nil, wanted error for empty audience")
+	}
+
+	if _, err := s.IdentityTokenSource("aud", true, 0); err != nil {
+		t.Fatalf("IdentityTokenSource() err = %v, wanted no error", err)
+	}
+
+	ts, err := s.IdentityTokenSource("aud", true, 50*time.Millisecond)
+	if err != nil {
+		t.Fatalf("IdentityTokenSource() err = %v, wanted no error", err)
 	}
 
 	if _, err := ts.Token(); err == nil {
 		t.Fatalf("ts.Token() err = nil, wanted error")
 	}
 	// One refresh should happen with error.
-	time.Sleep(55 * time.Millisecond)
+	time.Sleep(60 * time.Millisecond)
 	ready = true
 	tk, err := ts.Token()
 	if err != nil {
@@ -179,7 +193,7 @@ func TestIdentityTokenRefresh(t *testing.T) {
 		t.Errorf("ts.Token() returned %q, wanted %q", tk, "token-1")
 	}
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(60 * time.Millisecond)
 	// The token should be refreshed because of the refresh interval.
 	tk, err = ts.Token()
 	if err != nil {
@@ -187,34 +201,5 @@ func TestIdentityTokenRefresh(t *testing.T) {
 	}
 	if tk.AccessToken != "token-2" {
 		t.Errorf("ts.Token() returned %q, wanted %q", tk, "token-2")
-	}
-}
-
-func TestNewIdentityTokenSourceError(t *testing.T) {
-	tests := []struct {
-		desc string
-		opt  TokenSourceOption
-	}{
-		{
-			desc: "missing audience",
-			opt: TokenSourceOption{
-				ServiceAccount: "foo@bar.iam.gserviceaccount.com",
-			},
-		},
-		{
-			desc: "missing service account",
-			opt: TokenSourceOption{
-				Audience: "aud",
-			},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.desc, func(t *testing.T) {
-			_, err := NewIdentityTokenSource(context.Background(), test.opt)
-			if err == nil {
-				t.Errorf("NewAccessTokenSource(...) err = nil, wanted error")
-			}
-		})
 	}
 }
