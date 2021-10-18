@@ -141,9 +141,9 @@ func (m *manager) Authenticate(ctx context.Context, apiKey string,
 		authAttempted = true
 	}
 
-	var interalError error
+	var internalError error
 	if authenticationError != nil && authenticationError != ErrBadAuth {
-		interalError = authenticationError
+		internalError = authenticationError
 		authenticationError = ErrInternalError
 	}
 
@@ -161,7 +161,7 @@ func (m *manager) Authenticate(ctx context.Context, apiKey string,
 		if authenticationError == nil {
 			log.Debugf("Authenticate success: %s", redactedAC)
 		} else if authenticationError == ErrInternalError {
-			log.Debugf("Authenticate error: %s [%v]", redactedAC, interalError)
+			log.Debugf("Authenticate error: %s [%v]", redactedAC, internalError)
 		} else {
 			log.Debugf("Authenticate error: %s [%v]", redactedAC, authenticationError)
 		}
