@@ -180,6 +180,7 @@ func (kv *verifierImpl) singleFetchToken(ctx context.Context, apiKey string) (ma
 	}
 	res, err, _ := kv.herdBuster.Do(apiKey, fetch)
 	if err != nil {
+		log.Errorf("token fetching for API key failed: %v", err)
 		return nil, err
 	}
 
