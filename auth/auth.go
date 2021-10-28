@@ -147,9 +147,12 @@ func (m *manager) Authenticate(ctx context.Context, apiKey string,
 		authAttempted = true
 	}
 
+	// preserve original error for logging purpose
+	errorToLog := authenticationError
 	// translate errors to auth.Err* types
 	if !authAttempted {
 		authenticationError = ErrNoAuth
+		errorToLog = ErrNoAuth
 	} else if authenticationError != nil {
 		if authenticationError == key.ErrBadKeyAuth {
 			authenticationError = ErrBadAuth
@@ -160,6 +163,7 @@ func (m *manager) Authenticate(ctx context.Context, apiKey string,
 		}
 	} else if claimsError != nil {
 		authenticationError = claimsError
+		errorToLog = claimsError
 	}
 
 	if log.DebugEnabled() {
@@ -168,7 +172,7 @@ func (m *manager) Authenticate(ctx context.Context, apiKey string,
 		if authenticationError == nil {
 			log.Debugf("Authenticate success: %s", redactedAC)
 		} else {
-			log.Debugf("Authenticate error: %s [%v]", redactedAC, authenticationError)
+			log.Debugf("Authenticate error: %s [%v]", redactedAC, errorToLog)
 		}
 	}
 
