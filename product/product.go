@@ -35,45 +35,45 @@ type APIResponse struct {
 // An APIProduct is an Apigee API product. See the Apigee docs for details:
 // https://docs.apigee.com/api-platform/publish/what-api-product
 type APIProduct struct {
-	Attributes       []Attribute     `json:"attributes,omitempty"`
-	Description      string          `json:"description,omitempty"`
-	DisplayName      string          `json:"displayName,omitempty"`
-	Environments     []string        `json:"environments,omitempty"`
-	Name             string          `json:"name,omitempty"`
-	OperationGroup   *OperationGroup `json:"operationGroup,omitempty"`
-	Proxies          []string        `json:"proxies"`
-	QuotaLimit       string          `json:"quota,omitempty"`
-	QuotaInterval    string          `json:"quotaInterval,omitempty"`
-	QuotaTimeUnit    string          `json:"quotaTimeUnit,omitempty"`
-	Resources        []string        `json:"apiResources"`
-	Scopes           []string        `json:"scopes"`
-	APIs             map[string]bool // api name -> true
-	EnvironmentMap   map[string]bool // env name -> true
-	QuotaLimitInt    int64
-	QuotaIntervalInt int64
-	PathTree         path.Tree // APIProduct-level only
+	Attributes       []Attribute     `json:"attributes,omitempty" yaml:"attributes"`
+	Description      string          `json:"description,omitempty" yaml:"description"`
+	DisplayName      string          `json:"displayName,omitempty" yaml:"displayName"`
+	Environments     []string        `json:"environments,omitempty" yaml:"environments"`
+	Name             string          `json:"name,omitempty" yaml:"name"`
+	OperationGroup   *OperationGroup `json:"operationGroup,omitempty" yaml:"operationGroup"`
+	Proxies          []string        `json:"proxies" yaml:"proxies"`
+	QuotaLimit       string          `json:"quota,omitempty" yaml:"quota"`
+	QuotaInterval    string          `json:"quotaInterval,omitempty" yaml:"quotaInterval"`
+	QuotaTimeUnit    string          `json:"quotaTimeUnit,omitempty" yaml:"quotaTimeUnit"`
+	Resources        []string        `json:"apiResources" yaml:"apiResources"`
+	Scopes           []string        `json:"scopes" yaml:"scopes"`
+	APIs             map[string]bool `json:"-" yaml:"-"` // api name -> true
+	EnvironmentMap   map[string]bool `json:"-" yaml:"-"` // env name -> true
+	QuotaLimitInt    int64           `json:"-" yaml:"-"`
+	QuotaIntervalInt int64           `json:"-" yaml:"-"`
+	PathTree         path.Tree       `json:"-" yaml:"-"` // APIProduct-level only
 }
 
 // An Attribute is a name-value-pair attribute of an API product.
 type Attribute struct {
-	Name  string `json:"name,omitempty"`
-	Value string `json:"value,omitempty"`
+	Name  string `json:"name,omitempty" yaml:"name"`
+	Value string `json:"value,omitempty" yaml:"value"`
 }
 
 // An OperationGroup holds OperationConfigs
 type OperationGroup struct {
-	OperationConfigType string            `json:"operationConfigType"`
-	OperationConfigs    []OperationConfig `json:"operationConfigs,omitempty"`
+	OperationConfigType string            `json:"operationConfigType" yaml:"operationConfigType"`
+	OperationConfigs    []OperationConfig `json:"operationConfigs,omitempty" yaml:"operationConfigs"`
 }
 
 // An OperationConfig is a group of Operations
 type OperationConfig struct {
-	ID         string      `json:"-"`
-	APISource  string      `json:"apiSource"`
-	Attributes []Attribute `json:"attributes,omitempty"`
-	Operations []Operation `json:"operations"`
-	Quota      *Quota      `json:"quota"`
-	PathTree   path.Tree
+	ID         string      `json:"-" yaml:"-"`
+	APISource  string      `json:"apiSource" yaml:"apiSource"`
+	Attributes []Attribute `json:"attributes,omitempty" yaml:"attributes"`
+	Operations []Operation `json:"operations" yaml:"operations"`
+	Quota      *Quota      `json:"quota" yaml:"quota"`
+	PathTree   path.Tree   `json:"-" yaml:"-"`
 }
 
 // list of all HTTP verbs
@@ -132,17 +132,17 @@ func (oc *OperationConfig) isValidOperation(api, path, method string, treePath [
 
 // An Operation represents methods on a Resource
 type Operation struct {
-	Methods  []string `json:"methods"`
-	Resource string   `json:"resource"`
+	Methods  []string `json:"methods" yaml:"methods"`
+	Resource string   `json:"resource" yaml:"resource"`
 }
 
 // A Quota is attached to an OperationConfig
 type Quota struct {
-	Interval    string `json:"interval,omitempty"`
-	Limit       string `json:"limit,omitempty"`
-	TimeUnit    string `json:"timeUnit,omitempty"`
-	IntervalInt int64
-	LimitInt    int64
+	Interval    string `json:"interval,omitempty" yaml:"interval"`
+	Limit       string `json:"limit,omitempty" yaml:"limit"`
+	TimeUnit    string `json:"timeUnit,omitempty" yaml:"timeUnit"`
+	IntervalInt int64  `json:"-" yaml:"-"`
+	LimitInt    int64  `json:"-" yaml:"-"`
 }
 
 func (q *Quota) UnmarshalJSON(data []byte) error {
