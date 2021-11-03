@@ -109,6 +109,8 @@ func TestWildcardTree(t *testing.T) {
 		{path: "a/**/c/**", value: "a/**/c/**"},
 		{path: "a/**/c/**/c", value: "a/**/c/**/c"},
 		{path: "a/**/c/**/f", value: "a/**/c/**/f"},
+		{path: "c/**/x", value: "c/**/x"},
+		{path: "d/d/d/**", value: "d/d/d/**"},
 	}
 	for _, test := range add {
 		path := strings.Split(test.path, "/")
@@ -141,6 +143,8 @@ func TestWildcardTree(t *testing.T) {
 		{path: "a/x/x/x/c/x/c/c", value: "a/**/c/**/c"},
 		{path: "c/b/a", value: ""},
 		{path: "d/c/b/a", value: ""},
+		{path: "c/x", value: "c/**/x"},      // ** can be zero segment in the middle
+		{path: "d/d/d/", value: "d/d/d/**"}, // ** can be zero segment in the end
 	}
 	for _, test := range find {
 		path := strings.Split(test.path, "/")
@@ -178,6 +182,8 @@ func TestTemplateTree(t *testing.T) {
 		{path: "a/{b=**}/c/{d=**}", value: "a/{b=**}/c/{d=**}"},
 		{path: "a/{b=**}/c/{d=**}/c", value: "a/{b=**}/c/{d=**}/c"},
 		{path: "a/{b=**}/c/{d=**}/f", value: "a/{b=**}/c/{d=**}/f"},
+		{path: "c/{a=**}/x", value: "c/{a=**}/x"},
+		{path: "d/d/d/{a=**}", value: "d/d/d/{a=**}"},
 	}
 	for _, test := range add {
 		path := strings.Split(test.path, "/")
@@ -209,6 +215,8 @@ func TestTemplateTree(t *testing.T) {
 		{path: "a/x/x/x/c/x/g", value: "a/{b=**}/c/{d=**}", values: map[string]interface{}{"b": "x/x/x", "d": "x/g"}},
 		{path: "a/x/x/x", value: "a/{b=**}", values: map[string]interface{}{"b": "x/x/x"}},
 		{path: "a/x/x/x/c/x/c/c", value: "a/{b=**}/c/{d=**}/c", values: map[string]interface{}{"b": "x/x/x", "d": "x/c"}},
+		{path: "c/x", value: "c/{a=**}/x", values: map[string]interface{}{"a": ""}},
+		{path: "d/d/d", value: "d/d/d/{a=**}"},
 	}
 	for _, test := range find {
 		path := strings.Split(test.path, "/")

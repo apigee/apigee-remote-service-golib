@@ -195,6 +195,12 @@ func (t *tree) FindAndExtract(path []string, index int) (val interface{}, varMap
 
 func (t *tree) findNode(path []string, index, matchCount int, varMap map[string]interface{}) (found *tree, foundMatchCount int) {
 	if index >= len(path) {
+		// If there is double wildcard at the end of the path, match it if no complete match has been found.
+		if t == nil || t.value == nil {
+			if child, ok := t.children[doubleWildcard]; ok {
+				return child.(*tree).findNode(path, index, matchCount, varMap)
+			}
+		}
 		// This indicates a complete match. Return a larger count to ensure it beats others.
 		return t, matchCount + 1
 	}
