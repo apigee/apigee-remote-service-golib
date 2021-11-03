@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/context"
 	"github.com/pkg/errors"
@@ -41,7 +40,6 @@ type Context struct {
 	AccessToken    string
 	Application    string
 	APIProducts    []string
-	Expires        time.Time
 	DeveloperEmail string
 	Scopes         []string
 	APIKey         string
@@ -76,7 +74,6 @@ func (a *Context) setClaims(claims map[string]interface{}) error {
 	a.Application = claims[applicationNameKey].(string)
 	a.APIProducts = products
 	a.Scopes = scopes
-	a.Expires, _ = claims[developerEmailKey].(time.Time)
 	a.DeveloperEmail, _ = claims[developerEmailKey].(string)
 	a.AccessToken, _ = claims[accessTokenKey].(string)
 
