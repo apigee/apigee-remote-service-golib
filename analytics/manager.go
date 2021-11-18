@@ -389,7 +389,7 @@ func getOrgAndEnvFromTenant(tenant string) (string, string, error) {
 var (
 	prometheusRecordsCount = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Subsystem: "analytics",
-		Name:      "records_count",
+		Name:      "records_size",
 		Help:      "Analytics record counts by status",
 	}, []string{"org", "env", "status"})
 
