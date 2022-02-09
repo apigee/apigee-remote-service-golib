@@ -201,9 +201,15 @@ func (a *verifier) Parse(raw string, provider Provider) (map[string]interface{},
 	parser := jwt2.Parser{
 		SkipClaimsValidation: true,
 	}
-	_, err = parser.ParseWithClaims(raw, &claims, func(token *jwt2.Token) (interface{}, error) {
-		return verifyJWSWithKeySet(ks, token)
-	})
+
+	if provider.JWKSURL == "" {
+		_, _, err = parser.ParseUnverified(raw, &claims)
+	} else {
+		_, err = parser.ParseWithClaims(raw, &claims, func(token *jwt2.Token) (interface{}, error) {
+			return verifyJWSWithKeySet(ks, token)
+		})
+	}
+
 	if err != nil {
 		return cacheKnownBad(errors.Wrap(err, "jwt.Parse"))
 	}

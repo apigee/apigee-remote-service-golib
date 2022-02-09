@@ -158,7 +158,6 @@ func (kv *verifierImpl) fetchToken(ctx context.Context, apiKey string) (map[stri
 	// Parse will not verify empty provider
 	claims, err := kv.jwtVerifier.Parse(token, jwt.Provider{})
 	if err != nil {
-		err = errors.Wrap(err, "parsing jwt")
 		kv.knownBad.Set(apiKey, err)
 		return nil, err
 	}
