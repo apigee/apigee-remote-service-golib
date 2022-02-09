@@ -35,7 +35,6 @@ import (
 	"github.com/apigee/apigee-remote-service-golib/v2/context"
 	"github.com/apigee/apigee-remote-service-golib/v2/log"
 	"github.com/apigee/apigee-remote-service-golib/v2/util"
-	jwx "github.com/lestrrat-go/jwx/jwt"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -195,32 +194,33 @@ func (kv *verifierImpl) Verify(ctx context.Context, apiKey string) (claims map[s
 
 	// if token is expired, initiate a background refresh
 	if claims != nil {
-		exp := claims[jwx.ExpirationKey].(time.Time)
-		ttl := exp.Sub(kv.now())
-		if ttl <= 0 { // refresh if possible
-			if _, ok := kv.checking.Load(apiKey); !ok { // one refresh per apiKey at a time
-				kv.checking.Store(apiKey, apiKey)
+		if e, ok := claims["exp"].(float64); ok {
+			ttl := time.Unix(int64(e), 0).Sub(kv.now())
+			if ttl <= 0 { // refresh if possible
+				if _, ok := kv.checking.Load(apiKey); !ok { // one refresh per apiKey at a time
+					kv.checking.Store(apiKey, apiKey)
 
-				// make the call with a backoff
-				// will only call once and cancel loop if successful
-				looper := util.Looper{
-					Backoff: util.DefaultExponentialBackoff(),
-				}
-				c, cancel := contex.WithCancel(contex.Background())
-				work := func(c contex.Context) error {
-					claims, err = kv.singleFetchToken(ctx, apiKey)
-					if err != nil && err != ErrBadKeyAuth {
-						log.Debugf("fetchToken error: %s", err)
-						return err
+					// make the call with a backoff
+					// will only call once and cancel loop if successful
+					looper := util.Looper{
+						Backoff: util.DefaultExponentialBackoff(),
 					}
-					cancel()
-					kv.checking.Delete(apiKey)
-					return nil
+					c, cancel := contex.WithCancel(contex.Background())
+					work := func(c contex.Context) error {
+						claims, err = kv.singleFetchToken(ctx, apiKey)
+						if err != nil && err != ErrBadKeyAuth {
+							log.Debugf("fetchToken error: %s", err)
+							return err
+						}
+						cancel()
+						kv.checking.Delete(apiKey)
+						return nil
+					}
+					looper.Start(c, work, time.Minute, func(err error) error {
+						log.Errorf("Error refreshing token: %s", err)
+						return nil
+					})
 				}
-				looper.Start(c, work, time.Minute, func(err error) error {
-					log.Errorf("Error refreshing token: %s", err)
-					return nil
-				})
 			}
 		}
 		return claims, nil

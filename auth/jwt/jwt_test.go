@@ -22,12 +22,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
 	"time"
 
-	"github.com/lestrrat-go/jwx/jwa"
+	jwt2 "github.com/dgrijalva/jwt-go"
 	"github.com/lestrrat-go/jwx/jwk"
-	"github.com/lestrrat-go/jwx/jwt"
 )
 
 func TestJWTCaching(t *testing.T) {
@@ -35,7 +33,7 @@ func TestJWTCaching(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jwt, err := generateJWT(privateKey)
+	jwt, err := generateJWT(privateKey, 0, 0, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +91,7 @@ func TestEnsureProvidersLoaded(t *testing.T) {
 	time.Sleep(time.Second)
 	defer jwtVerifier.Stop()
 
-	jwt, err := generateJWT(privateKey)
+	jwt, err := generateJWT(privateKey, 0, 0, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +132,8 @@ func TestGoodAndBadJWT(t *testing.T) {
 	defer jwtVerifier.Stop()
 
 	// A good JWT request
-	jwt, err := generateJWT(privateKey)
+	var jwt string
+	jwt, err = generateJWT(privateKey, 0, 0, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,8 +142,18 @@ func TestGoodAndBadJWT(t *testing.T) {
 		t.Errorf("good JWT should not get error: %v", err)
 	}
 
-	// expired JWT
-	jwt, err = generateExpiredJWT(privateKey)
+	// expired within acceptible skew
+	jwt, err = generateJWT(privateKey, 0, 0, -time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = jwtVerifier.Parse(jwt, provider)
+	if err != nil {
+		t.Errorf("expired JWT within acceptible skew should not get error, got %v", err)
+	}
+
+	// expired
+	jwt, err = generateJWT(privateKey, 0, 0, -time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,14 +162,54 @@ func TestGoodAndBadJWT(t *testing.T) {
 		t.Errorf("expired JWT should get error")
 	}
 
-	// near future JWT
-	jwt, err = generateFutureJWT(privateKey)
+	// expired (from cache)
+	knownBad, ok := jwtVerifier.(*verifier).knownBad.Get(jwt)
+	if !ok {
+		t.Errorf("known bad should be cached")
+	}
+	_, err = jwtVerifier.Parse(jwt, provider)
+	if err != knownBad {
+		t.Errorf("should return known bad")
+	}
+
+	// future nbf within acceptable skew
+	jwt, err = generateJWT(privateKey, 0, time.Second, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = jwtVerifier.Parse(jwt, provider)
 	if err != nil {
-		t.Errorf("near future JWT should not get error, got: %s", err)
+		t.Errorf("future JWT within acceptible skew should not get error, got: %v", err)
+	}
+
+	// future nbf
+	jwt, err = generateJWT(privateKey, 0, time.Hour, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = jwtVerifier.Parse(jwt, provider)
+	if err == nil {
+		t.Errorf("future JWT should get error")
+	}
+
+	// future iss within acceptable skew
+	jwt, err = generateJWT(privateKey, time.Second, 0, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = jwtVerifier.Parse(jwt, provider)
+	if err != nil {
+		t.Errorf("future JWT within acceptible skew should not get error, got: %v", err)
+	}
+
+	// future iss
+	jwt, err = generateJWT(privateKey, time.Hour, 0, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = jwtVerifier.Parse(jwt, provider)
+	if err == nil {
+		t.Errorf("future JWT should get error")
 	}
 
 	// wrong key
@@ -168,7 +217,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jwt, err = generateJWT(wrongKey)
+	jwt, err = generateJWT(wrongKey, 0, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,82 +227,32 @@ func TestGoodAndBadJWT(t *testing.T) {
 	}
 }
 
-func generateJWT(privateKey *rsa.PrivateKey) (string, error) {
-
-	key, err := jwk.New(privateKey)
-	if err != nil {
-		return "", err
-	}
-	if err := key.Set("kid", "1"); err != nil {
-		return "", err
-	}
-	if err := key.Set("alg", jwa.RS256.String()); err != nil {
-		return "", err
-	}
-
-	token := jwt.New()
-	_ = token.Set(jwt.AudienceKey, "remote-service-client")
-	_ = token.Set(jwt.JwtIDKey, "29e2320b-787c-4625-8599-acc5e05c68d0")
-	_ = token.Set(jwt.IssuerKey, "https://theganyo1-eval-test.apigee.net/remote-service/token")
-	_ = token.Set(jwt.NotBeforeKey, time.Now().Add(-10*time.Minute).Unix())
-	_ = token.Set(jwt.IssuedAtKey, time.Now().Unix())
-	_ = token.Set(jwt.ExpirationKey, (time.Now().Add(50 * time.Millisecond)).Unix())
-	_ = token.Set("access_token", "8E7Az3ZgPHKrgzcQA54qAzXT3Z1G")
-	_ = token.Set("client_id", "yBQ5eXZA8rSoipYEi1Rmn0Z8RKtkGI4H")
-	_ = token.Set("application_name", "61cd4d83-06b5-4270-a9ee-cf9255ef45c3")
-	_ = token.Set("scope", "scope1 scope2")
-	_ = token.Set("api_product_list", []string{"TestProduct"})
-	payload, err := jwt.Sign(token, jwa.RS256, key)
-
-	return string(payload), err
+// iat, nbf, exp are deltas from time.Now() (may be zero)
+func generateJWT(privateKey *rsa.PrivateKey, iat, nbf, exp time.Duration) (string, error) {
+	return makeJWTToken(iat, nbf, exp).SignedString(privateKey)
 }
 
-func generateExpiredJWT(privateKey *rsa.PrivateKey) (string, error) {
-
-	key, err := jwk.New(privateKey)
-	if err != nil {
-		return "", err
+// iat, nbf, exp are deltas from time.Now() (may be zero)
+func makeJWTToken(iat, nbf, exp time.Duration) *jwt2.Token {
+	t := jwt2.New(jwt2.GetSigningMethod("RS256"))
+	t.Header["kid"] = "1"
+	now := time.Now()
+	t.Claims = &ClaimsWithApigeeClaims{
+		&jwt2.StandardClaims{
+			// http://tools.ietf.org/html/draft-ietf-oauth-json-web-token-20#section-4.1.4
+			IssuedAt:  now.Add(iat).Unix(),
+			NotBefore: now.Add(nbf).Unix(),
+			ExpiresAt: now.Add(exp).Unix(),
+		},
+		ApigeeClaims{
+			AccessToken:    "8E7Az3ZgPHKrgzcQA54qAzXT3Z1G",
+			ClientID:       "yBQ5eXZA8rSoipYEi1Rmn0Z8RKtkGI4H",
+			AppName:        "61cd4d83-06b5-4270-a9ee-cf9255ef45c3",
+			Scope:          "scope",
+			APIProductList: []string{"TestProduct"},
+		},
 	}
-	if err := key.Set("kid", "1"); err != nil {
-		return "", err
-	}
-	if err := key.Set("alg", jwa.RS256.String()); err != nil {
-		return "", err
-	}
-
-	token := jwt.New()
-	_ = token.Set(jwt.JwtIDKey, "29e2320b-787c-4625-8599-acc5e05c68d0")
-	_ = token.Set(jwt.IssuerKey, "https://theganyo1-eval-test.apigee.net/remote-service/token")
-	_ = token.Set(jwt.NotBeforeKey, (time.Now().Add(-10 * time.Minute)).Unix())
-	_ = token.Set(jwt.IssuedAtKey, (time.Now().Add(-10 * time.Minute)).Unix())
-	_ = token.Set(jwt.ExpirationKey, (time.Now().Add(-2 * time.Minute)).Unix())
-	payload, err := jwt.Sign(token, jwa.RS256, key)
-
-	return string(payload), err
-}
-
-func generateFutureJWT(privateKey *rsa.PrivateKey) (string, error) {
-
-	key, err := jwk.New(privateKey)
-	if err != nil {
-		return "", err
-	}
-	if err := key.Set("kid", "1"); err != nil {
-		return "", err
-	}
-	if err := key.Set("alg", jwa.RS256.String()); err != nil {
-		return "", err
-	}
-
-	token := jwt.New()
-	_ = token.Set(jwt.JwtIDKey, "29e2320b-787c-4625-8599-acc5e05c68d0")
-	_ = token.Set(jwt.IssuerKey, "https://theganyo1-eval-test.apigee.net/remote-service/token")
-	_ = token.Set(jwt.NotBeforeKey, (time.Now().Add(5 * time.Second)).Unix())
-	_ = token.Set(jwt.IssuedAtKey, (time.Now().Add(5 * time.Second)).Unix())
-	_ = token.Set(jwt.ExpirationKey, (time.Now().Add(2 * time.Second)).Unix())
-	payload, err := jwt.Sign(token, jwa.RS256, key)
-
-	return string(payload), err
+	return t
 }
 
 func sendGoodJWKsHandler(privateKey *rsa.PrivateKey, t *testing.T) http.HandlerFunc {
@@ -265,7 +264,7 @@ func sendGoodJWKsHandler(privateKey *rsa.PrivateKey, t *testing.T) http.HandlerF
 		if err := key.Set("kid", "1"); err != nil {
 			t.Fatal(err)
 		}
-		if err := key.Set("alg", jwa.RS256.String()); err != nil {
+		if err := key.Set("alg", jwt2.SigningMethodRS256.Alg()); err != nil {
 			t.Fatal(err)
 		}
 

@@ -23,13 +23,16 @@ package jwt
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/cache"
 	"github.com/apigee/apigee-remote-service-golib/v2/log"
+	jwt2 "github.com/dgrijalva/jwt-go"
 	"github.com/lestrrat-go/backoff/v2"
+	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
-	"github.com/lestrrat-go/jwx/jwt"
+	"github.com/lestrrat-go/jwx/jws"
 	"github.com/pkg/errors"
 )
 
@@ -181,42 +184,135 @@ func (a *verifier) Parse(raw string, provider Provider) (map[string]interface{},
 	}
 
 	if cached, ok := a.cache.Get(raw); ok {
-		return cached.(map[string]interface{}), nil
+		return cached.(jwt2.MapClaims), nil
 	}
 
-	cacheKnownBad := func(err error) (map[string]interface{}, error) {
+	cacheKnownBad := func(err error) (jwt2.MapClaims, error) {
 		a.knownBad.Set(raw, err)
 		return nil, err
 	}
 
-	parseOptions := []jwt.ParseOption{jwt.WithAcceptableSkew(acceptableSkew), jwt.WithValidate(true)}
-
-	if provider.JWKSURL != "" {
-		set, err := a.fetchJWKs(provider)
-		if err != nil {
-			return nil, err
-		}
-		if set != nil {
-			parseOptions = append(parseOptions, jwt.WithKeySet(set))
-		}
+	ks, err := a.fetchJWKs(provider)
+	if err != nil {
+		return nil, err
 	}
 
-	token, err := jwt.Parse([]byte(raw), parseOptions...)
+	claims := jwt2.MapClaims{}
+	parser := jwt2.Parser{
+		SkipClaimsValidation: true,
+	}
+	_, err = parser.ParseWithClaims(raw, &claims, func(token *jwt2.Token) (interface{}, error) {
+		return verifyJWSWithKeySet(ks, token)
+	})
 	if err != nil {
 		return cacheKnownBad(errors.Wrap(err, "jwt.Parse"))
 	}
 
-	claims, err := token.AsMap(a.cancelContext)
-	if err != nil {
-		return cacheKnownBad(errors.Wrap(err, "failed to parse claims"))
+	// The claims below are optional, by default, so if they are set to the
+	// default value in Go, let's not fail the verification for them.
+	now := time.Now()
+	var ttl time.Duration
+	if exp, ok := claims["exp"].(float64); ok {
+		ttl = time.Unix(int64(exp), 0).Add(acceptableSkew).Sub(now)
+		if ttl <= 0 {
+			err := fmt.Errorf("token is expired per exp claim")
+			return cacheKnownBad(errors.Wrap(err, "jwt.Parse"))
+		}
 	}
 
-	exp := token.Expiration()
-	if exp.After(time.Now()) {
-		a.cache.SetWithExpiration(raw, claims, time.Until(exp))
-	} else if exp.IsZero() {
+	if iss, ok := claims["iat"].(float64); ok {
+		if now.Add(acceptableSkew).Before(time.Unix(int64(iss), 0)) {
+			err := fmt.Errorf("token used before issued per iat claim")
+			return nil, errors.Wrap(err, "jwt.Parse")
+		}
+	}
+
+	if nbf, ok := claims["nbf"].(float64); ok {
+		if now.Add(acceptableSkew).Before(time.Unix(int64(nbf), 0)) {
+			err := fmt.Errorf("token is not valid yet per nbf claim")
+			return nil, errors.Wrap(err, "jwt.Parse")
+		}
+	}
+
+	if ttl > 0 {
+		a.cache.SetWithExpiration(raw, claims, ttl)
+	} else {
 		a.cache.Set(raw, claims)
 	}
 
 	return claims, nil
+}
+
+type ClaimsWithApigeeClaims struct {
+	*jwt2.StandardClaims
+	ApigeeClaims
+}
+
+type ApigeeClaims struct {
+	AccessToken    string   `json:"access_token,omitempty"`
+	ClientID       string   `json:"client_id,omitempty"`
+	AppName        string   `json:"application_name,omitempty"`
+	Scope          string   `json:"scope,omitempty"`
+	APIProductList []string `json:"api_product_list,omitempty"`
+}
+
+func verifyJWSWithKeySet(ks jwk.Set, msg *jwt2.Token) (interface{}, error) {
+	if ks == nil || ks.Len() == 0 {
+		return nil, errors.New(`empty keyset provided`)
+	}
+
+	useDefault := true
+	inferAlgorithm := true
+	var key jwk.Key
+
+	// find the key
+	kid := msg.Header["kid"].(string)
+	if kid == "" {
+		// if no kid, useDefault must be true and JWKs must have exactly one key
+		if !useDefault {
+			return nil, errors.New(`failed to find matching key: no key ID ("kid") specified in token`)
+		} else if ks.Len() > 1 {
+			return nil, errors.New(`failed to find matching key: no key ID ("kid") specified in token but multiple keys available in key set`)
+		}
+		key, _ = ks.Get(0)
+	} else {
+		v, ok := ks.LookupKeyID(kid)
+		if !ok {
+			return nil, errors.Errorf(`failed to find key with key ID %q in key set`, kid)
+		}
+		key = v
+	}
+
+	// if the key has an algorithm, check it
+	if v := key.Algorithm(); v != "" {
+		var alg jwa.SignatureAlgorithm
+		if err := alg.Accept(v); err != nil {
+			return nil, errors.Wrapf(err, `invalid signature algorithm %s`, key.Algorithm())
+		}
+
+		var rawkey interface{}
+		err := key.Raw(&rawkey)
+		return rawkey, err
+	}
+
+	// infer the algorithm from JWT headers
+	if inferAlgorithm {
+		algs, err := jws.AlgorithmsForKey(key)
+		if err != nil {
+			return nil, errors.Wrapf(err, `failed to get a list of signature methods for key type %s`, key.KeyType())
+		}
+
+		for _, alg := range algs {
+			if tokAlg, ok := msg.Header["alg"]; ok && tokAlg != alg.String() {
+				// JWT has a `alg` field but it doesn't match
+				continue
+			}
+
+			var rawkey interface{}
+			err := key.Raw(&rawkey)
+			return rawkey, err
+		}
+	}
+
+	return nil, errors.New(`failed to match any of the keys`)
 }

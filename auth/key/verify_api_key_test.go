@@ -28,6 +28,7 @@ import (
 
 	"github.com/apigee/apigee-remote-service-golib/v2/auth/jwt"
 	"github.com/apigee/apigee-remote-service-golib/v2/authtest"
+	jwt2 "github.com/dgrijalva/jwt-go"
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
 	jwx "github.com/lestrrat-go/jwx/jwt"
@@ -51,7 +52,7 @@ func goodHandler(apiKey string, t *testing.T) http.HandlerFunc {
 	if err := key.Set("kid", "1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := key.Set("alg", jwa.RS256.String()); err != nil {
+	if err := key.Set("alg", jwt2.SigningMethodRS256.Alg()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -109,7 +110,7 @@ func generateAPIKeyJWT(privateKey *rsa.PrivateKey) (string, error) {
 	if err := key.Set("kid", "1"); err != nil {
 		return "", err
 	}
-	if err := key.Set("alg", jwa.RS256.String()); err != nil {
+	if err := key.Set("alg", jwt2.SigningMethodRS256.Alg()); err != nil {
 		return "", err
 	}
 
