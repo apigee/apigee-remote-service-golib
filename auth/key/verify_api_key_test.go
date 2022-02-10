@@ -28,47 +28,40 @@ import (
 
 	"github.com/apigee/apigee-remote-service-golib/v2/auth/jwt"
 	"github.com/apigee/apigee-remote-service-golib/v2/authtest"
-	jwt2 "github.com/dgrijalva/jwt-go"
-	"github.com/lestrrat-go/jwx/jwa"
+	jwtgo "github.com/dgrijalva/jwt-go"
 	"github.com/lestrrat-go/jwx/jwk"
-	jwx "github.com/lestrrat-go/jwx/jwt"
 )
 
 var (
 	badKeyResponse = []byte(`{"fault":{"faultstring":"Invalid ApiKey","detail":{"errorcode":"oauth.v2.InvalidApiKey"}}}`)
 )
 
-// goodHandler is an HTTP handler that handles all the requests in a proper fashion.
-func goodHandler(apiKey string, t *testing.T) http.HandlerFunc {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+func createJWKS(privateKey *rsa.PrivateKey) ([]byte, error) {
 	key, err := jwk.New(&privateKey.PublicKey)
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 	if err := key.Set("kid", "1"); err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
-	if err := key.Set("alg", jwt2.SigningMethodRS256.Alg()); err != nil {
-		t.Fatal(err)
+	if err := key.Set("alg", jwtgo.SigningMethodRS256.Alg()); err != nil {
+		return nil, err
 	}
 
-	type JWKS struct {
+	jwks := struct {
 		Keys []jwk.Key `json:"keys"`
-	}
-
-	jwks := JWKS{
+	}{
 		Keys: []jwk.Key{
 			key,
 		},
 	}
+	return json.Marshal(jwks)
+}
 
+func responseHandler(t *testing.T, validKey string, jwks []byte, privateKey *rsa.PrivateKey) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// jwks
 		if strings.HasSuffix(r.URL.Path, certsPath) {
-			// Handling the JWK verifier
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(jwks); err != nil {
 				t.Fatal(err)
@@ -83,11 +76,11 @@ func goodHandler(apiKey string, t *testing.T) http.HandlerFunc {
 		}
 		defer r.Body.Close()
 
-		if apiKey != req.APIKey {
-			t.Fatalf("expected: %v, got: %v", apiKey, req)
+		if validKey != req.APIKey {
+			t.Fatalf("expected: %v, got: %v", validKey, req)
 		}
 
-		jwt, err := generateAPIKeyJWT(privateKey)
+		jwt, err := generateSignedJWT(privateKey, 0, 0, time.Second)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -101,33 +94,69 @@ func goodHandler(apiKey string, t *testing.T) http.HandlerFunc {
 	}
 }
 
-func generateAPIKeyJWT(privateKey *rsa.PrivateKey) (string, error) {
-
-	key, err := jwk.New(privateKey)
+// goodHandler is an HTTP handler that handles all the requests in a proper fashion.
+func goodHandler(apiKey string, t *testing.T) http.HandlerFunc {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		return "", err
-	}
-	if err := key.Set("kid", "1"); err != nil {
-		return "", err
-	}
-	if err := key.Set("alg", jwt2.SigningMethodRS256.Alg()); err != nil {
-		return "", err
+		t.Fatal(err)
 	}
 
-	token := jwx.New()
-	_ = token.Set(jwx.AudienceKey, "remote-service-client")
-	_ = token.Set(jwx.JwtIDKey, "29e2320b-787c-4625-8599-acc5e05c68d0")
-	_ = token.Set(jwx.IssuerKey, "https://theganyo1-eval-test.apigee.net/remote-service/token")
-	_ = token.Set(jwx.NotBeforeKey, time.Now().Add(-10*time.Minute).Unix())
-	_ = token.Set(jwx.IssuedAtKey, time.Now().Unix())
-	_ = token.Set(jwx.ExpirationKey, (time.Now().Add(50 * time.Millisecond)).Unix())
-	_ = token.Set("access_token", "8E7Az3ZgPHKrgzcQA54qAzXT3Z1G")
-	_ = token.Set("client_id", "yBQ5eXZA8rSoipYEi1Rmn0Z8RKtkGI4H")
-	_ = token.Set("application_name", "61cd4d83-06b5-4270-a9ee-cf9255ef45c3")
-	_ = token.Set("api_product_list", []string{"TestProduct"})
-	payload, err := jwx.Sign(token, jwa.RS256, key)
+	jwks, err := createJWKS(privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	return string(payload), err
+	return responseHandler(t, apiKey, jwks, privateKey)
+}
+
+// On the first iteration, use a normal HTTP handler that will return good
+// results for the various HTTP requests that go out. After the first run,
+// replace with bad responses to ensure that we do not go out and fetch any
+// new pages (things are cached).
+func goodOnceHandler(goodAPIKey string, t *testing.T) http.HandlerFunc {
+	called := false
+	good := goodHandler(goodAPIKey, t)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, certsPath) {
+			// We don't care about jwks expiry here.
+			good(w, r)
+			return
+		}
+		if !called {
+			called = true
+			good(w, r)
+		} else {
+			badHandler()(w, r)
+		}
+	})
+}
+
+// iat, nbf, exp are deltas from time.Now() (may be zero)
+func generateSignedJWT(privateKey *rsa.PrivateKey, iat, nbf, exp time.Duration) (string, error) {
+	return makeJWTToken(iat, nbf, exp).SignedString(privateKey)
+}
+
+// iat, nbf, exp are deltas from time.Now() (may be zero)
+func makeJWTToken(iat, nbf, exp time.Duration) *jwtgo.Token {
+	t := jwtgo.New(jwtgo.GetSigningMethod("RS256"))
+	t.Header["kid"] = "1"
+	now := time.Now()
+	t.Claims = &jwt.ClaimsWithApigeeClaims{
+		StandardClaims: &jwtgo.StandardClaims{
+			// http://tools.ietf.org/html/draft-ietf-oauth-json-web-token-20#section-4.1.4
+			IssuedAt:  now.Add(iat).Unix(),
+			NotBefore: now.Add(nbf).Unix(),
+			ExpiresAt: now.Add(exp).Unix(),
+		},
+		ApigeeClaims: jwt.ApigeeClaims{
+			AccessToken:    "8E7Az3ZgPHKrgzcQA54qAzXT3Z1G",
+			ClientID:       "yBQ5eXZA8rSoipYEi1Rmn0Z8RKtkGI4H",
+			AppName:        "61cd4d83-06b5-4270-a9ee-cf9255ef45c3",
+			Scope:          "scope",
+			APIProductList: []string{"TestProduct"},
+		},
+	}
+	return t
 }
 
 // badHandler gives a handler that just gives a 401 for all requests.
@@ -178,20 +207,8 @@ func TestVerifyAPIKeyValid(t *testing.T) {
 func TestVerifyAPIKeyCacheWithClear(t *testing.T) {
 	apiKey := "testID"
 
-	// On the first iteration, use a normal HTTP handler that will return good
-	// results for the various HTTP requests that go out. After the first run,
-	// replace with bad responses to ensure that we do not go out and fetch any
-	// new pages (things are cached).
-	called := map[string]bool{}
-	good := goodHandler(apiKey, t)
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !called[r.URL.Path] {
-			called[r.URL.Path] = true
-			good(w, r)
-		} else {
-			badHandler()(w, r)
-		}
-	}))
+	good := goodOnceHandler(apiKey, t)
+	ts := httptest.NewServer(good)
 	defer ts.Close()
 
 	v, j := testVerifier(t, ts.URL, VerifierOpts{})
@@ -224,26 +241,7 @@ func TestVerifyAPIKeyCacheWithClear(t *testing.T) {
 
 func TestVerifyAPIKeyCacheWithExpiry(t *testing.T) {
 	apiKey := "testID"
-
-	// On the first iteration, use a normal HTTP handler that will return good
-	// results for the various HTTP requests that go out. After the first run,
-	// replace with bad responses to ensure that we do not go out and fetch any
-	// new pages (things are cached).
-	called := false
-	good := goodHandler(apiKey, t)
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, certsPath) {
-			// We don't care about jwks expiry here.
-			good(w, r)
-			return
-		}
-		if !called {
-			called = true
-			good(w, r)
-		} else {
-			badHandler()(w, r)
-		}
-	}))
+	ts := httptest.NewServer(goodOnceHandler(apiKey, t))
 	defer ts.Close()
 
 	v, j := testVerifier(t, ts.URL, VerifierOpts{
@@ -251,6 +249,12 @@ func TestVerifyAPIKeyCacheWithExpiry(t *testing.T) {
 		CacheEvictionInterval: 100 * time.Millisecond,
 		Client:                http.DefaultClient,
 	})
+	now := time.Now()
+	veriferNow := func() time.Time {
+		return now
+	}
+	v.(*verifierImpl).now = veriferNow
+
 	defer j.Stop()
 
 	ctx := authtest.NewContext(ts.URL)
@@ -271,9 +275,16 @@ func TestVerifyAPIKeyCacheWithExpiry(t *testing.T) {
 		}
 	}
 
-	// Wait until the key is expired. This should give us an error since we are
-	// now going to make an HTTP request that will fail.
-	time.Sleep(200 * time.Millisecond)
+	// expire the key
+	now = time.Now().Add(time.Minute)
+
+	// will be cached but expired
+	if _, err := v.Verify(ctx, apiKey); err != nil {
+		t.Errorf("expected no error, got %s", err)
+	}
+
+	// allow fetch to run
+	time.Sleep(100 * time.Millisecond)
 
 	if _, err := v.Verify(ctx, apiKey); err == nil {
 		t.Errorf("expected error result on cleared cache")

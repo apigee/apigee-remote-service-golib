@@ -28,7 +28,7 @@ import (
 
 	"github.com/apigee/apigee-remote-service-golib/v2/cache"
 	"github.com/apigee/apigee-remote-service-golib/v2/log"
-	jwt2 "github.com/dgrijalva/jwt-go"
+	"github.com/dgrijalva/jwt-go"
 	"github.com/lestrrat-go/backoff/v2"
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
@@ -184,10 +184,10 @@ func (a *verifier) Parse(raw string, provider Provider) (map[string]interface{},
 	}
 
 	if cached, ok := a.cache.Get(raw); ok {
-		return cached.(jwt2.MapClaims), nil
+		return cached.(jwt.MapClaims), nil
 	}
 
-	cacheKnownBad := func(err error) (jwt2.MapClaims, error) {
+	cacheKnownBad := func(err error) (jwt.MapClaims, error) {
 		a.knownBad.Set(raw, err)
 		return nil, err
 	}
@@ -197,15 +197,15 @@ func (a *verifier) Parse(raw string, provider Provider) (map[string]interface{},
 		return nil, err
 	}
 
-	claims := jwt2.MapClaims{}
-	parser := jwt2.Parser{
+	claims := jwt.MapClaims{}
+	parser := jwt.Parser{
 		SkipClaimsValidation: true,
 	}
 
 	if provider.JWKSURL == "" {
 		_, _, err = parser.ParseUnverified(raw, &claims)
 	} else {
-		_, err = parser.ParseWithClaims(raw, &claims, func(token *jwt2.Token) (interface{}, error) {
+		_, err = parser.ParseWithClaims(raw, &claims, func(token *jwt.Token) (interface{}, error) {
 			return verifyJWSWithKeySet(ks, token)
 		})
 	}
@@ -250,7 +250,7 @@ func (a *verifier) Parse(raw string, provider Provider) (map[string]interface{},
 }
 
 type ClaimsWithApigeeClaims struct {
-	*jwt2.StandardClaims
+	*jwt.StandardClaims
 	ApigeeClaims
 }
 
@@ -262,7 +262,7 @@ type ApigeeClaims struct {
 	APIProductList []string `json:"api_product_list,omitempty"`
 }
 
-func verifyJWSWithKeySet(ks jwk.Set, msg *jwt2.Token) (interface{}, error) {
+func verifyJWSWithKeySet(ks jwk.Set, msg *jwt.Token) (interface{}, error) {
 	if ks == nil || ks.Len() == 0 {
 		return nil, errors.New(`empty keyset provided`)
 	}

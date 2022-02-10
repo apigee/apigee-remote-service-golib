@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	jwt2 "github.com/dgrijalva/jwt-go"
+	"github.com/dgrijalva/jwt-go"
 	"github.com/lestrrat-go/jwx/jwk"
 )
 
@@ -33,7 +33,7 @@ func TestJWTCaching(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jwt, err := generateJWT(privateKey, 0, 0, time.Minute)
+	jwt, err := generateSignedJWT(privateKey, 0, 0, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestEnsureProvidersLoaded(t *testing.T) {
 	time.Sleep(time.Second)
 	defer jwtVerifier.Stop()
 
-	jwt, err := generateJWT(privateKey, 0, 0, time.Minute)
+	jwt, err := generateSignedJWT(privateKey, 0, 0, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 
 	// A good JWT request
 	var jwt string
-	jwt, err = generateJWT(privateKey, 0, 0, time.Minute)
+	jwt, err = generateSignedJWT(privateKey, 0, 0, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 	}
 
 	// expired within acceptible skew
-	jwt, err = generateJWT(privateKey, 0, 0, -time.Second)
+	jwt, err = generateSignedJWT(privateKey, 0, 0, -time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 	}
 
 	// expired
-	jwt, err = generateJWT(privateKey, 0, 0, -time.Hour)
+	jwt, err = generateSignedJWT(privateKey, 0, 0, -time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +173,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 	}
 
 	// future nbf within acceptable skew
-	jwt, err = generateJWT(privateKey, 0, time.Second, time.Minute)
+	jwt, err = generateSignedJWT(privateKey, 0, time.Second, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 	}
 
 	// future nbf
-	jwt, err = generateJWT(privateKey, 0, time.Hour, time.Minute)
+	jwt, err = generateSignedJWT(privateKey, 0, time.Hour, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +193,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 	}
 
 	// future iss within acceptable skew
-	jwt, err = generateJWT(privateKey, time.Second, 0, time.Minute)
+	jwt, err = generateSignedJWT(privateKey, time.Second, 0, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 	}
 
 	// future iss
-	jwt, err = generateJWT(privateKey, time.Hour, 0, time.Minute)
+	jwt, err = generateSignedJWT(privateKey, time.Hour, 0, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +217,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jwt, err = generateJWT(wrongKey, 0, 0, 0)
+	jwt, err = generateSignedJWT(wrongKey, 0, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,23 +228,23 @@ func TestGoodAndBadJWT(t *testing.T) {
 }
 
 // iat, nbf, exp are deltas from time.Now() (may be zero)
-func generateJWT(privateKey *rsa.PrivateKey, iat, nbf, exp time.Duration) (string, error) {
+func generateSignedJWT(privateKey *rsa.PrivateKey, iat, nbf, exp time.Duration) (string, error) {
 	return makeJWTToken(iat, nbf, exp).SignedString(privateKey)
 }
 
 // iat, nbf, exp are deltas from time.Now() (may be zero)
-func makeJWTToken(iat, nbf, exp time.Duration) *jwt2.Token {
-	t := jwt2.New(jwt2.GetSigningMethod("RS256"))
+func makeJWTToken(iat, nbf, exp time.Duration) *jwt.Token {
+	t := jwt.New(jwt.GetSigningMethod("RS256"))
 	t.Header["kid"] = "1"
 	now := time.Now()
 	t.Claims = &ClaimsWithApigeeClaims{
-		&jwt2.StandardClaims{
+		StandardClaims: &jwt.StandardClaims{
 			// http://tools.ietf.org/html/draft-ietf-oauth-json-web-token-20#section-4.1.4
 			IssuedAt:  now.Add(iat).Unix(),
 			NotBefore: now.Add(nbf).Unix(),
 			ExpiresAt: now.Add(exp).Unix(),
 		},
-		ApigeeClaims{
+		ApigeeClaims: ApigeeClaims{
 			AccessToken:    "8E7Az3ZgPHKrgzcQA54qAzXT3Z1G",
 			ClientID:       "yBQ5eXZA8rSoipYEi1Rmn0Z8RKtkGI4H",
 			AppName:        "61cd4d83-06b5-4270-a9ee-cf9255ef45c3",
@@ -264,7 +264,7 @@ func sendGoodJWKsHandler(privateKey *rsa.PrivateKey, t *testing.T) http.HandlerF
 		if err := key.Set("kid", "1"); err != nil {
 			t.Fatal(err)
 		}
-		if err := key.Set("alg", jwt2.SigningMethodRS256.Alg()); err != nil {
+		if err := key.Set("alg", jwt.SigningMethodRS256.Alg()); err != nil {
 			t.Fatal(err)
 		}
 
