@@ -24,11 +24,9 @@ package jwt
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/cache"
-	"github.com/apigee/apigee-remote-service-golib/v2/errorset"
 
 	"github.com/pkg/errors"
 	"gopkg.in/square/go-jose.v2/jwt"
@@ -40,7 +38,7 @@ const (
 	defaultCacheEvictionInterval = 10 * time.Second
 	defaultMaxCachedEntries      = 10000
 	defaultBadEntryCacheTTL      = 10 * time.Second
-	// minAllowedRefreshInterval    = 10 * time.Minute
+	minAllowedRefreshInterval    = 10 * time.Minute
 )
 
 // NewVerifier creates a Verifier. Call Start() after creation.
@@ -54,8 +52,14 @@ func NewVerifier(opts VerifierOptions) Verifier {
 	if opts.MaxCachedEntries == 0 {
 		opts.MaxCachedEntries = defaultMaxCachedEntries
 	}
+	providers := &providerSet{
+		jwksCache: jwksCache{},
+	}
+	for _, p := range opts.Providers {
+		providers.Add(p)
+	}
 	return &verifier{
-		providers: opts.Providers,
+		providers: providers,
 		cache:     cache.NewLRU(opts.CacheTTL, opts.CacheEvictionInterval, int32(opts.MaxCachedEntries)),
 		knownBad:  cache.NewLRU(defaultBadEntryCacheTTL, opts.CacheEvictionInterval, 100),
 	}
@@ -78,100 +82,34 @@ type VerifierOptions struct {
 
 // An verifier handles all of the various JWT authentication functionality.
 type verifier struct {
-	// jwks          *jwk.AutoRefresh
 	cancelContext context.Context
 	cancelFunc    context.CancelFunc
-	providers     []Provider
+	providers     *providerSet
 	cache         cache.ExpiringCache
 	knownBad      cache.ExpiringCache
 }
 
 // Start begins JWKS polling. Call Stop() when done.
-func (a *verifier) Start() {
-	// TODO: initiate polling
-
-	// a.cancelContext, a.cancelFunc = context.WithCancel(context.Background())
-	// a.jwks = jwk.NewAutoRefresh(a.cancelContext)
-
-	// // initialize JWKs
-	// providers := a.providers
-	// a.providers = []Provider{}
-	// for _, p := range providers {
-	// 	a.AddProvider(p)
-	// }
-
-	// ch := make(chan jwk.AutoRefreshError)
-	// a.jwks.ErrorSink(ch)
-
-	// go func() {
-	// 	for {
-	// 		select {
-	// 		case <-a.cancelContext.Done():
-	// 			close(ch)
-	// 			return
-	// 		case fetchError := <-ch:
-	// 			log.Errorf("fetching jwks from %s error: %v", fetchError.URL, fetchError.Error)
-	// 		}
-	// 	}
-	// }()
+func (v *verifier) Start() {
+	v.cancelContext, v.cancelFunc = context.WithCancel(context.Background())
+	v.providers.Start(v.cancelContext)
 }
 
 // EnsureProvidersLoaded ensures all JWKs certs have been retrieved for the first time.
-func (a *verifier) EnsureProvidersLoaded(ctx context.Context) error {
-	wg := sync.WaitGroup{}
-	// TODO: use pool, fix up errors, sync errors access
-	var errors error
-	for i := range a.providers {
-		wg.Add(1)
-		p := a.providers[i]
-		go func() {
-			if _, err := p.Fetch(ctx); err != nil {
-				errors = errorset.Append(errors, err)
-			}
-			wg.Done()
-		}()
-	}
-	wg.Wait()
-	return errors
+func (v *verifier) EnsureProvidersLoaded(ctx context.Context) error {
+	return v.providers.Refresh(ctx)
 }
 
 // Stop all background tasks.
-func (a *verifier) Stop() {
-	if a != nil && a.cancelFunc != nil {
-		a.cancelFunc()
+func (v *verifier) Stop() {
+	if v != nil && v.cancelFunc != nil {
+		v.cancelFunc()
 	}
 }
 
 // AddProvider adds a JWKs provider
-func (a *verifier) AddProvider(provider Provider) {
-
-	// TODO: configure jwks polling
-
-	// JWKs url could be shared amongst providers, find min refresh
-	// jwksConfigured := false
-	// minRefresh := provider.Refresh
-	// for _, p := range a.providers {
-	// 	if p.JWKSURL == provider.JWKSURL {
-	// 		jwksConfigured = true
-	// 		if p.Refresh > 0 && p.Refresh < minRefresh {
-	// 			minRefresh = p.Refresh
-	// 		}
-	// 	}
-	// }
-	// a.providers = append(a.providers, provider)
-
-	// if !jwksConfigured || minRefresh != provider.Refresh {
-	// 	options := []jwk.AutoRefreshOption{
-	// 		jwk.WithFetchBackoff(backoff.Exponential()),
-	// 	}
-	// 	if minRefresh > 0 {
-	// 		if minRefresh < minAllowedRefreshInterval {
-	// 			minRefresh = minAllowedRefreshInterval
-	// 		}
-	// 		options = append(options, jwk.WithMinRefreshInterval(minRefresh))
-	// 	}
-	// 	a.jwks.Configure(provider.JWKSURL, options...)
-	// }
+func (v *verifier) AddProvider(provider Provider) {
+	v.providers.Add(provider)
 }
 
 // Parse and verify a JWT
@@ -191,27 +129,31 @@ func (a *verifier) Parse(raw string, provider Provider) (map[string]interface{},
 		return nil, err
 	}
 
-	ks, err := provider.Fetch(a.cancelContext)
-	if err != nil {
-		return nil, err
-	}
-
 	tok, err := jwt.ParseSigned(raw)
 	if err != nil {
 		return cacheKnownBad(errors.Wrap(err, "jwt.Parse"))
 	}
 
-	claims := make(map[string]interface{})
-	if provider.JWKSURL == "" {
-		err = tok.UnsafeClaimsWithoutVerification(&claims)
-	} else {
+	// TODO: weird inversion
+	getClaims := func(tok *jwt.JSONWebToken) (map[string]interface{}, error) {
+		var claims map[string]interface{}
+		if provider.JWKSURL == "" {
+			err = tok.UnsafeClaimsWithoutVerification(&claims)
+			return claims, err
+		}
+
+		ks, err := a.providers.GetJWKs(provider)
+		if err != nil {
+			return nil, err
+		}
+
 		err = tok.Claims(ks, &claims)
+		return claims, err
 	}
+	claims, err := getClaims(tok)
 	if err != nil {
 		return cacheKnownBad(errors.Wrap(err, "jwt.Parse"))
 	}
-
-	// TODO: make claims a struct?
 
 	// The claims below are optional, by default, so if they are set to the
 	// default value in Go, let's not fail the verification for them.
@@ -247,66 +189,3 @@ func (a *verifier) Parse(raw string, provider Provider) (map[string]interface{},
 
 	return claims, nil
 }
-
-// TODO: Do we still need to do this verification?
-
-// func verifyJWSWithKeySet(ks jwk.Set, msg *jwt.Token) (interface{}, error) {
-// 	if ks == nil || ks.Len() == 0 {
-// 		return nil, errors.New(`empty keyset provided`)
-// 	}
-
-// 	useDefault := true
-// 	inferAlgorithm := true
-// 	var key jwk.Key
-
-// 	// find the key
-// 	kid := msg.Header["kid"].(string)
-// 	if kid == "" {
-// 		// if no kid, useDefault must be true and JWKs must have exactly one key
-// 		if !useDefault {
-// 			return nil, errors.New(`failed to find matching key: no key ID ("kid") specified in token`)
-// 		} else if ks.Len() > 1 {
-// 			return nil, errors.New(`failed to find matching key: no key ID ("kid") specified in token but multiple keys available in key set`)
-// 		}
-// 		key, _ = ks.Get(0)
-// 	} else {
-// 		v, ok := ks.LookupKeyID(kid)
-// 		if !ok {
-// 			return nil, errors.Errorf(`failed to find key with key ID %q in key set`, kid)
-// 		}
-// 		key = v
-// 	}
-
-// 	// if the key has an algorithm, check it
-// 	if v := key.Algorithm(); v != "" {
-// 		var alg jwa.SignatureAlgorithm
-// 		if err := alg.Accept(v); err != nil {
-// 			return nil, errors.Wrapf(err, `invalid signature algorithm %s`, key.Algorithm())
-// 		}
-
-// 		var rawkey interface{}
-// 		err := key.Raw(&rawkey)
-// 		return rawkey, err
-// 	}
-
-// 	// infer the algorithm from JWT headers
-// 	if inferAlgorithm {
-// 		algs, err := jws.AlgorithmsForKey(key)
-// 		if err != nil {
-// 			return nil, errors.Wrapf(err, `failed to get a list of signature methods for key type %s`, key.KeyType())
-// 		}
-
-// 		for _, alg := range algs {
-// 			if tokAlg, ok := msg.Header["alg"]; ok && tokAlg != alg.String() {
-// 				// JWT has a `alg` field but it doesn't match
-// 				continue
-// 			}
-
-// 			var rawkey interface{}
-// 			err := key.Raw(&rawkey)
-// 			return rawkey, err
-// 		}
-// 	}
-
-// 	return nil, errors.New(`failed to match any of the keys`)
-// }
