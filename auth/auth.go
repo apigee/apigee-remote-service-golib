@@ -38,6 +38,15 @@ type Manager interface {
 	ParseJWT(jwtString string, provider jwt.Provider) (claims map[string]interface{}, err error)
 }
 
+// TODO: use Claims struct?
+// type ApigeeClaims struct {
+// 	AccessToken    string   `json:"access_token,omitempty"`
+// 	ClientID       string   `json:"client_id,omitempty"`
+// 	AppName        string   `json:"application_name,omitempty"`
+// 	Scope          string   `json:"scope,omitempty"`
+// 	APIProductList []string `json:"api_product_list,omitempty"`
+// }
+
 // ErrNoAuth is an error because of missing auth
 var ErrNoAuth = errors.New("missing authentication")
 

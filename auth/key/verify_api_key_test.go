@@ -28,44 +28,23 @@ import (
 
 	"github.com/apigee/apigee-remote-service-golib/v2/auth/jwt"
 	"github.com/apigee/apigee-remote-service-golib/v2/authtest"
-	jwtgo "github.com/dgrijalva/jwt-go"
-	"github.com/lestrrat-go/jwx/jwk"
 )
 
 var (
 	badKeyResponse = []byte(`{"fault":{"faultstring":"Invalid ApiKey","detail":{"errorcode":"oauth.v2.InvalidApiKey"}}}`)
 )
 
-func createJWKS(privateKey *rsa.PrivateKey) ([]byte, error) {
-	key, err := jwk.New(&privateKey.PublicKey)
+// goodHandler is an HTTP handler that handles all the requests in a proper fashion.
+func goodHandler(apiKey string, t *testing.T) http.HandlerFunc {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		return nil, err
+		t.Fatal(err)
 	}
-	if err := key.Set("kid", "1"); err != nil {
-		return nil, err
-	}
-	if err := key.Set("alg", jwtgo.SigningMethodRS256.Alg()); err != nil {
-		return nil, err
-	}
+	jwksH := authtest.JWKsHandlerFunc(privateKey, t)
 
-	jwks := struct {
-		Keys []jwk.Key `json:"keys"`
-	}{
-		Keys: []jwk.Key{
-			key,
-		},
-	}
-	return json.Marshal(jwks)
-}
-
-func responseHandler(t *testing.T, validKey string, jwks []byte, privateKey *rsa.PrivateKey) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// jwks
 		if strings.HasSuffix(r.URL.Path, certsPath) {
-			w.Header().Set("Content-Type", "application/json")
-			if err := json.NewEncoder(w).Encode(jwks); err != nil {
-				t.Fatal(err)
-			}
+			jwksH(w, r)
 			return
 		}
 
@@ -76,11 +55,11 @@ func responseHandler(t *testing.T, validKey string, jwks []byte, privateKey *rsa
 		}
 		defer r.Body.Close()
 
-		if validKey != req.APIKey {
-			t.Fatalf("expected: %v, got: %v", validKey, req)
+		if apiKey != req.APIKey {
+			t.Fatalf("expected: %v, got: %v", apiKey, req)
 		}
 
-		jwt, err := generateSignedJWT(privateKey, 0, 0, time.Second)
+		jwt, err := authtest.GenerateSignedJWT(privateKey, 0, 0, time.Second)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -92,21 +71,6 @@ func responseHandler(t *testing.T, validKey string, jwks []byte, privateKey *rsa
 			t.Fatal(err)
 		}
 	}
-}
-
-// goodHandler is an HTTP handler that handles all the requests in a proper fashion.
-func goodHandler(apiKey string, t *testing.T) http.HandlerFunc {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	jwks, err := createJWKS(privateKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return responseHandler(t, apiKey, jwks, privateKey)
 }
 
 // On the first iteration, use a normal HTTP handler that will return good
@@ -129,34 +93,6 @@ func goodOnceHandler(goodAPIKey string, t *testing.T) http.HandlerFunc {
 			badHandler()(w, r)
 		}
 	})
-}
-
-// iat, nbf, exp are deltas from time.Now() (may be zero)
-func generateSignedJWT(privateKey *rsa.PrivateKey, iat, nbf, exp time.Duration) (string, error) {
-	return makeJWTToken(iat, nbf, exp).SignedString(privateKey)
-}
-
-// iat, nbf, exp are deltas from time.Now() (may be zero)
-func makeJWTToken(iat, nbf, exp time.Duration) *jwtgo.Token {
-	t := jwtgo.New(jwtgo.GetSigningMethod("RS256"))
-	t.Header["kid"] = "1"
-	now := time.Now()
-	t.Claims = &jwt.ClaimsWithApigeeClaims{
-		StandardClaims: &jwtgo.StandardClaims{
-			// http://tools.ietf.org/html/draft-ietf-oauth-json-web-token-20#section-4.1.4
-			IssuedAt:  now.Add(iat).Unix(),
-			NotBefore: now.Add(nbf).Unix(),
-			ExpiresAt: now.Add(exp).Unix(),
-		},
-		ApigeeClaims: jwt.ApigeeClaims{
-			AccessToken:    "8E7Az3ZgPHKrgzcQA54qAzXT3Z1G",
-			ClientID:       "yBQ5eXZA8rSoipYEi1Rmn0Z8RKtkGI4H",
-			AppName:        "61cd4d83-06b5-4270-a9ee-cf9255ef45c3",
-			Scope:          "scope",
-			APIProductList: []string{"TestProduct"},
-		},
-	}
-	return t
 }
 
 // badHandler gives a handler that just gives a 401 for all requests.

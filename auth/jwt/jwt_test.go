@@ -18,14 +18,12 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
-	"github.com/lestrrat-go/jwx/jwk"
+	"github.com/apigee/apigee-remote-service-golib/v2/authtest"
 )
 
 func TestJWTCaching(t *testing.T) {
@@ -33,12 +31,12 @@ func TestJWTCaching(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jwt, err := generateSignedJWT(privateKey, 0, 0, time.Minute)
+	jwt, err := authtest.GenerateSignedJWT(privateKey, 0, 0, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	good := sendGoodJWKsHandler(privateKey, t)
+	good := authtest.JWKsHandlerFunc(privateKey, t)
 	called := false
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !called {
@@ -78,7 +76,7 @@ func TestEnsureProvidersLoaded(t *testing.T) {
 			send401Handler(w, r)
 			return
 		}
-		sendGoodJWKsHandler(privateKey, t)(w, r)
+		authtest.JWKsHandlerFunc(privateKey, t)(w, r)
 	}))
 	defer ts.Close()
 
@@ -91,7 +89,7 @@ func TestEnsureProvidersLoaded(t *testing.T) {
 	time.Sleep(time.Second)
 	defer jwtVerifier.Stop()
 
-	jwt, err := generateSignedJWT(privateKey, 0, 0, time.Minute)
+	jwt, err := authtest.GenerateSignedJWT(privateKey, 0, 0, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +119,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts := httptest.NewServer(sendGoodJWKsHandler(privateKey, t))
+	ts := httptest.NewServer(authtest.JWKsHandlerFunc(privateKey, t))
 	defer ts.Close()
 
 	provider := Provider{JWKSURL: ts.URL}
@@ -133,7 +131,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 
 	// A good JWT request
 	var jwt string
-	jwt, err = generateSignedJWT(privateKey, 0, 0, time.Minute)
+	jwt, err = authtest.GenerateSignedJWT(privateKey, 0, 0, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +141,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 	}
 
 	// expired within acceptible skew
-	jwt, err = generateSignedJWT(privateKey, 0, 0, -time.Second)
+	jwt, err = authtest.GenerateSignedJWT(privateKey, 0, 0, -time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +151,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 	}
 
 	// expired
-	jwt, err = generateSignedJWT(privateKey, 0, 0, -time.Hour)
+	jwt, err = authtest.GenerateSignedJWT(privateKey, 0, 0, -time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +171,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 	}
 
 	// future nbf within acceptable skew
-	jwt, err = generateSignedJWT(privateKey, 0, time.Second, time.Minute)
+	jwt, err = authtest.GenerateSignedJWT(privateKey, 0, time.Second, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +181,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 	}
 
 	// future nbf
-	jwt, err = generateSignedJWT(privateKey, 0, time.Hour, time.Minute)
+	jwt, err = authtest.GenerateSignedJWT(privateKey, 0, time.Hour, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +191,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 	}
 
 	// future iss within acceptable skew
-	jwt, err = generateSignedJWT(privateKey, time.Second, 0, time.Minute)
+	jwt, err = authtest.GenerateSignedJWT(privateKey, time.Second, 0, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +201,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 	}
 
 	// future iss
-	jwt, err = generateSignedJWT(privateKey, time.Hour, 0, time.Minute)
+	jwt, err = authtest.GenerateSignedJWT(privateKey, time.Hour, 0, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,71 +215,13 @@ func TestGoodAndBadJWT(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jwt, err = generateSignedJWT(wrongKey, 0, 0, 0)
+	jwt, err = authtest.GenerateSignedJWT(wrongKey, 0, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = jwtVerifier.Parse(jwt, provider)
 	if err == nil {
 		t.Errorf("JWT with wrong key should get error")
-	}
-}
-
-// iat, nbf, exp are deltas from time.Now() (may be zero)
-func generateSignedJWT(privateKey *rsa.PrivateKey, iat, nbf, exp time.Duration) (string, error) {
-	return makeJWTToken(iat, nbf, exp).SignedString(privateKey)
-}
-
-// iat, nbf, exp are deltas from time.Now() (may be zero)
-func makeJWTToken(iat, nbf, exp time.Duration) *jwt.Token {
-	t := jwt.New(jwt.GetSigningMethod("RS256"))
-	t.Header["kid"] = "1"
-	now := time.Now()
-	t.Claims = &ClaimsWithApigeeClaims{
-		StandardClaims: &jwt.StandardClaims{
-			// http://tools.ietf.org/html/draft-ietf-oauth-json-web-token-20#section-4.1.4
-			IssuedAt:  now.Add(iat).Unix(),
-			NotBefore: now.Add(nbf).Unix(),
-			ExpiresAt: now.Add(exp).Unix(),
-		},
-		ApigeeClaims: ApigeeClaims{
-			AccessToken:    "8E7Az3ZgPHKrgzcQA54qAzXT3Z1G",
-			ClientID:       "yBQ5eXZA8rSoipYEi1Rmn0Z8RKtkGI4H",
-			AppName:        "61cd4d83-06b5-4270-a9ee-cf9255ef45c3",
-			Scope:          "scope",
-			APIProductList: []string{"TestProduct"},
-		},
-	}
-	return t
-}
-
-func sendGoodJWKsHandler(privateKey *rsa.PrivateKey, t *testing.T) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		key, err := jwk.New(&privateKey.PublicKey)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := key.Set("kid", "1"); err != nil {
-			t.Fatal(err)
-		}
-		if err := key.Set("alg", jwt.SigningMethodRS256.Alg()); err != nil {
-			t.Fatal(err)
-		}
-
-		type JWKS struct {
-			Keys []jwk.Key `json:"keys"`
-		}
-
-		jwks := JWKS{
-			Keys: []jwk.Key{
-				key,
-			},
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(jwks); err != nil {
-			t.Fatal(err)
-		}
 	}
 }
 
