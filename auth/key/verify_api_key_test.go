@@ -15,14 +15,11 @@
 package key
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path"
-	"strings"
 	"testing"
 	"time"
 
@@ -33,67 +30,6 @@ import (
 var (
 	badKeyResponse = []byte(`{"fault":{"faultstring":"Invalid ApiKey","detail":{"errorcode":"oauth.v2.InvalidApiKey"}}}`)
 )
-
-// goodHandler is an HTTP handler that handles all the requests in a proper fashion.
-func goodHandler(apiKey string, t *testing.T) http.HandlerFunc {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatal(err)
-	}
-	jwksH := authtest.JWKsHandlerFunc(privateKey, t)
-
-	return func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, certsPath) {
-			jwksH(w, r)
-			return
-		}
-
-		var req APIKeyRequest
-		err := json.NewDecoder(r.Body).Decode(&req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer r.Body.Close()
-
-		if apiKey != req.APIKey {
-			t.Fatalf("expected: %v, got: %v", apiKey, req)
-		}
-
-		jwt, err := authtest.GenerateSignedJWT(privateKey, 0, 0, time.Second)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		jwtResponse := APIKeyResponse{Token: jwt}
-
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(jwtResponse); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
-// On the first iteration, use a normal HTTP handler that will return good
-// results for the various HTTP requests that go out. After the first run,
-// replace with bad responses to ensure that we do not go out and fetch any
-// new pages (things are cached).
-func goodOnceHandler(goodAPIKey string, t *testing.T) http.HandlerFunc {
-	called := false
-	good := goodHandler(goodAPIKey, t)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, certsPath) {
-			// We don't care about jwks expiry here.
-			good(w, r)
-			return
-		}
-		if !called {
-			called = true
-			good(w, r)
-		} else {
-			badHandler()(w, r)
-		}
-	})
-}
 
 // badHandler gives a handler that just gives a 401 for all requests.
 func badHandler() http.HandlerFunc {
@@ -118,7 +54,7 @@ func testVerifier(t *testing.T, baseURL string, opts VerifierOpts) (Verifier, jw
 func TestVerifyAPIKeyValid(t *testing.T) {
 	apiKey := "testID"
 
-	ts := httptest.NewServer(goodHandler(apiKey, t))
+	ts := httptest.NewServer(authtest.APIKeyHandlerFunc(apiKey, t))
 	defer ts.Close()
 
 	v, j := testVerifier(t, ts.URL, VerifierOpts{})
@@ -143,7 +79,7 @@ func TestVerifyAPIKeyValid(t *testing.T) {
 func TestVerifyAPIKeyCacheWithClear(t *testing.T) {
 	apiKey := "testID"
 
-	good := goodOnceHandler(apiKey, t)
+	good := authtest.GoodOnceAPIKeyHandler(apiKey, t)
 	ts := httptest.NewServer(good)
 	defer ts.Close()
 
@@ -177,7 +113,7 @@ func TestVerifyAPIKeyCacheWithClear(t *testing.T) {
 
 func TestVerifyAPIKeyCacheWithExpiry(t *testing.T) {
 	apiKey := "testID"
-	ts := httptest.NewServer(goodOnceHandler(apiKey, t))
+	ts := httptest.NewServer(authtest.GoodOnceAPIKeyHandler(apiKey, t))
 	defer ts.Close()
 
 	v, j := testVerifier(t, ts.URL, VerifierOpts{

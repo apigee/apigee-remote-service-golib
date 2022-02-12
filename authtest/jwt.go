@@ -15,9 +15,11 @@
 package authtest
 
 import (
+	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -54,7 +56,6 @@ func GenerateSignedJWT(privateKey *rsa.PrivateKey, iat, nbf, exp time.Duration) 
 }
 
 func JWKsHandlerFunc(privateKey *rsa.PrivateKey, t *testing.T) http.HandlerFunc {
-
 	jwk := jose.JSONWebKey{
 		KeyID:     "1",
 		Algorithm: "RSA",
@@ -71,4 +72,87 @@ func JWKsHandlerFunc(privateKey *rsa.PrivateKey, t *testing.T) http.HandlerFunc 
 			t.Fatal(err)
 		}
 	}
+}
+
+const (
+	certsPath = "/certs"
+)
+
+// APIKeyHandlerFunc is an HTTP handler that handles all the requests in a proper fashion.
+func APIKeyHandlerFunc(apiKey string, t *testing.T) http.HandlerFunc {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	jwt, err := GenerateSignedJWT(privateKey, 0, 0, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jwksH := JWKsHandlerFunc(privateKey, t)
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, certsPath) {
+			jwksH(w, r)
+			return
+		}
+
+		// api key
+		var req APIKeyRequest
+		err := json.NewDecoder(r.Body).Decode(&req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer r.Body.Close()
+
+		if apiKey != req.APIKey {
+			t.Fatalf("expected: %v, got: %v", apiKey, req)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(APIKeyResponse{Token: jwt}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// On the first iteration, use a normal HTTP handler that will return good
+// results for the various HTTP requests that go out. After the first run,
+// replace with bad responses to ensure that we do not go out and fetch any
+// new pages (things are cached).
+func GoodOnceAPIKeyHandler(goodAPIKey string, t *testing.T) http.HandlerFunc {
+	called := false
+	good := APIKeyHandlerFunc(goodAPIKey, t)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, certsPath) {
+			// We don't care about jwks expiry here.
+			good(w, r)
+			return
+		}
+		if !called {
+			called = true
+			good(w, r)
+		} else {
+			badHandler()(w, r)
+		}
+	})
+}
+
+// badHandler gives a handler that just gives a 401 for all requests.
+func badHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		// _ = json.NewEncoder(w).Encode(badKeyResponse)
+	}
+}
+
+// APIKeyRequest is the request to Apigee's verifyAPIKey API
+type APIKeyRequest struct {
+	APIKey string `json:"apiKey"`
+}
+
+// APIKeyResponse is the response from Apigee's verifyAPIKey API
+type APIKeyResponse struct {
+	Token string `json:"token"`
 }

@@ -85,9 +85,6 @@ func TestEnsureProvidersLoaded(t *testing.T) {
 		// Duplicates will be ignored when added.
 		Providers: []Provider{provider, provider},
 	})
-	jwtVerifier.Start()
-	time.Sleep(time.Second)
-	defer jwtVerifier.Stop()
 
 	jwt, err := authtest.GenerateSignedJWT(privateKey, 0, 0, time.Minute)
 	if err != nil {
@@ -104,6 +101,7 @@ func TestEnsureProvidersLoaded(t *testing.T) {
 	}
 
 	fail = false
+	jwtVerifier.(*verifier).knownBad.RemoveAll()
 	err = jwtVerifier.EnsureProvidersLoaded(context.Background())
 	if err != nil {
 		t.Fatal(err)

@@ -40,7 +40,7 @@ func (p *providerSet) GetJWKs(pr Provider) (*jose.JSONWebKeySet, error) {
 	return p.jwksCache.Get(pr.JWKSURL)
 }
 
-// TODO: do proper polling w/ Refresh intervals
+// TODO: do proper polling w/ Refresh intervals and such
 func (p *providerSet) Start(ctx context.Context) {
 	p.jwksCache = jwksCache{}
 	// ensure providers are registered to this set
@@ -60,7 +60,7 @@ func (p *providerSet) Start(ctx context.Context) {
 	}()
 }
 
-// Fetch jwks for all providers
+// Force fetch jwks for all providers
 func (p *providerSet) Refresh(ctx context.Context) error {
 	wg := sync.WaitGroup{}
 	errSync := sync.Mutex{}
@@ -69,7 +69,7 @@ func (p *providerSet) Refresh(ctx context.Context) error {
 		p := p.providers[i]
 		wg.Add(1)
 		go func() {
-			if _, err := p.GetJWKs(ctx); err != nil {
+			if _, err := p.FetchJWKs(ctx); err != nil {
 				errSync.Lock()
 				errors = errorset.Append(errors, err)
 				errSync.Unlock()
@@ -130,6 +130,15 @@ func (p *provider) GetJWKs(ctx context.Context) (*jose.JSONWebKeySet, error) {
 	return p.providerSet.jwksCache.Get(p.JWKSURL)
 }
 
+// force GET from url
+func (p *provider) FetchJWKs(ctx context.Context) (*jose.JSONWebKeySet, error) {
+	if p.JWKSURL == "" {
+		return nil, nil
+	}
+
+	return p.providerSet.jwksCache.Fetch(p.JWKSURL)
+}
+
 // TODO: backoff
 type jwksCache struct {
 	cache      sync.Map
@@ -147,15 +156,24 @@ func (j *jwksCache) Get(url string) (*jose.JSONWebKeySet, error) {
 		}
 	}
 
-	jwks, err, _ := j.herdBuster.Do("", func() (interface{}, error) {
-		var jwks *jose.JSONWebKeySet
+	return j.Fetch(url)
+}
+
+func (j *jwksCache) Fetch(url string) (*jose.JSONWebKeySet, error) {
+
+	jwks, err, _ := j.herdBuster.Do(url, func() (interface{}, error) {
+		var jwks jose.JSONWebKeySet
 
 		resp, err := http.Get(url)
 		if err == nil {
-			var body []byte
-			body, err = ioutil.ReadAll(resp.Body)
-			if err == nil {
-				err = json.Unmarshal(body, jwks)
+			if resp.StatusCode == 200 {
+				var body []byte
+				body, err = ioutil.ReadAll(resp.Body)
+				if err == nil {
+					err = json.Unmarshal(body, &jwks)
+				}
+			} else {
+				err = fmt.Errorf("status %s", resp.Status)
 			}
 		}
 
@@ -165,8 +183,8 @@ func (j *jwksCache) Get(url string) (*jose.JSONWebKeySet, error) {
 			return nil, err
 		}
 
-		j.cache.Store(url, jwks)
-		return jwks, nil
+		j.cache.Store(url, &jwks)
+		return &jwks, nil
 	})
 
 	if err != nil {
