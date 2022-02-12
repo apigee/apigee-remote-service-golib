@@ -44,6 +44,10 @@ func TestJWTCaching(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	noExpireJwt, err := generateJWTWithExpiration(privateKey, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	called := make(map[string]bool)
 	keyForPath := map[string]http.HandlerFunc{
@@ -79,6 +83,10 @@ func TestJWTCaching(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		// Do a first request and confirm that things look good.
 		_, err = jwtVerifier.Parse(jwt, hasProvider)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = jwtVerifier.Parse(noExpireJwt, hasProvider)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -201,7 +209,10 @@ func TestGoodAndBadJWT(t *testing.T) {
 }
 
 func generateJWT(privateKey *rsa.PrivateKey) (string, error) {
+	return generateJWTWithExpiration(privateKey, time.Now().Add(50*time.Millisecond).Unix())
+}
 
+func generateJWTWithExpiration(privateKey *rsa.PrivateKey, expiresAt int64) (string, error) {
 	key, err := jwk.New(privateKey)
 	if err != nil {
 		return "", err
@@ -219,7 +230,9 @@ func generateJWT(privateKey *rsa.PrivateKey) (string, error) {
 	_ = token.Set(jwt.IssuerKey, "https://theganyo1-eval-test.apigee.net/remote-service/token")
 	_ = token.Set(jwt.NotBeforeKey, time.Now().Add(-10*time.Minute).Unix())
 	_ = token.Set(jwt.IssuedAtKey, time.Now().Unix())
-	_ = token.Set(jwt.ExpirationKey, (time.Now().Add(50 * time.Millisecond)).Unix())
+	if expiresAt > 0 {
+		_ = token.Set(jwt.ExpirationKey, expiresAt)
+	}
 	_ = token.Set("access_token", "8E7Az3ZgPHKrgzcQA54qAzXT3Z1G")
 	_ = token.Set("client_id", "yBQ5eXZA8rSoipYEi1Rmn0Z8RKtkGI4H")
 	_ = token.Set("application_name", "61cd4d83-06b5-4270-a9ee-cf9255ef45c3")
