@@ -35,17 +35,26 @@ func TestJWTCaching(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	wrongPrivateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	jwt, err := generateJWT(privateKey)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	good := sendGoodJWKsHandler(privateKey, t)
-	called := false
+	called := make(map[string]bool)
+	keyForPath := map[string]http.HandlerFunc{
+		"/hasit":         sendGoodJWKsHandler(privateKey, t),
+		"/doesnothaveit": sendGoodJWKsHandler(wrongPrivateKey, t),
+	}
+
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !called {
-			called = true
-			good(w, r)
+		if handler, ok := keyForPath[r.URL.Path]; ok && !called[r.URL.Path] {
+			called[r.URL.Path] = true
+			handler(w, r)
 		} else {
 			send401Handler(w, r)
 		}
@@ -53,19 +62,32 @@ func TestJWTCaching(t *testing.T) {
 	defer ts.Close()
 
 	// Refresh time is too small and will be overriden.
-	provider := Provider{JWKSURL: ts.URL, Refresh: 10 * time.Second}
+	hasProvider := Provider{JWKSURL: ts.URL + "/hasit", Refresh: 10 * time.Second}
+	missingProvider := Provider{JWKSURL: ts.URL + "/doesnothaveit", Refresh: 10 * time.Second}
 	jwtVerifier := NewVerifier(VerifierOptions{
-		Providers: []Provider{provider},
+		Providers: []Provider{missingProvider, hasProvider},
 	})
 	jwtVerifier.Start()
 	defer jwtVerifier.Stop()
 
+	// Make sure the missing provider caches its results first.
+	_, err = jwtVerifier.Parse(jwt, missingProvider)
+	if err == nil {
+		t.Errorf("no error found checking %q, expected error", missingProvider.JWKSURL)
+	}
+
 	for i := 0; i < 5; i++ {
 		// Do a first request and confirm that things look good.
-		_, err = jwtVerifier.Parse(jwt, provider)
+		_, err = jwtVerifier.Parse(jwt, hasProvider)
 		if err != nil {
 			t.Fatal(err)
 		}
+	}
+
+	// Ensure that good results are only cached on the correct provider.
+	_, err = jwtVerifier.Parse(jwt, missingProvider)
+	if err == nil {
+		t.Errorf("no error found checking %q, expected error", missingProvider.JWKSURL)
 	}
 }
 
