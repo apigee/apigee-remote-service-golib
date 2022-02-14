@@ -23,6 +23,7 @@ package jwt
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/cache"
@@ -175,17 +176,17 @@ func (a *verifier) fetchJWKs(provider Provider) (jwk.Set, error) {
 // Parse and verify a JWT
 // if provider has no JWKSURL, the cert will not be verified
 func (a *verifier) Parse(raw string, provider Provider) (map[string]interface{}, error) {
-
-	if cached, ok := a.knownBad.Get(raw); ok {
+	cacheKey := fmt.Sprintf("%s-%s", provider.JWKSURL, raw)
+	if cached, ok := a.knownBad.Get(cacheKey); ok {
 		return nil, cached.(error)
 	}
 
-	if cached, ok := a.cache.Get(raw); ok {
+	if cached, ok := a.cache.Get(cacheKey); ok {
 		return cached.(map[string]interface{}), nil
 	}
 
 	cacheKnownBad := func(err error) (map[string]interface{}, error) {
-		a.knownBad.Set(raw, err)
+		a.knownBad.Set(cacheKey, err)
 		return nil, err
 	}
 
@@ -213,9 +214,9 @@ func (a *verifier) Parse(raw string, provider Provider) (map[string]interface{},
 
 	exp := token.Expiration()
 	if exp.After(time.Now()) {
-		a.cache.SetWithExpiration(raw, claims, time.Until(exp))
+		a.cache.SetWithExpiration(cacheKey, claims, time.Until(exp))
 	} else if exp.IsZero() {
-		a.cache.Set(raw, claims)
+		a.cache.Set(cacheKey, claims)
 	}
 
 	return claims, nil
