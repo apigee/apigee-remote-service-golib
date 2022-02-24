@@ -15,7 +15,6 @@
 package jwt
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"net/http"
@@ -50,66 +49,31 @@ func TestJWTCaching(t *testing.T) {
 
 	// Refresh time is too small and will be overriden.
 	provider := Provider{JWKSURL: ts.URL, Refresh: 10 * time.Second}
+	provider2 := Provider{JWKSURL: "bad url", Refresh: 10 * time.Second}
 	jwtVerifier := NewVerifier(VerifierOptions{
-		Providers: []Provider{provider},
+		Client:    http.DefaultClient,
+		Providers: []Provider{provider, provider2},
 	})
 	jwtVerifier.Start()
 	defer jwtVerifier.Stop()
 
+	_, err = jwtVerifier.Parse(jwt, provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	for i := 0; i < 5; i++ {
-		// Do a first request and confirm that things look good.
 		_, err = jwtVerifier.Parse(jwt, provider)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
-}
 
-func TestEnsureProvidersLoaded(t *testing.T) {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fail := true
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if fail {
-			send401Handler(w, r)
-			return
-		}
-		authtest.JWKsHandlerFunc(privateKey, t)(w, r)
-	}))
-	defer ts.Close()
-
-	provider := Provider{JWKSURL: ts.URL}
-	jwtVerifier := NewVerifier(VerifierOptions{
-		// Duplicates will be ignored when added.
-		Providers: []Provider{provider, provider},
-	})
-
-	jwt, err := authtest.GenerateSignedJWT(privateKey, 0, 0, time.Minute)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = jwtVerifier.EnsureProvidersLoaded(context.Background())
-	if err == nil {
-		t.Errorf("no JWKs available, expected error")
-	}
-	_, err = jwtVerifier.Parse(jwt, provider)
-	if err == nil {
-		t.Errorf("no JWKs available, expected error")
-	}
-
-	fail = false
-	jwtVerifier.(*verifier).knownBad.RemoveAll()
-	err = jwtVerifier.EnsureProvidersLoaded(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = jwtVerifier.Parse(jwt, provider)
-	if err != nil {
-		t.Errorf("good JWT and JWKs should not get error: %v", err)
-	}
+	// TODO:
+	// _, err = jwtVerifier.Parse(jwt, provider2)
+	// if err == nil {
+	// 	t.Fatal(err)
+	// }
 }
 
 func TestGoodAndBadJWT(t *testing.T) {
@@ -122,6 +86,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 
 	provider := Provider{JWKSURL: ts.URL}
 	jwtVerifier := NewVerifier(VerifierOptions{
+		Client:    http.DefaultClient,
 		Providers: []Provider{provider},
 	})
 	jwtVerifier.Start()

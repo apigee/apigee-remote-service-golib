@@ -66,6 +66,7 @@ func NewManager(options Options) (Manager, error) {
 		return nil, err
 	}
 	jwtVerifier := jwt.NewVerifier(jwt.VerifierOptions{
+		Client:    options.Client,
 		Providers: options.JWTProviders,
 	})
 	v := key.NewVerifier(key.VerifierOpts{

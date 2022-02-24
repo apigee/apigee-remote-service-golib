@@ -24,10 +24,10 @@ package jwt
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/cache"
-
 	"github.com/pkg/errors"
 	"gopkg.in/square/go-jose.v2/jwt"
 )
@@ -52,24 +52,19 @@ func NewVerifier(opts VerifierOptions) Verifier {
 	if opts.MaxCachedEntries == 0 {
 		opts.MaxCachedEntries = defaultMaxCachedEntries
 	}
-	providers := &providerSet{
-		jwksCache: jwksCache{},
-	}
-	for _, p := range opts.Providers {
-		providers.Add(p)
-	}
 	return &verifier{
-		providers: providers,
-		cache:     cache.NewLRU(opts.CacheTTL, opts.CacheEvictionInterval, int32(opts.MaxCachedEntries)),
-		knownBad:  cache.NewLRU(defaultBadEntryCacheTTL, opts.CacheEvictionInterval, 100),
+		jwksManager: &jwksManager{
+			providers: opts.Providers,
+			client:    opts.Client,
+		},
+		cache:    cache.NewLRU(opts.CacheTTL, opts.CacheEvictionInterval, int32(opts.MaxCachedEntries)),
+		knownBad: cache.NewLRU(defaultBadEntryCacheTTL, opts.CacheEvictionInterval, 100),
 	}
 }
 
 type Verifier interface {
 	Start()
 	Stop()
-	AddProvider(provider Provider)
-	EnsureProvidersLoaded(ctx context.Context) error
 	Parse(raw string, provider Provider) (map[string]interface{}, error)
 }
 
@@ -78,26 +73,27 @@ type VerifierOptions struct {
 	CacheTTL              time.Duration
 	CacheEvictionInterval time.Duration
 	MaxCachedEntries      int
+	Client                *http.Client
+}
+
+type Provider struct {
+	JWKSURL string
+	Refresh time.Duration
 }
 
 // An verifier handles all of the various JWT authentication functionality.
 type verifier struct {
 	cancelContext context.Context
 	cancelFunc    context.CancelFunc
-	providers     *providerSet
 	cache         cache.ExpiringCache
 	knownBad      cache.ExpiringCache
+	jwksManager   *jwksManager
 }
 
 // Start begins JWKS polling. Call Stop() when done.
 func (v *verifier) Start() {
 	v.cancelContext, v.cancelFunc = context.WithCancel(context.Background())
-	v.providers.Start(v.cancelContext)
-}
-
-// EnsureProvidersLoaded ensures all JWKs certs have been retrieved for the first time.
-func (v *verifier) EnsureProvidersLoaded(ctx context.Context) error {
-	return v.providers.Refresh(ctx)
+	v.jwksManager.Start(v.cancelContext)
 }
 
 // Stop all background tasks.
@@ -105,11 +101,6 @@ func (v *verifier) Stop() {
 	if v != nil && v.cancelFunc != nil {
 		v.cancelFunc()
 	}
-}
-
-// AddProvider adds a JWKs provider
-func (v *verifier) AddProvider(provider Provider) {
-	v.providers.Add(provider)
 }
 
 // Parse and verify a JWT
@@ -134,7 +125,6 @@ func (a *verifier) Parse(raw string, provider Provider) (map[string]interface{},
 		return cacheKnownBad(errors.Wrap(err, "jwt.Parse"))
 	}
 
-	// TODO: weird inversion
 	getClaims := func(tok *jwt.JSONWebToken) (map[string]interface{}, error) {
 		var claims map[string]interface{}
 		if provider.JWKSURL == "" {
@@ -142,7 +132,7 @@ func (a *verifier) Parse(raw string, provider Provider) (map[string]interface{},
 			return claims, err
 		}
 
-		ks, err := a.providers.GetJWKs(provider)
+		ks, err := a.jwksManager.Get(a.cancelContext, provider.JWKSURL)
 		if err != nil {
 			return nil, err
 		}
