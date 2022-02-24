@@ -17,6 +17,7 @@ package jwt
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -30,17 +31,32 @@ func TestJWTCaching(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jwt, err := authtest.GenerateSignedJWT(privateKey, 0, 0, time.Minute)
+
+	wrongPrivateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	good := authtest.JWKsHandlerFunc(privateKey, t)
-	called := false
+	jwt, err := authtest.GenerateSignedJWT(privateKey, 0, 0, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	noExpireJwt, err := authtest.GenerateSignedJWT(privateKey, 0, 0, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	called := make(map[string]bool)
+	keyForPath := map[string]http.HandlerFunc{
+		"/hasit":         authtest.JWKsHandlerFunc(privateKey, t),
+		"/doesnothaveit": authtest.JWKsHandlerFunc(wrongPrivateKey, t),
+	}
+
+	// fails after first attempt - thus, if caching fails, the test below fails
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !called {
-			called = true
-			good(w, r)
+		if handler, ok := keyForPath[r.URL.Path]; ok && !called[r.URL.Path] {
+			called[r.URL.Path] = true
+			handler(w, r)
 		} else {
 			send401Handler(w, r)
 		}
@@ -48,32 +64,37 @@ func TestJWTCaching(t *testing.T) {
 	defer ts.Close()
 
 	// Refresh time is too small and will be overriden.
-	provider := Provider{JWKSURL: ts.URL, Refresh: 10 * time.Second}
-	provider2 := Provider{JWKSURL: "bad url", Refresh: 10 * time.Second}
+	hasProvider := Provider{JWKSURL: ts.URL + "/hasit", Refresh: 10 * time.Second}
+	missingProvider := Provider{JWKSURL: ts.URL + "/doesnothaveit", Refresh: 10 * time.Second}
 	jwtVerifier := NewVerifier(VerifierOptions{
 		Client:    http.DefaultClient,
-		Providers: []Provider{provider, provider2},
+		Providers: []Provider{missingProvider, hasProvider},
 	})
 	jwtVerifier.Start()
 	defer jwtVerifier.Stop()
 
-	_, err = jwtVerifier.Parse(jwt, provider)
-	if err != nil {
-		t.Fatal(err)
+	// Make sure the missing provider caches its results first.
+	_, err = jwtVerifier.Parse(jwt, missingProvider)
+	if err == nil {
+		t.Errorf("no error found checking %q, expected error", missingProvider.JWKSURL)
 	}
 
-	for i := 0; i < 5; i++ {
-		_, err = jwtVerifier.Parse(jwt, provider)
+	for i := 0; i < 3; i++ {
+		_, err = jwtVerifier.Parse(jwt, hasProvider)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = jwtVerifier.Parse(noExpireJwt, hasProvider)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// TODO:
-	// _, err = jwtVerifier.Parse(jwt, provider2)
-	// if err == nil {
-	// 	t.Fatal(err)
-	// }
+	// Ensure that good results are only cached on the correct provider.
+	_, err = jwtVerifier.Parse(jwt, missingProvider)
+	if err == nil {
+		t.Errorf("no error found checking %q, expected error", missingProvider.JWKSURL)
+	}
 }
 
 func TestGoodAndBadJWT(t *testing.T) {
@@ -124,7 +145,8 @@ func TestGoodAndBadJWT(t *testing.T) {
 	}
 
 	// expired (from cache)
-	knownBad, ok := jwtVerifier.(*verifier).knownBad.Get(jwt)
+	cacheKey := fmt.Sprintf("%s-%s", provider.JWKSURL, jwt)
+	knownBad, ok := jwtVerifier.(*verifier).knownBad.Get(cacheKey)
 	if !ok {
 		t.Errorf("known bad should be cached")
 	}
