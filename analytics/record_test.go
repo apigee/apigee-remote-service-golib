@@ -212,7 +212,7 @@ func TestEncodeLimits(t *testing.T) {
 	` + outAttrs + `
 	"apiproxy":"","apiproxy_revision":0,"client_received_end_timestamp":0,"client_received_start_timestamp":0,
 	"client_sent_end_timestamp":0,"client_sent_start_timestamp":0,"environment":"test","gateway_flow_id":"",
-	"gateway_source":"","organization":"hi","recordType":"","request_path":"","request_uri":"","request_verb":"",
+	"gateway_source":"","grpc_method":"", "grpc_status_code":"","organization":"hi","recordType":"","request_path":"","request_uri":"","request_verb":"",
 	"response_status_code":0,"useragent":""}`
 	if err := json.Unmarshal([]byte(wantString), &want); err != nil {
 		t.Fatal(err)

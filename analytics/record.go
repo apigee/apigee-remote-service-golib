@@ -76,6 +76,8 @@ type Record struct {
 	Environment                  string      `json:"environment"`
 	GatewaySource                string      `json:"gateway_source"`
 	GatewayFlowID                string      `json:"gateway_flow_id"`
+	GrpcStatusCode               string      `json:"grpc_status_code,omitempty"`
+	GrpcMethod                   string      `json:"grpc_method,omitempty"`
 	Attributes                   []Attribute `json:"-"`
 }
 
