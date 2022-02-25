@@ -15,6 +15,7 @@
 package jwt
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"fmt"
@@ -24,6 +25,8 @@ import (
 	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/authtest"
+	"github.com/google/go-cmp/cmp"
+	"gopkg.in/square/go-jose.v2"
 )
 
 func TestJWTCaching(t *testing.T) {
@@ -41,15 +44,13 @@ func TestJWTCaching(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	noExpireJwt, err := authtest.GenerateSignedJWT(privateKey, 0, 0, time.Minute)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	called := make(map[string]bool)
 	keyForPath := map[string]http.HandlerFunc{
-		"/hasit":         authtest.JWKsHandlerFunc(privateKey, t),
-		"/doesnothaveit": authtest.JWKsHandlerFunc(wrongPrivateKey, t),
+		"/hasit":         authtest.JWKSHandlerFunc(privateKey, t),
+		"/doesnothaveit": authtest.JWKSHandlerFunc(wrongPrivateKey, t),
+		"/badformat":     authtest.StringHandler("bad"),
+		"/denied":        authtest.DeniedHandler(),
 	}
 
 	// fails after first attempt - thus, if caching fails, the test below fails
@@ -58,42 +59,91 @@ func TestJWTCaching(t *testing.T) {
 			called[r.URL.Path] = true
 			handler(w, r)
 		} else {
-			send401Handler(w, r)
+			authtest.DeniedHandler()(w, r)
 		}
 	}))
 	defer ts.Close()
 
-	// Refresh time is too small and will be overriden.
-	hasProvider := Provider{JWKSURL: ts.URL + "/hasit", Refresh: 10 * time.Second}
-	missingProvider := Provider{JWKSURL: ts.URL + "/doesnothaveit", Refresh: 10 * time.Second}
+	goodProvider := Provider{JWKSURL: ts.URL + "/hasit", Refresh: -time.Second}
+	goodProvider2 := Provider{JWKSURL: ts.URL + "/hasit"}
+	wrongProvider := Provider{JWKSURL: ts.URL + "/doesnothaveit"}
+	badUrlProvider := Provider{JWKSURL: "badurl"}
+	badFormatProvider := Provider{JWKSURL: ts.URL + "/badformat"}
+	deniedProvider := Provider{JWKSURL: ts.URL + "/denied"}
 	jwtVerifier := NewVerifier(VerifierOptions{
 		Client:    http.DefaultClient,
-		Providers: []Provider{missingProvider, hasProvider},
+		Providers: []Provider{goodProvider, goodProvider2, wrongProvider, badUrlProvider, badFormatProvider, deniedProvider},
 	})
 	jwtVerifier.Start()
+	time.Sleep(10 * time.Millisecond)
 	defer jwtVerifier.Stop()
 
-	// Make sure the missing provider caches its results first.
-	_, err = jwtVerifier.Parse(jwt, missingProvider)
-	if err == nil {
-		t.Errorf("no error found checking %q, expected error", missingProvider.JWKSURL)
-	}
+	for _, test := range []struct {
+		desc           string
+		provider       Provider
+		wantParseError bool
+		wantJwksError  bool
+	}{
+		{"good provider", goodProvider, false, false},
+		{"wrong provider", wrongProvider, true, false},
+		{"bad provider url", badUrlProvider, true, true},
+		{"bad jwks format", badFormatProvider, true, true},
+		{"denied provider", deniedProvider, true, true},
+	} {
+		t.Run("parse "+test.desc, func(t *testing.T) {
 
-	for i := 0; i < 3; i++ {
-		_, err = jwtVerifier.Parse(jwt, hasProvider)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = jwtVerifier.Parse(noExpireJwt, hasProvider)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
+			// check first run & cached run
+			for i := 0; i < 2; i++ {
+				_, err = jwtVerifier.Parse(jwt, test.provider)
+				if test.wantParseError && err == nil {
+					t.Error("wanted error, got none")
+				}
+				if !test.wantParseError && err != nil {
+					t.Errorf("wanted no error, got: %v", err)
+				}
+			}
+		})
 
-	// Ensure that good results are only cached on the correct provider.
-	_, err = jwtVerifier.Parse(jwt, missingProvider)
-	if err == nil {
-		t.Errorf("no error found checking %q, expected error", missingProvider.JWKSURL)
+		t.Run("caches "+test.desc, func(t *testing.T) {
+
+			cacheKey := fmt.Sprintf("%s-%s", test.provider.JWKSURL, jwt)
+			v, ok := jwtVerifier.(*verifier).cache.Get(cacheKey)
+			if test.wantParseError && ok {
+				t.Errorf("want nothing in verifier cache, got: %v", v)
+			}
+			if !test.wantParseError && !ok {
+				t.Error("want in verifier cache, got none")
+			}
+
+			v, ok = jwtVerifier.(*verifier).knownBad.Get(cacheKey)
+			if test.wantParseError && !ok {
+				t.Error("want in verifier knownbad, got none")
+			}
+			if !test.wantParseError && ok {
+				t.Errorf("want nothing in verifier knownbad, got: %v", v)
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			jwks, err := jwtVerifier.(*verifier).jwksManager.Get(ctx, test.provider.JWKSURL)
+			cv, _ := jwtVerifier.(*verifier).jwksManager.cache.Load(test.provider.JWKSURL)
+			switch cv := cv.(type) {
+			case *jose.JSONWebKeySet:
+				if cv != jwks {
+					t.Errorf("mismatched values, want: %v, got: %v", jwks, cv)
+				}
+				if test.wantJwksError {
+					t.Errorf("want error in jwks cache, got: %v", cv)
+				}
+			case error:
+				if cv != err {
+					t.Errorf("mismatched values, want: %v, got: %v", err, cv)
+				}
+				if !test.wantJwksError {
+					t.Errorf("want jwks in jwks cache, got: %v", cv)
+				}
+			}
+		})
 	}
 }
 
@@ -102,13 +152,14 @@ func TestGoodAndBadJWT(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts := httptest.NewServer(authtest.JWKsHandlerFunc(privateKey, t))
+	ts := httptest.NewServer(authtest.JWKSHandlerFunc(privateKey, t))
 	defer ts.Close()
 
 	provider := Provider{JWKSURL: ts.URL}
+	noJWKSProvider := Provider{}
 	jwtVerifier := NewVerifier(VerifierOptions{
 		Client:    http.DefaultClient,
-		Providers: []Provider{provider},
+		Providers: []Provider{provider, noJWKSProvider},
 	})
 	jwtVerifier.Start()
 	defer jwtVerifier.Stop()
@@ -142,17 +193,6 @@ func TestGoodAndBadJWT(t *testing.T) {
 	_, err = jwtVerifier.Parse(jwt, provider)
 	if err == nil {
 		t.Errorf("expired JWT should get error")
-	}
-
-	// expired (from cache)
-	cacheKey := fmt.Sprintf("%s-%s", provider.JWKSURL, jwt)
-	knownBad, ok := jwtVerifier.(*verifier).knownBad.Get(cacheKey)
-	if !ok {
-		t.Errorf("known bad should be cached")
-	}
-	_, err = jwtVerifier.Parse(jwt, provider)
-	if err != knownBad {
-		t.Errorf("should return known bad")
 	}
 
 	// future nbf within acceptable skew
@@ -208,9 +248,82 @@ func TestGoodAndBadJWT(t *testing.T) {
 	if err == nil {
 		t.Errorf("JWT with wrong key should get error")
 	}
+
+	// no provider JWKS
+	jwt, err = authtest.GenerateSignedJWT(wrongKey, 0, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = jwtVerifier.Parse(jwt, noJWKSProvider)
+	if err != nil {
+		t.Errorf("provider without JWKS should not error, got: %v", err)
+	}
+
+	// bad JWT format
+	_, err = jwtVerifier.Parse("jwt", noJWKSProvider)
+	if err == nil {
+		t.Errorf("bad JWT format should get error")
+	}
 }
 
-func send401Handler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
+func TestMinAllowedRefresh(t *testing.T) {
+
+	for _, test := range []struct {
+		desc string
+		dur1 time.Duration
+		dur2 time.Duration
+		want time.Duration
+	}{
+		{"first", time.Hour, time.Hour, time.Hour},
+		{"second", 2 * time.Hour, time.Hour, time.Hour},
+		{"force min", time.Minute, time.Minute, minAllowedRefreshInterval},
+		{"negative", -time.Hour, -time.Hour, minAllowedRefreshInterval},
+	} {
+		t.Run(test.desc, func(t *testing.T) {
+			got := minAllowedRefresh(test.dur1, test.dur2)
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("for: %v (-want +got):\n%s", test.want, diff)
+			}
+		})
+	}
+}
+
+func TestJwksRefresh(t *testing.T) {
+
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !called {
+			called = true
+			authtest.JWKSHandlerFunc(privateKey, t)(w, r)
+		} else {
+			authtest.DeniedHandler()(w, r)
+		}
+	}))
+
+	p := Provider{JWKSURL: ts.URL}
+	m := jwksManager{
+		client:    http.DefaultClient,
+		providers: []Provider{p},
+	}
+	// bypass minRefresh by bypassing Start()
+	rates := map[string]time.Duration{
+		p.JWKSURL: time.Millisecond,
+	}
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	m.startRefreshing(ctx, rates)
+	defer cancelFunc()
+
+	jwks, err := m.Get(ctx, p.JWKSURL)
+	if jwks == nil || err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	time.Sleep(5 * time.Millisecond)
+	jwks, err = m.Get(ctx, p.JWKSURL)
+	if jwks != nil || err == nil {
+		t.Fatalf("expected error on second poll")
+	}
 }

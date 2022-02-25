@@ -38,12 +38,17 @@ func GenerateSignedJWT(privateKey *rsa.PrivateKey, iat, nbf, exp time.Duration) 
 	}
 
 	now := time.Now()
-	jwt, err := jwt.Signed(rsaSigner).
-		Claims(&jwt.Claims{
-			IssuedAt:  jwt.NewNumericDate(now.Add(iat)),
-			NotBefore: jwt.NewNumericDate(now.Add(nbf)),
-			Expiry:    jwt.NewNumericDate(now.Add(exp)),
-		}).
+	claims := jwt.Claims{}
+	if iat != 0 {
+		claims.IssuedAt = jwt.NewNumericDate(now.Add(iat))
+	}
+	if nbf != 0 {
+		claims.NotBefore = jwt.NewNumericDate(now.Add(nbf))
+	}
+	if exp != 0 {
+		claims.Expiry = jwt.NewNumericDate(now.Add(exp))
+	}
+	jwt, err := jwt.Signed(rsaSigner).Claims(claims).
 		Claims(map[string]interface{}{
 			"access_token":     "8E7Az3ZgPHKrgzcQA54qAzXT3Z1G",
 			"client_id":        "yBQ5eXZA8rSoipYEi1Rmn0Z8RKtkGI4H",
@@ -55,7 +60,7 @@ func GenerateSignedJWT(privateKey *rsa.PrivateKey, iat, nbf, exp time.Duration) 
 	return jwt, err
 }
 
-func JWKsHandlerFunc(privateKey *rsa.PrivateKey, t *testing.T) http.HandlerFunc {
+func JWKSHandlerFunc(privateKey *rsa.PrivateKey, t *testing.T) http.HandlerFunc {
 	jwk := jose.JSONWebKey{
 		KeyID:     "1",
 		Algorithm: "RSA",
@@ -89,7 +94,7 @@ func APIKeyHandlerFunc(apiKey string, t *testing.T) http.HandlerFunc {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jwksH := JWKsHandlerFunc(privateKey, t)
+	jwksH := JWKSHandlerFunc(privateKey, t)
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, certsPath) {
@@ -133,17 +138,22 @@ func GoodOnceAPIKeyHandler(goodAPIKey string, t *testing.T) http.HandlerFunc {
 			called = true
 			good(w, r)
 		} else {
-			badHandler()(w, r)
+			DeniedHandler()(w, r)
 		}
 	})
 }
 
-// badHandler gives a handler that just gives a 401 for all requests.
-func badHandler() http.HandlerFunc {
+// DeniedHandler gives a handler that just gives a 401 for all requests.
+func DeniedHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(401)
-		// _ = json.NewEncoder(w).Encode(badKeyResponse)
+	}
+}
+
+// StringHandler gives a handler that sends a string w/ a 200 status
+func StringHandler(v string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(v))
 	}
 }
 

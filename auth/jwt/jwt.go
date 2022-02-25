@@ -85,8 +85,8 @@ type Provider struct {
 type verifier struct {
 	cancelContext context.Context
 	cancelFunc    context.CancelFunc
-	cache         cache.ExpiringCache
-	knownBad      cache.ExpiringCache
+	cache         cache.ExpiringCache // key -> JWT
+	knownBad      cache.ExpiringCache // key -> error
 	jwksManager   *jwksManager
 }
 
@@ -105,18 +105,18 @@ func (v *verifier) Stop() {
 
 // Parse and verify a JWT
 // if provider has no JWKSURL, the cert will not be verified
-func (a *verifier) Parse(raw string, provider Provider) (map[string]interface{}, error) {
+func (v *verifier) Parse(raw string, provider Provider) (map[string]interface{}, error) {
 	cacheKey := fmt.Sprintf("%s-%s", provider.JWKSURL, raw)
-	if cached, ok := a.knownBad.Get(cacheKey); ok {
+	if cached, ok := v.knownBad.Get(cacheKey); ok {
 		return nil, cached.(error)
 	}
 
-	if cached, ok := a.cache.Get(cacheKey); ok {
+	if cached, ok := v.cache.Get(cacheKey); ok {
 		return cached.(map[string]interface{}), nil
 	}
 
 	cacheKnownBad := func(err error) (map[string]interface{}, error) {
-		a.knownBad.Set(cacheKey, err)
+		v.knownBad.Set(cacheKey, err)
 		return nil, err
 	}
 
@@ -132,7 +132,7 @@ func (a *verifier) Parse(raw string, provider Provider) (map[string]interface{},
 			return claims, err
 		}
 
-		ks, err := a.jwksManager.Get(a.cancelContext, provider.JWKSURL)
+		ks, err := v.jwksManager.Get(v.cancelContext, provider.JWKSURL)
 		if err != nil {
 			return nil, err
 		}
@@ -172,9 +172,9 @@ func (a *verifier) Parse(raw string, provider Provider) (map[string]interface{},
 	}
 
 	if ttl > 0 {
-		a.cache.SetWithExpiration(cacheKey, claims, ttl)
+		v.cache.SetWithExpiration(cacheKey, claims, ttl)
 	} else {
-		a.cache.Set(cacheKey, claims)
+		v.cache.Set(cacheKey, claims)
 	}
 
 	return claims, nil

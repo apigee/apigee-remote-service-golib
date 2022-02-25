@@ -39,12 +39,17 @@ type jwksManager struct {
 	refreshers []util.Looper
 }
 
+// stop by canceling passed context
 func (j *jwksManager) Start(ctx context.Context) {
 
 	refreshRates := map[string]time.Duration{}
 	for _, p := range j.providers {
 		refreshRates[p.JWKSURL] = minAllowedRefresh(p.Refresh, refreshRates[p.JWKSURL])
 	}
+	j.startRefreshing(ctx, refreshRates)
+}
+
+func (j *jwksManager) startRefreshing(ctx context.Context, refreshRates map[string]time.Duration) {
 	for url, rate := range refreshRates {
 		l := util.Looper{
 			Backoff: util.DefaultExponentialBackoff(),
@@ -80,7 +85,7 @@ func minAllowedRefresh(a, b time.Duration) time.Duration {
 	return max(min(a, b), minAllowedRefreshInterval)
 }
 
-// Get the JWKs for the url
+// Get the JWKS for the url
 // If not in cache, fetches from source
 func (j *jwksManager) Get(ctx context.Context, url string) (*jose.JSONWebKeySet, error) {
 
@@ -96,11 +101,12 @@ func (j *jwksManager) Get(ctx context.Context, url string) (*jose.JSONWebKeySet,
 	return j.fetch(ctx, url)
 }
 
-// Fetches the JWKs for the url from the source.
+// Fetches the JWKS for the url from the source.
 // Does herdbusting and caching.
 func (j *jwksManager) fetch(ctx context.Context, url string) (*jose.JSONWebKeySet, error) {
 
 	fetch := func() (interface{}, error) {
+		log.Debugf("fetching jwks %s", url)
 		req, err := http.NewRequest(http.MethodGet, url, nil)
 		if err != nil {
 			return nil, err
@@ -126,6 +132,7 @@ func (j *jwksManager) fetch(ctx context.Context, url string) (*jose.JSONWebKeySe
 			j.cache.Store(url, err)
 		} else {
 			j.cache.Store(url, &jwks)
+			log.Debugf("cached jwks %s: %v", url, &jwks)
 		}
 		return &jwks, err
 	}
