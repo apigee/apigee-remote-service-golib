@@ -33,7 +33,6 @@ func TestJWTCaching(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	wrongPrivateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
@@ -42,6 +41,16 @@ func TestJWTCaching(t *testing.T) {
 	jwt, err := authtest.GenerateSignedJWT(privateKey, 0, 0, time.Minute)
 	if err != nil {
 		t.Fatal(err)
+	}
+	noExpireJwt, err := generateJWTWithExpiration(privateKey, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	called := make(map[string]bool)
+	keyForPath := map[string]http.HandlerFunc{
+		"/hasit":         sendGoodJWKsHandler(privateKey, t),
+		"/doesnothaveit": sendGoodJWKsHandler(wrongPrivateKey, t),
 	}
 
 	called := make(map[string]bool)
@@ -143,6 +152,12 @@ func TestJWTCaching(t *testing.T) {
 				}
 			}
 		})
+	}
+
+	// Ensure that good results are only cached on the correct provider.
+	_, err = jwtVerifier.Parse(jwt, missingProvider)
+	if err == nil {
+		t.Errorf("no error found checking %q, expected error", missingProvider.JWKSURL)
 	}
 }
 
