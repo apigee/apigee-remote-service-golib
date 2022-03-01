@@ -29,6 +29,11 @@ import (
 	"gopkg.in/square/go-jose.v2"
 )
 
+type jwksCache interface {
+	Start(ctx context.Context)
+	Get(ctx context.Context, url string) (*jose.JSONWebKeySet, error)
+}
+
 // initialize with providers and call Start() to populate
 // call WaitForLoad() to wait
 type jwksManager struct {
