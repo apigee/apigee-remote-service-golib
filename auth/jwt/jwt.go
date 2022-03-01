@@ -105,18 +105,18 @@ func (v *verifier) Stop() {
 
 // Parse and verify a JWT
 // if provider has no JWKSURL, the cert will not be verified
-func (a *verifier) Parse(raw string, provider Provider) (map[string]interface{}, error) {
+func (v *verifier) Parse(raw string, provider Provider) (map[string]interface{}, error) {
 	cacheKey := fmt.Sprintf("%s-%s", provider.JWKSURL, raw)
-	if cached, ok := a.knownBad.Get(cacheKey); ok {
+	if cached, ok := v.knownBad.Get(cacheKey); ok {
 		return nil, cached.(error)
 	}
 
-	if cached, ok := a.cache.Get(cacheKey); ok {
+	if cached, ok := v.cache.Get(cacheKey); ok {
 		return cached.(map[string]interface{}), nil
 	}
 
 	cacheKnownBad := func(err error) (map[string]interface{}, error) {
-		a.knownBad.Set(cacheKey, err)
+		v.knownBad.Set(cacheKey, err)
 		return nil, err
 	}
 

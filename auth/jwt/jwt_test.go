@@ -42,16 +42,6 @@ func TestJWTCaching(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	noExpireJwt, err := generateJWTWithExpiration(privateKey, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	called := make(map[string]bool)
-	keyForPath := map[string]http.HandlerFunc{
-		"/hasit":         sendGoodJWKsHandler(privateKey, t),
-		"/doesnothaveit": sendGoodJWKsHandler(wrongPrivateKey, t),
-	}
 
 	called := make(map[string]bool)
 	keyForPath := map[string]http.HandlerFunc{
@@ -152,12 +142,6 @@ func TestJWTCaching(t *testing.T) {
 				}
 			}
 		})
-	}
-
-	// Ensure that good results are only cached on the correct provider.
-	_, err = jwtVerifier.Parse(jwt, missingProvider)
-	if err == nil {
-		t.Errorf("no error found checking %q, expected error", missingProvider.JWKSURL)
 	}
 }
 
