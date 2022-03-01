@@ -38,7 +38,7 @@ type Manager interface {
 	ParseJWT(jwtString string, provider jwt.Provider) (claims map[string]interface{}, err error)
 }
 
-// TODO: use Claims struct?
+// Future: use Claims struct?
 // type ApigeeClaims struct {
 // 	AccessToken    string   `json:"access_token,omitempty"`
 // 	ClientID       string   `json:"client_id,omitempty"`
