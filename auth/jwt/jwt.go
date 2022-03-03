@@ -58,10 +58,6 @@ func NewVerifier(opts VerifierOptions) Verifier {
 			providers: opts.Providers,
 			client:    opts.Client,
 		},
-		// if needed, replaces the above - see lestrrat_jwks.go
-		// jwksManager: &lestrrat_jwksManager{
-		// 	providers: opts.Providers,
-		// },
 		cache:    cache.NewLRU(opts.CacheTTL, opts.CacheEvictionInterval, int32(opts.MaxCachedEntries)),
 		knownBad: cache.NewLRU(defaultBadEntryCacheTTL, opts.CacheEvictionInterval, 100),
 	}
@@ -92,7 +88,7 @@ type verifier struct {
 	cancelFunc    context.CancelFunc
 	cache         cache.ExpiringCache // key -> JWT
 	knownBad      cache.ExpiringCache // key -> error
-	jwksManager   jwksCache
+	jwksManager   *jwksManager
 }
 
 // Start begins JWKS polling. Call Stop() when done.
