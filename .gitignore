@@ -15,3 +15,6 @@ coverage.txt
 # Distribution
 dist/
 temp/
+
+# IDE files
+.idea/
