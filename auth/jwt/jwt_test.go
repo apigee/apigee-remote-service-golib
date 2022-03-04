@@ -15,6 +15,7 @@
 package jwt
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"fmt"
@@ -24,6 +25,7 @@ import (
 	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/authtest"
+	"gopkg.in/square/go-jose.v2"
 )
 
 func TestJWTCaching(t *testing.T) {
@@ -119,26 +121,26 @@ func TestJWTCaching(t *testing.T) {
 				t.Errorf("want nothing in verifier knownbad, got: %v", v)
 			}
 
-			// ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			// defer cancel()
-			// jwks, err := jwtVerifier.(*verifier).jwksManager.Get(ctx, test.provider.JWKSURL)
-			// cv, _ := jwtVerifier.(*verifier).jwksManager.cache.Load(test.provider.JWKSURL)
-			// switch cv := cv.(type) {
-			// case *jose.JSONWebKeySet:
-			// 	if cv != jwks {
-			// 		t.Errorf("mismatched values, want: %v, got: %v", jwks, cv)
-			// 	}
-			// 	if test.wantJwksError {
-			// 		t.Errorf("want error in jwks cache, got: %v", cv)
-			// 	}
-			// case error:
-			// 	if cv != err {
-			// 		t.Errorf("mismatched values, want: %v, got: %v", err, cv)
-			// 	}
-			// 	if !test.wantJwksError {
-			// 		t.Errorf("want jwks in jwks cache, got: %v", cv)
-			// 	}
-			// }
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			jwks, err := jwtVerifier.(*verifier).jwksManager.Get(ctx, test.provider.JWKSURL)
+			cv, _ := jwtVerifier.(*verifier).jwksManager.cache.Load(test.provider.JWKSURL)
+			switch cv := cv.(type) {
+			case *jose.JSONWebKeySet:
+				if cv != jwks {
+					t.Errorf("mismatched values, want: %v, got: %v", jwks, cv)
+				}
+				if test.wantJwksError {
+					t.Errorf("want error in jwks cache, got: %v", cv)
+				}
+			case error:
+				if cv != err {
+					t.Errorf("mismatched values, want: %v, got: %v", err, cv)
+				}
+				if !test.wantJwksError {
+					t.Errorf("want jwks in jwks cache, got: %v", cv)
+				}
+			}
 		})
 	}
 }
