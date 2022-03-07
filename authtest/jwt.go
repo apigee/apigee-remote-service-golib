@@ -27,6 +27,7 @@ import (
 	"gopkg.in/square/go-jose.v2/jwt"
 )
 
+// Generate a signed JWT
 func GenerateSignedJWT(privateKey *rsa.PrivateKey, iat, nbf, exp time.Duration) (string, error) {
 	rsaSigner, err := jose.NewSigner(
 		jose.SigningKey{Algorithm: jose.RS256, Key: privateKey},
@@ -60,6 +61,7 @@ func GenerateSignedJWT(privateKey *rsa.PrivateKey, iat, nbf, exp time.Duration) 
 	return jwt, err
 }
 
+// JWKSHandlerFunc creates a HandlerFunc to deliver a JWKS for the private key
 func JWKSHandlerFunc(privateKey *rsa.PrivateKey, t *testing.T) http.HandlerFunc {
 	jwk := jose.JSONWebKey{
 		KeyID:     "1",
@@ -83,7 +85,7 @@ const (
 	certsPath = "/certs"
 )
 
-// APIKeyHandlerFunc is an HTTP handler that handles all the requests in a proper fashion.
+// APIKeyHandlerFunc creates an HTTP handler that handles API Key requests properly.
 func APIKeyHandlerFunc(apiKey string, t *testing.T) http.HandlerFunc {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -121,6 +123,7 @@ func APIKeyHandlerFunc(apiKey string, t *testing.T) http.HandlerFunc {
 	}
 }
 
+// GoodOnceAPIKeyHandler creates an HTTP handler that handles API Key requests.
 // On the first iteration, use a normal HTTP handler that will return good
 // results for the various HTTP requests that go out. After the first run,
 // replace with bad responses to ensure that we do not go out and fetch any

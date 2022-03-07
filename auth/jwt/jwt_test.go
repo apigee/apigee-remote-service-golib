@@ -93,11 +93,8 @@ func TestJWTCaching(t *testing.T) {
 			// check first run & cached run
 			for i := 0; i < 2; i++ {
 				_, err = jwtVerifier.Parse(jwt, test.provider)
-				if test.wantParseError && err == nil {
-					t.Error("wanted error, got none")
-				}
-				if !test.wantParseError && err != nil {
-					t.Errorf("wanted no error, got: %v", err)
+				if test.wantParseError == (err == nil) {
+					t.Errorf("wanted error (%t), got (%t): %v", test.wantParseError, !test.wantParseError, err)
 				}
 			}
 		})
@@ -106,19 +103,13 @@ func TestJWTCaching(t *testing.T) {
 
 			cacheKey := fmt.Sprintf("%s-%s", test.provider.JWKSURL, jwt)
 			v, ok := jwtVerifier.(*verifier).cache.Get(cacheKey)
-			if test.wantParseError && ok {
-				t.Errorf("want nothing in verifier cache, got: %v", v)
-			}
-			if !test.wantParseError && !ok {
-				t.Error("want in verifier cache, got none")
+			if test.wantParseError == ok {
+				t.Errorf("want cached (%t), got: %v", ok, v)
 			}
 
 			v, ok = jwtVerifier.(*verifier).knownBad.Get(cacheKey)
-			if test.wantParseError && !ok {
-				t.Error("want in verifier knownbad, got none")
-			}
-			if !test.wantParseError && ok {
-				t.Errorf("want nothing in verifier knownbad, got: %v", v)
+			if test.wantParseError != ok {
+				t.Errorf("want knownBad (%t), got: %v", ok, v)
 			}
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -127,18 +118,16 @@ func TestJWTCaching(t *testing.T) {
 			cv, _ := jwtVerifier.(*verifier).jwksManager.cache.Load(test.provider.JWKSURL)
 			switch cv := cv.(type) {
 			case *jose.JSONWebKeySet:
-				if cv != jwks {
-					t.Errorf("mismatched values, want: %v, got: %v", jwks, cv)
-				}
 				if test.wantJwksError {
-					t.Errorf("want error in jwks cache, got: %v", cv)
+					t.Errorf("want error, got: %v", cv)
+				} else if cv != jwks {
+					t.Errorf("want jwks: %v, got: %v", jwks, cv)
 				}
 			case error:
-				if cv != err {
-					t.Errorf("mismatched values, want: %v, got: %v", err, cv)
-				}
 				if !test.wantJwksError {
-					t.Errorf("want jwks in jwks cache, got: %v", cv)
+					t.Errorf("want jwks, got: %v", cv)
+				} else if cv != err {
+					t.Errorf("want: %v, got: %v", err, cv)
 				}
 			}
 		})
@@ -173,7 +162,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 		t.Errorf("good JWT should not get error: %v", err)
 	}
 
-	// expired within acceptible skew
+	// expired within acceptable skew
 	jwt, err = authtest.GenerateSignedJWT(privateKey, 0, 0, -time.Second)
 	if err != nil {
 		t.Fatal(err)

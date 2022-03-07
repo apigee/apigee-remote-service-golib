@@ -39,7 +39,7 @@ type jwksManager struct {
 	refreshers []util.Looper
 }
 
-// stop by canceling passed context
+// Start starts refreshing providers. Stop by canceling passed context.
 func (j *jwksManager) Start(ctx context.Context) {
 
 	refreshRates := map[string]time.Duration{}
