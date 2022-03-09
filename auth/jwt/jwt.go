@@ -41,6 +41,12 @@ const (
 	minAllowedRefreshInterval    = 10 * time.Minute
 )
 
+var (
+	ErrExp = errors.New("token is expired per exp claim")
+	ErrNbf = errors.New("token is not valid yet per nbf claim")
+	ErrIat = errors.New("token used before issued per iat claim")
+)
+
 // NewVerifier creates a Verifier. Call Start() after creation.
 func NewVerifier(opts VerifierOptions) Verifier {
 	if opts.CacheTTL == 0 {
@@ -104,8 +110,10 @@ func (v *verifier) Stop() {
 	}
 }
 
-// Parse and verify a JWT
-// if provider has no JWKSURL, the cert will not be verified
+// Parse and verify a JWT against a provider's certificates.
+// If provider has no JWKSURL, there will be no cert verification.
+// Time claims (nbf, exp, iat) are verified against now +/- acceptableSkew and an inappropriate
+// value will result in an error, other claims are not checked.
 func (v *verifier) Parse(raw string, provider Provider) (map[string]interface{}, error) {
 	cacheKey := fmt.Sprintf("%s-%s", provider.JWKSURL, raw)
 	if cached, ok := v.knownBad.Get(cacheKey); ok {
@@ -116,67 +124,72 @@ func (v *verifier) Parse(raw string, provider Provider) (map[string]interface{},
 		return cached.(map[string]interface{}), nil
 	}
 
-	cacheKnownBad := func(err error) (map[string]interface{}, error) {
-		v.knownBad.Set(cacheKey, err)
-		return nil, err
-	}
-
 	tok, err := jwt.ParseSigned(raw)
 	if err != nil {
-		return cacheKnownBad(errors.Wrap(err, "jwt.Parse"))
+		return v.cacheKnownBad(cacheKey, errors.Wrap(err, "jwt.Parse"))
 	}
 
-	getClaims := func(tok *jwt.JSONWebToken) (map[string]interface{}, error) {
-		var claims map[string]interface{}
-		if provider.JWKSURL == "" {
-			err = tok.UnsafeClaimsWithoutVerification(&claims)
-			return claims, err
-		}
-
-		ks, err := v.jwksManager.Get(v.cancelContext, provider.JWKSURL)
-		if err != nil {
-			return nil, err
-		}
-
-		err = tok.Claims(ks, &claims)
-		return claims, err
-	}
-	claims, err := getClaims(tok)
+	registeredClaims, claimsMap, err := v.claims(provider, tok)
 	if err != nil {
-		return cacheKnownBad(errors.Wrap(err, "jwt.Parse"))
+		return v.cacheKnownBad(cacheKey, errors.Wrap(err, "jwt.Parse"))
 	}
 
-	// The claims below are optional, by default, so if they are set to the
-	// default value in Go, let's not fail the verification for them.
 	now := time.Now()
-	var ttl time.Duration
-	if exp, ok := claims["exp"].(float64); ok {
-		ttl = time.Unix(int64(exp), 0).Add(acceptableSkew).Sub(now)
-		if ttl <= 0 {
-			err := fmt.Errorf("token is expired per exp claim")
-			return cacheKnownBad(errors.Wrap(err, "jwt.Parse"))
-		}
+	err = registeredClaims.ValidateWithLeeway(jwt.Expected{}.WithTime(now), acceptableSkew)
+	switch err {
+	case jwt.ErrExpired:
+		err = ErrExp
+	case jwt.ErrNotValidYet:
+		err = ErrNbf
+	case jwt.ErrIssuedInTheFuture:
+		err = ErrIat
+	case nil:
+		// ok
+	case jwt.ErrInvalidIssuer:
+		err = fmt.Errorf("unexpected err: %s", err)
+	case jwt.ErrInvalidSubject:
+		err = fmt.Errorf("unexpected err: %s", err)
+	case jwt.ErrInvalidID:
+		err = fmt.Errorf("unexpected err: %s", err)
+	case jwt.ErrInvalidAudience:
+		err = fmt.Errorf("unexpected err: %s", err)
+	default:
+		err = fmt.Errorf("unexpected err: %s", err)
+	}
+	if err != nil {
+		return v.cacheKnownBad(cacheKey, errors.Wrap(err, "jwt.Parse"))
 	}
 
-	if iss, ok := claims["iat"].(float64); ok {
-		if now.Add(acceptableSkew).Before(time.Unix(int64(iss), 0)) {
-			err := fmt.Errorf("token used before issued per iat claim")
-			return nil, errors.Wrap(err, "jwt.Parse")
-		}
-	}
-
-	if nbf, ok := claims["nbf"].(float64); ok {
-		if now.Add(acceptableSkew).Before(time.Unix(int64(nbf), 0)) {
-			err := fmt.Errorf("token is not valid yet per nbf claim")
-			return nil, errors.Wrap(err, "jwt.Parse")
-		}
-	}
-
+	ttl := registeredClaims.Expiry.Time().Add(acceptableSkew).Sub(now)
 	if ttl > 0 {
-		v.cache.SetWithExpiration(cacheKey, claims, ttl)
+		v.cache.SetWithExpiration(cacheKey, claimsMap, ttl)
 	} else {
-		v.cache.Set(cacheKey, claims)
+		v.cache.Set(cacheKey, claimsMap)
 	}
 
-	return claims, nil
+	return claimsMap, nil
+}
+
+// put an error in the known bad cache
+func (v *verifier) cacheKnownBad(cacheKey string, err error) (map[string]interface{}, error) {
+	v.knownBad.Set(cacheKey, err)
+	return nil, err
+}
+
+// return the claims for a provider
+func (v *verifier) claims(provider Provider, tok *jwt.JSONWebToken) (*jwt.Claims, map[string]interface{}, error) {
+	var claims1 jwt.Claims
+	var claims map[string]interface{}
+	if provider.JWKSURL == "" {
+		err := tok.UnsafeClaimsWithoutVerification(&claims)
+		return &claims1, claims, err
+	}
+
+	ks, err := v.jwksManager.Get(v.cancelContext, provider.JWKSURL)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	err = tok.Claims(ks, &claims1, &claims)
+	return &claims1, claims, err
 }
