@@ -15,119 +15,21 @@
 package key
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/auth/jwt"
 	"github.com/apigee/apigee-remote-service-golib/v2/authtest"
-	"github.com/lestrrat-go/jwx/jwa"
-	"github.com/lestrrat-go/jwx/jwk"
-	jwx "github.com/lestrrat-go/jwx/jwt"
 )
 
 var (
 	badKeyResponse = []byte(`{"fault":{"faultstring":"Invalid ApiKey","detail":{"errorcode":"oauth.v2.InvalidApiKey"}}}`)
 )
-
-// goodHandler is an HTTP handler that handles all the requests in a proper fashion.
-func goodHandler(apiKey string, t *testing.T) http.HandlerFunc {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	key, err := jwk.New(&privateKey.PublicKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := key.Set("kid", "1"); err != nil {
-		t.Fatal(err)
-	}
-	if err := key.Set("alg", jwa.RS256.String()); err != nil {
-		t.Fatal(err)
-	}
-
-	type JWKS struct {
-		Keys []jwk.Key `json:"keys"`
-	}
-
-	jwks := JWKS{
-		Keys: []jwk.Key{
-			key,
-		},
-	}
-
-	return func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, certsPath) {
-			// Handling the JWK verifier
-			w.Header().Set("Content-Type", "application/json")
-			if err := json.NewEncoder(w).Encode(jwks); err != nil {
-				t.Fatal(err)
-			}
-			return
-		}
-
-		var req APIKeyRequest
-		err := json.NewDecoder(r.Body).Decode(&req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer r.Body.Close()
-
-		if apiKey != req.APIKey {
-			t.Fatalf("expected: %v, got: %v", apiKey, req)
-		}
-
-		jwt, err := generateAPIKeyJWT(privateKey)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		jwtResponse := APIKeyResponse{Token: jwt}
-
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(jwtResponse); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
-func generateAPIKeyJWT(privateKey *rsa.PrivateKey) (string, error) {
-
-	key, err := jwk.New(privateKey)
-	if err != nil {
-		return "", err
-	}
-	if err := key.Set("kid", "1"); err != nil {
-		return "", err
-	}
-	if err := key.Set("alg", jwa.RS256.String()); err != nil {
-		return "", err
-	}
-
-	token := jwx.New()
-	_ = token.Set(jwx.AudienceKey, "remote-service-client")
-	_ = token.Set(jwx.JwtIDKey, "29e2320b-787c-4625-8599-acc5e05c68d0")
-	_ = token.Set(jwx.IssuerKey, "https://theganyo1-eval-test.apigee.net/remote-service/token")
-	_ = token.Set(jwx.NotBeforeKey, time.Now().Add(-10*time.Minute).Unix())
-	_ = token.Set(jwx.IssuedAtKey, time.Now().Unix())
-	_ = token.Set(jwx.ExpirationKey, (time.Now().Add(50 * time.Millisecond)).Unix())
-	_ = token.Set("access_token", "8E7Az3ZgPHKrgzcQA54qAzXT3Z1G")
-	_ = token.Set("client_id", "yBQ5eXZA8rSoipYEi1Rmn0Z8RKtkGI4H")
-	_ = token.Set("application_name", "61cd4d83-06b5-4270-a9ee-cf9255ef45c3")
-	_ = token.Set("api_product_list", []string{"TestProduct"})
-	payload, err := jwx.Sign(token, jwa.RS256, key)
-
-	return string(payload), err
-}
 
 // badHandler gives a handler that just gives a 401 for all requests.
 func badHandler() http.HandlerFunc {
@@ -152,7 +54,7 @@ func testVerifier(t *testing.T, baseURL string, opts VerifierOpts) (Verifier, jw
 func TestVerifyAPIKeyValid(t *testing.T) {
 	apiKey := "testID"
 
-	ts := httptest.NewServer(goodHandler(apiKey, t))
+	ts := httptest.NewServer(authtest.APIKeyHandlerFunc(apiKey, t))
 	defer ts.Close()
 
 	v, j := testVerifier(t, ts.URL, VerifierOpts{})
@@ -177,20 +79,8 @@ func TestVerifyAPIKeyValid(t *testing.T) {
 func TestVerifyAPIKeyCacheWithClear(t *testing.T) {
 	apiKey := "testID"
 
-	// On the first iteration, use a normal HTTP handler that will return good
-	// results for the various HTTP requests that go out. After the first run,
-	// replace with bad responses to ensure that we do not go out and fetch any
-	// new pages (things are cached).
-	called := map[string]bool{}
-	good := goodHandler(apiKey, t)
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !called[r.URL.Path] {
-			called[r.URL.Path] = true
-			good(w, r)
-		} else {
-			badHandler()(w, r)
-		}
-	}))
+	good := authtest.GoodOnceAPIKeyHandler(apiKey, t)
+	ts := httptest.NewServer(good)
 	defer ts.Close()
 
 	v, j := testVerifier(t, ts.URL, VerifierOpts{})
@@ -223,26 +113,7 @@ func TestVerifyAPIKeyCacheWithClear(t *testing.T) {
 
 func TestVerifyAPIKeyCacheWithExpiry(t *testing.T) {
 	apiKey := "testID"
-
-	// On the first iteration, use a normal HTTP handler that will return good
-	// results for the various HTTP requests that go out. After the first run,
-	// replace with bad responses to ensure that we do not go out and fetch any
-	// new pages (things are cached).
-	called := false
-	good := goodHandler(apiKey, t)
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, certsPath) {
-			// We don't care about jwks expiry here.
-			good(w, r)
-			return
-		}
-		if !called {
-			called = true
-			good(w, r)
-		} else {
-			badHandler()(w, r)
-		}
-	}))
+	ts := httptest.NewServer(authtest.GoodOnceAPIKeyHandler(apiKey, t))
 	defer ts.Close()
 
 	v, j := testVerifier(t, ts.URL, VerifierOpts{
@@ -250,6 +121,12 @@ func TestVerifyAPIKeyCacheWithExpiry(t *testing.T) {
 		CacheEvictionInterval: 100 * time.Millisecond,
 		Client:                http.DefaultClient,
 	})
+	now := time.Now()
+	veriferNow := func() time.Time {
+		return now
+	}
+	v.(*verifierImpl).now = veriferNow
+
 	defer j.Stop()
 
 	ctx := authtest.NewContext(ts.URL)
@@ -270,9 +147,16 @@ func TestVerifyAPIKeyCacheWithExpiry(t *testing.T) {
 		}
 	}
 
-	// Wait until the key is expired. This should give us an error since we are
-	// now going to make an HTTP request that will fail.
-	time.Sleep(200 * time.Millisecond)
+	// expire the key
+	now = time.Now().Add(time.Minute)
+
+	// will be cached but expired
+	if _, err := v.Verify(ctx, apiKey); err != nil {
+		t.Errorf("expected no error, got %s", err)
+	}
+
+	// allow fetch to run
+	time.Sleep(100 * time.Millisecond)
 
 	if _, err := v.Verify(ctx, apiKey); err == nil {
 		t.Errorf("expected error result on cleared cache")

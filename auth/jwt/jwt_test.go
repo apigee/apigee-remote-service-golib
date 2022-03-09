@@ -18,16 +18,14 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
-	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
 	"time"
 
-	"github.com/lestrrat-go/jwx/jwa"
-	"github.com/lestrrat-go/jwx/jwk"
-	"github.com/lestrrat-go/jwx/jwt"
+	"github.com/apigee/apigee-remote-service-golib/v2/authtest"
+	"gopkg.in/square/go-jose.v2"
 )
 
 func TestJWTCaching(t *testing.T) {
@@ -40,111 +38,99 @@ func TestJWTCaching(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	jwt, err := generateJWT(privateKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	noExpireJwt, err := generateJWTWithExpiration(privateKey, 0)
+	jwt, err := authtest.GenerateSignedJWT(privateKey, 0, 0, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	called := make(map[string]bool)
 	keyForPath := map[string]http.HandlerFunc{
-		"/hasit":         sendGoodJWKsHandler(privateKey, t),
-		"/doesnothaveit": sendGoodJWKsHandler(wrongPrivateKey, t),
+		"/hasit":         authtest.JWKSHandlerFunc(privateKey, t),
+		"/doesnothaveit": authtest.JWKSHandlerFunc(wrongPrivateKey, t),
+		"/badformat":     authtest.StringHandler("bad"),
+		"/denied":        authtest.DeniedHandler(),
 	}
 
+	// fails after first attempt - thus, if caching fails, the test below fails
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if handler, ok := keyForPath[r.URL.Path]; ok && !called[r.URL.Path] {
 			called[r.URL.Path] = true
 			handler(w, r)
 		} else {
-			send401Handler(w, r)
+			authtest.DeniedHandler()(w, r)
 		}
 	}))
 	defer ts.Close()
 
-	// Refresh time is too small and will be overriden.
-	hasProvider := Provider{JWKSURL: ts.URL + "/hasit", Refresh: 10 * time.Second}
-	missingProvider := Provider{JWKSURL: ts.URL + "/doesnothaveit", Refresh: 10 * time.Second}
+	goodProvider := Provider{JWKSURL: ts.URL + "/hasit", Refresh: -time.Second}
+	goodProvider2 := Provider{JWKSURL: ts.URL + "/hasit"}
+	wrongProvider := Provider{JWKSURL: ts.URL + "/doesnothaveit"}
+	badUrlProvider := Provider{JWKSURL: "badurl"}
+	badFormatProvider := Provider{JWKSURL: ts.URL + "/badformat"}
+	deniedProvider := Provider{JWKSURL: ts.URL + "/denied"}
 	jwtVerifier := NewVerifier(VerifierOptions{
-		Providers: []Provider{missingProvider, hasProvider},
+		Client:    http.DefaultClient,
+		Providers: []Provider{goodProvider, goodProvider2, wrongProvider, badUrlProvider, badFormatProvider, deniedProvider},
 	})
 	jwtVerifier.Start()
+	time.Sleep(10 * time.Millisecond)
 	defer jwtVerifier.Stop()
 
-	// Make sure the missing provider caches its results first.
-	_, err = jwtVerifier.Parse(jwt, missingProvider)
-	if err == nil {
-		t.Errorf("no error found checking %q, expected error", missingProvider.JWKSURL)
-	}
+	for _, test := range []struct {
+		desc           string
+		provider       Provider
+		wantParseError bool
+		wantJwksError  bool
+	}{
+		{"good provider", goodProvider, false, false},
+		{"wrong provider", wrongProvider, true, false},
+		{"bad provider url", badUrlProvider, true, true},
+		{"bad jwks format", badFormatProvider, true, true},
+		{"denied provider", deniedProvider, true, true},
+	} {
+		t.Run("parse "+test.desc, func(t *testing.T) {
 
-	for i := 0; i < 5; i++ {
-		// Do a first request and confirm that things look good.
-		_, err = jwtVerifier.Parse(jwt, hasProvider)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = jwtVerifier.Parse(noExpireJwt, hasProvider)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
+			// check first run & cached run
+			for i := 0; i < 2; i++ {
+				_, err = jwtVerifier.Parse(jwt, test.provider)
+				if test.wantParseError == (err == nil) {
+					t.Errorf("wanted error (%t), got (%t): %v", test.wantParseError, !test.wantParseError, err)
+				}
+			}
+		})
 
-	// Ensure that good results are only cached on the correct provider.
-	_, err = jwtVerifier.Parse(jwt, missingProvider)
-	if err == nil {
-		t.Errorf("no error found checking %q, expected error", missingProvider.JWKSURL)
-	}
-}
+		t.Run("caches "+test.desc, func(t *testing.T) {
 
-func TestEnsureProvidersLoaded(t *testing.T) {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fail := true
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if fail {
-			send401Handler(w, r)
-			return
-		}
-		sendGoodJWKsHandler(privateKey, t)(w, r)
-	}))
-	defer ts.Close()
+			cacheKey := fmt.Sprintf("%s-%s", test.provider.JWKSURL, jwt)
+			v, ok := jwtVerifier.(*verifier).cache.Get(cacheKey)
+			if test.wantParseError == ok {
+				t.Errorf("want cached (%t), got: %v", ok, v)
+			}
 
-	provider := Provider{JWKSURL: ts.URL}
-	jwtVerifier := NewVerifier(VerifierOptions{
-		// Duplicates will be ignored when added.
-		Providers: []Provider{provider, provider},
-	})
-	jwtVerifier.Start()
-	time.Sleep(time.Second)
-	defer jwtVerifier.Stop()
+			v, ok = jwtVerifier.(*verifier).knownBad.Get(cacheKey)
+			if test.wantParseError != ok {
+				t.Errorf("want knownBad (%t), got: %v", ok, v)
+			}
 
-	jwt, err := generateJWT(privateKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = jwtVerifier.EnsureProvidersLoaded(context.Background())
-	if err == nil {
-		t.Errorf("no JWKs available, expected error")
-	}
-	_, err = jwtVerifier.Parse(jwt, provider)
-	if err == nil {
-		t.Errorf("no JWKs available, expected error")
-	}
-
-	fail = false
-	err = jwtVerifier.EnsureProvidersLoaded(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = jwtVerifier.Parse(jwt, provider)
-	if err != nil {
-		t.Errorf("good JWT and JWKs should not get error: %v", err)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			jwks, err := jwtVerifier.(*verifier).jwksManager.Get(ctx, test.provider.JWKSURL)
+			cv, _ := jwtVerifier.(*verifier).jwksManager.cache.Load(test.provider.JWKSURL)
+			switch cv := cv.(type) {
+			case *jose.JSONWebKeySet:
+				if test.wantJwksError {
+					t.Errorf("want error, got: %v", cv)
+				} else if cv != jwks {
+					t.Errorf("want jwks: %v, got: %v", jwks, cv)
+				}
+			case error:
+				if !test.wantJwksError {
+					t.Errorf("want jwks, got: %v", cv)
+				} else if cv != err {
+					t.Errorf("want: %v, got: %v", err, cv)
+				}
+			}
+		})
 	}
 }
 
@@ -153,18 +139,21 @@ func TestGoodAndBadJWT(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts := httptest.NewServer(sendGoodJWKsHandler(privateKey, t))
+	ts := httptest.NewServer(authtest.JWKSHandlerFunc(privateKey, t))
 	defer ts.Close()
 
 	provider := Provider{JWKSURL: ts.URL}
+	noJWKSProvider := Provider{}
 	jwtVerifier := NewVerifier(VerifierOptions{
-		Providers: []Provider{provider},
+		Client:    http.DefaultClient,
+		Providers: []Provider{provider, noJWKSProvider},
 	})
 	jwtVerifier.Start()
 	defer jwtVerifier.Stop()
 
 	// A good JWT request
-	jwt, err := generateJWT(privateKey)
+	var jwt string
+	jwt, err = authtest.GenerateSignedJWT(privateKey, 0, 0, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,8 +162,18 @@ func TestGoodAndBadJWT(t *testing.T) {
 		t.Errorf("good JWT should not get error: %v", err)
 	}
 
-	// expired JWT
-	jwt, err = generateExpiredJWT(privateKey)
+	// expired within acceptable skew
+	jwt, err = authtest.GenerateSignedJWT(privateKey, 0, 0, -time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = jwtVerifier.Parse(jwt, provider)
+	if err != nil {
+		t.Errorf("expired JWT within acceptible skew should not get error, got %v", err)
+	}
+
+	// expired
+	jwt, err = authtest.GenerateSignedJWT(privateKey, 0, 0, -time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,14 +182,44 @@ func TestGoodAndBadJWT(t *testing.T) {
 		t.Errorf("expired JWT should get error")
 	}
 
-	// near future JWT
-	jwt, err = generateFutureJWT(privateKey)
+	// future nbf within acceptable skew
+	jwt, err = authtest.GenerateSignedJWT(privateKey, 0, time.Second, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = jwtVerifier.Parse(jwt, provider)
 	if err != nil {
-		t.Errorf("near future JWT should not get error, got: %s", err)
+		t.Errorf("future JWT within acceptible skew should not get error, got: %v", err)
+	}
+
+	// future nbf
+	jwt, err = authtest.GenerateSignedJWT(privateKey, 0, time.Hour, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = jwtVerifier.Parse(jwt, provider)
+	if err == nil {
+		t.Errorf("future JWT should get error")
+	}
+
+	// future iss within acceptable skew
+	jwt, err = authtest.GenerateSignedJWT(privateKey, time.Second, 0, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = jwtVerifier.Parse(jwt, provider)
+	if err != nil {
+		t.Errorf("future JWT within acceptible skew should not get error, got: %v", err)
+	}
+
+	// future iss
+	jwt, err = authtest.GenerateSignedJWT(privateKey, time.Hour, 0, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = jwtVerifier.Parse(jwt, provider)
+	if err == nil {
+		t.Errorf("future JWT should get error")
 	}
 
 	// wrong key
@@ -198,7 +227,7 @@ func TestGoodAndBadJWT(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jwt, err = generateJWT(wrongKey)
+	jwt, err = authtest.GenerateSignedJWT(wrongKey, 0, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,122 +235,20 @@ func TestGoodAndBadJWT(t *testing.T) {
 	if err == nil {
 		t.Errorf("JWT with wrong key should get error")
 	}
-}
 
-func generateJWT(privateKey *rsa.PrivateKey) (string, error) {
-	return generateJWTWithExpiration(privateKey, time.Now().Add(50*time.Millisecond).Unix())
-}
-
-func generateJWTWithExpiration(privateKey *rsa.PrivateKey, expiresAt int64) (string, error) {
-	key, err := jwk.New(privateKey)
+	// no provider JWKS
+	jwt, err = authtest.GenerateSignedJWT(wrongKey, 0, 0, 0)
 	if err != nil {
-		return "", err
+		t.Fatal(err)
 	}
-	if err := key.Set("kid", "1"); err != nil {
-		return "", err
-	}
-	if err := key.Set("alg", jwa.RS256.String()); err != nil {
-		return "", err
-	}
-
-	token := jwt.New()
-	_ = token.Set(jwt.AudienceKey, "remote-service-client")
-	_ = token.Set(jwt.JwtIDKey, "29e2320b-787c-4625-8599-acc5e05c68d0")
-	_ = token.Set(jwt.IssuerKey, "https://theganyo1-eval-test.apigee.net/remote-service/token")
-	_ = token.Set(jwt.NotBeforeKey, time.Now().Add(-10*time.Minute).Unix())
-	_ = token.Set(jwt.IssuedAtKey, time.Now().Unix())
-	if expiresAt > 0 {
-		_ = token.Set(jwt.ExpirationKey, expiresAt)
-	}
-	_ = token.Set("access_token", "8E7Az3ZgPHKrgzcQA54qAzXT3Z1G")
-	_ = token.Set("client_id", "yBQ5eXZA8rSoipYEi1Rmn0Z8RKtkGI4H")
-	_ = token.Set("application_name", "61cd4d83-06b5-4270-a9ee-cf9255ef45c3")
-	_ = token.Set("scope", "scope1 scope2")
-	_ = token.Set("api_product_list", []string{"TestProduct"})
-	payload, err := jwt.Sign(token, jwa.RS256, key)
-
-	return string(payload), err
-}
-
-func generateExpiredJWT(privateKey *rsa.PrivateKey) (string, error) {
-
-	key, err := jwk.New(privateKey)
+	_, err = jwtVerifier.Parse(jwt, noJWKSProvider)
 	if err != nil {
-		return "", err
-	}
-	if err := key.Set("kid", "1"); err != nil {
-		return "", err
-	}
-	if err := key.Set("alg", jwa.RS256.String()); err != nil {
-		return "", err
+		t.Errorf("provider without JWKS should not error, got: %v", err)
 	}
 
-	token := jwt.New()
-	_ = token.Set(jwt.JwtIDKey, "29e2320b-787c-4625-8599-acc5e05c68d0")
-	_ = token.Set(jwt.IssuerKey, "https://theganyo1-eval-test.apigee.net/remote-service/token")
-	_ = token.Set(jwt.NotBeforeKey, (time.Now().Add(-10 * time.Minute)).Unix())
-	_ = token.Set(jwt.IssuedAtKey, (time.Now().Add(-10 * time.Minute)).Unix())
-	_ = token.Set(jwt.ExpirationKey, (time.Now().Add(-2 * time.Minute)).Unix())
-	payload, err := jwt.Sign(token, jwa.RS256, key)
-
-	return string(payload), err
-}
-
-func generateFutureJWT(privateKey *rsa.PrivateKey) (string, error) {
-
-	key, err := jwk.New(privateKey)
-	if err != nil {
-		return "", err
+	// bad JWT format
+	_, err = jwtVerifier.Parse("jwt", noJWKSProvider)
+	if err == nil {
+		t.Errorf("bad JWT format should get error")
 	}
-	if err := key.Set("kid", "1"); err != nil {
-		return "", err
-	}
-	if err := key.Set("alg", jwa.RS256.String()); err != nil {
-		return "", err
-	}
-
-	token := jwt.New()
-	_ = token.Set(jwt.JwtIDKey, "29e2320b-787c-4625-8599-acc5e05c68d0")
-	_ = token.Set(jwt.IssuerKey, "https://theganyo1-eval-test.apigee.net/remote-service/token")
-	_ = token.Set(jwt.NotBeforeKey, (time.Now().Add(5 * time.Second)).Unix())
-	_ = token.Set(jwt.IssuedAtKey, (time.Now().Add(5 * time.Second)).Unix())
-	_ = token.Set(jwt.ExpirationKey, (time.Now().Add(2 * time.Second)).Unix())
-	payload, err := jwt.Sign(token, jwa.RS256, key)
-
-	return string(payload), err
-}
-
-func sendGoodJWKsHandler(privateKey *rsa.PrivateKey, t *testing.T) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		key, err := jwk.New(&privateKey.PublicKey)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := key.Set("kid", "1"); err != nil {
-			t.Fatal(err)
-		}
-		if err := key.Set("alg", jwa.RS256.String()); err != nil {
-			t.Fatal(err)
-		}
-
-		type JWKS struct {
-			Keys []jwk.Key `json:"keys"`
-		}
-
-		jwks := JWKS{
-			Keys: []jwk.Key{
-				key,
-			},
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(jwks); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
-func send401Handler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
 }

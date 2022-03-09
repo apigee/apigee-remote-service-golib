@@ -24,14 +24,12 @@ package jwt
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/cache"
-	"github.com/apigee/apigee-remote-service-golib/v2/log"
-	"github.com/lestrrat-go/backoff/v2"
-	"github.com/lestrrat-go/jwx/jwk"
-	"github.com/lestrrat-go/jwx/jwt"
 	"github.com/pkg/errors"
+	"gopkg.in/square/go-jose.v2/jwt"
 )
 
 const (
@@ -41,6 +39,12 @@ const (
 	defaultMaxCachedEntries      = 10000
 	defaultBadEntryCacheTTL      = 10 * time.Second
 	minAllowedRefreshInterval    = 10 * time.Minute
+)
+
+var (
+	ErrExp = errors.New("token is expired per exp claim")
+	ErrNbf = errors.New("token is not valid yet per nbf claim")
+	ErrIat = errors.New("token used before issued per iat claim")
 )
 
 // NewVerifier creates a Verifier. Call Start() after creation.
@@ -54,24 +58,21 @@ func NewVerifier(opts VerifierOptions) Verifier {
 	if opts.MaxCachedEntries == 0 {
 		opts.MaxCachedEntries = defaultMaxCachedEntries
 	}
+
 	return &verifier{
-		providers: opts.Providers,
-		cache:     cache.NewLRU(opts.CacheTTL, opts.CacheEvictionInterval, int32(opts.MaxCachedEntries)),
-		knownBad:  cache.NewLRU(defaultBadEntryCacheTTL, opts.CacheEvictionInterval, 100),
+		jwksManager: &jwksManager{
+			providers: opts.Providers,
+			client:    opts.Client,
+		},
+		cache:    cache.NewLRU(opts.CacheTTL, opts.CacheEvictionInterval, int32(opts.MaxCachedEntries)),
+		knownBad: cache.NewLRU(defaultBadEntryCacheTTL, opts.CacheEvictionInterval, 100),
 	}
 }
 
 type Verifier interface {
 	Start()
 	Stop()
-	AddProvider(provider Provider)
-	EnsureProvidersLoaded(ctx context.Context) error
 	Parse(raw string, provider Provider) (map[string]interface{}, error)
-}
-
-type Provider struct {
-	JWKSURL string
-	Refresh time.Duration
 }
 
 type VerifierOptions struct {
@@ -79,145 +80,108 @@ type VerifierOptions struct {
 	CacheTTL              time.Duration
 	CacheEvictionInterval time.Duration
 	MaxCachedEntries      int
+	Client                *http.Client
+}
+
+type Provider struct {
+	JWKSURL string
+	Refresh time.Duration
 }
 
 // An verifier handles all of the various JWT authentication functionality.
 type verifier struct {
-	jwks          *jwk.AutoRefresh
 	cancelContext context.Context
 	cancelFunc    context.CancelFunc
-	providers     []Provider
-	cache         cache.ExpiringCache
-	knownBad      cache.ExpiringCache
+	cache         cache.ExpiringCache // key -> JWT
+	knownBad      cache.ExpiringCache // key -> error
+	jwksManager   *jwksManager
 }
 
 // Start begins JWKS polling. Call Stop() when done.
-func (a *verifier) Start() {
-	a.cancelContext, a.cancelFunc = context.WithCancel(context.Background())
-	a.jwks = jwk.NewAutoRefresh(a.cancelContext)
-
-	// initialize JWKs
-	providers := a.providers
-	a.providers = []Provider{}
-	for _, p := range providers {
-		a.AddProvider(p)
-	}
-
-	ch := make(chan jwk.AutoRefreshError)
-	a.jwks.ErrorSink(ch)
-
-	go func() {
-		for {
-			select {
-			case <-a.cancelContext.Done():
-				close(ch)
-				return
-			case fetchError := <-ch:
-				log.Errorf("fetching jwks from %s error: %v", fetchError.URL, fetchError.Error)
-			}
-		}
-	}()
-}
-
-// EnsureProvidersLoaded ensures all JWKs certs have been retrieved for the first time.
-func (a *verifier) EnsureProvidersLoaded(ctx context.Context) error {
-	for i := range a.providers {
-		p := a.providers[i]
-		if _, err := a.jwks.Refresh(ctx, p.JWKSURL); err != nil {
-			return err
-		}
-	}
-	return nil
+func (v *verifier) Start() {
+	v.cancelContext, v.cancelFunc = context.WithCancel(context.Background())
+	v.jwksManager.Start(v.cancelContext)
 }
 
 // Stop all background tasks.
-func (a *verifier) Stop() {
-	if a != nil && a.cancelFunc != nil {
-		a.cancelFunc()
+func (v *verifier) Stop() {
+	if v != nil && v.cancelFunc != nil {
+		v.cancelFunc()
 	}
 }
 
-// AddProvider adds a JWKs provider
-func (a *verifier) AddProvider(provider Provider) {
-	// JWKs url could be shared amongst providers, find min refresh
-	jwksConfigured := false
-	minRefresh := provider.Refresh
-	for _, p := range a.providers {
-		if p.JWKSURL == provider.JWKSURL {
-			jwksConfigured = true
-			if p.Refresh > 0 && p.Refresh < minRefresh {
-				minRefresh = p.Refresh
-			}
-		}
-	}
-	a.providers = append(a.providers, provider)
-
-	if !jwksConfigured || minRefresh != provider.Refresh {
-		options := []jwk.AutoRefreshOption{
-			jwk.WithFetchBackoff(backoff.Exponential()),
-		}
-		if minRefresh > 0 {
-			if minRefresh < minAllowedRefreshInterval {
-				minRefresh = minAllowedRefreshInterval
-			}
-			options = append(options, jwk.WithMinRefreshInterval(minRefresh))
-		}
-		a.jwks.Configure(provider.JWKSURL, options...)
-	}
-}
-
-func (a *verifier) fetchJWKs(provider Provider) (jwk.Set, error) {
-	if provider.JWKSURL != "" {
-		return a.jwks.Fetch(a.cancelContext, provider.JWKSURL)
-	}
-	return nil, nil
-}
-
-// Parse and verify a JWT
-// if provider has no JWKSURL, the cert will not be verified
-func (a *verifier) Parse(raw string, provider Provider) (map[string]interface{}, error) {
+// Parse and verify a JWT against a provider's certificates.
+// If provider has no JWKSURL, there will be no cert verification.
+// Time claims (nbf, exp, iat) are verified against now +/- acceptableSkew and an inappropriate
+// value will result in an error, other claims are not checked.
+func (v *verifier) Parse(raw string, provider Provider) (map[string]interface{}, error) {
 	cacheKey := fmt.Sprintf("%s-%s", provider.JWKSURL, raw)
-	if cached, ok := a.knownBad.Get(cacheKey); ok {
+	if cached, ok := v.knownBad.Get(cacheKey); ok {
 		return nil, cached.(error)
 	}
 
-	if cached, ok := a.cache.Get(cacheKey); ok {
+	if cached, ok := v.cache.Get(cacheKey); ok {
 		return cached.(map[string]interface{}), nil
 	}
 
-	cacheKnownBad := func(err error) (map[string]interface{}, error) {
-		a.knownBad.Set(cacheKey, err)
-		return nil, err
-	}
-
-	parseOptions := []jwt.ParseOption{jwt.WithAcceptableSkew(acceptableSkew), jwt.WithValidate(true)}
-
-	if provider.JWKSURL != "" {
-		set, err := a.fetchJWKs(provider)
-		if err != nil {
-			return nil, err
-		}
-		if set != nil {
-			parseOptions = append(parseOptions, jwt.WithKeySet(set))
-		}
-	}
-
-	token, err := jwt.Parse([]byte(raw), parseOptions...)
+	tok, err := jwt.ParseSigned(raw)
 	if err != nil {
-		return cacheKnownBad(errors.Wrap(err, "jwt.Parse"))
+		return v.cacheKnownBad(cacheKey, errors.Wrap(err, "jwt.Parse"))
 	}
 
-	claims, err := token.AsMap(a.cancelContext)
+	registeredClaims, claimsMap, err := v.claims(provider, tok)
 	if err != nil {
-		return cacheKnownBad(errors.Wrap(err, "failed to parse claims"))
+		return v.cacheKnownBad(cacheKey, errors.Wrap(err, "jwt.Parse"))
 	}
 
-	exp := token.Expiration()
-	if exp.After(time.Now()) {
-		a.cache.SetWithExpiration(cacheKey, claims, time.Until(exp))
-	} else if exp.IsZero() {
-		a.cache.Set(cacheKey, claims)
+	now := time.Now()
+	err = registeredClaims.ValidateWithLeeway(jwt.Expected{}.WithTime(now), acceptableSkew)
+	switch err {
+	case jwt.ErrExpired:
+		err = ErrExp
+	case jwt.ErrNotValidYet:
+		err = ErrNbf
+	case jwt.ErrIssuedInTheFuture:
+		err = ErrIat
+	case nil:
+		// ok
+	default:
+		err = fmt.Errorf("unexpected err: %s", err)
+	}
+	if err != nil {
+		return v.cacheKnownBad(cacheKey, errors.Wrap(err, "jwt.Parse"))
 	}
 
-	return claims, nil
+	ttl := registeredClaims.Expiry.Time().Add(acceptableSkew).Sub(now)
+	if ttl > 0 {
+		v.cache.SetWithExpiration(cacheKey, claimsMap, ttl)
+	} else {
+		v.cache.Set(cacheKey, claimsMap)
+	}
+
+	return claimsMap, nil
+}
+
+// put an error in the known bad cache
+func (v *verifier) cacheKnownBad(cacheKey string, err error) (map[string]interface{}, error) {
+	v.knownBad.Set(cacheKey, err)
+	return nil, err
+}
+
+// return the claims for a provider
+func (v *verifier) claims(provider Provider, tok *jwt.JSONWebToken) (*jwt.Claims, map[string]interface{}, error) {
+	var claims1 jwt.Claims
+	var claims map[string]interface{}
+	if provider.JWKSURL == "" {
+		err := tok.UnsafeClaimsWithoutVerification(&claims)
+		return &claims1, claims, err
+	}
+
+	ks, err := v.jwksManager.Get(v.cancelContext, provider.JWKSURL)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	err = tok.Claims(ks, &claims1, &claims)
+	return &claims1, claims, err
 }

@@ -18,21 +18,12 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/lestrrat-go/jwx/jwt"
 )
 
 func TestSetClaims(t *testing.T) {
 	c := Context{}
-	now := time.Unix(time.Now().Unix(), 0)
 	claims := map[string]interface{}{
-		jwt.AudienceKey:    "aud",
-		jwt.ExpirationKey:  float64(now.Unix()),
-		apiProductListKey:  time.Now(),
-		clientIDKey:        nil,
 		applicationNameKey: "app",
-		scopeKey:           nil,
 		developerEmailKey:  "email",
 	}
 	if err := c.setClaims(claims); err == nil {
