@@ -145,14 +145,6 @@ func (v *verifier) Parse(raw string, provider Provider) (map[string]interface{},
 		err = ErrIat
 	case nil:
 		// ok
-	case jwt.ErrInvalidIssuer:
-		err = fmt.Errorf("unexpected err: %s", err)
-	case jwt.ErrInvalidSubject:
-		err = fmt.Errorf("unexpected err: %s", err)
-	case jwt.ErrInvalidID:
-		err = fmt.Errorf("unexpected err: %s", err)
-	case jwt.ErrInvalidAudience:
-		err = fmt.Errorf("unexpected err: %s", err)
 	default:
 		err = fmt.Errorf("unexpected err: %s", err)
 	}
