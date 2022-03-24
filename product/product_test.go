@@ -456,7 +456,7 @@ func TestAuthorizeOperations(t *testing.T) {
 			path:        "/operation1",
 			method:      "GET",
 			wantAPIsLen: 1,
-			wantAPIID:   "Name 1-prod-app-host-7c5532d6fca7a87312365219212de443",
+			wantAPIID:   "Name 1-prod-app-host-44e69ea2e336e56f96ec4d8712417aa3705b0aa6f5bd43d177370c43343c15ea",
 			wantQuota:   productsMap["Name 1"].OperationGroup.OperationConfigs[0].Quota,
 			wantHints: `Authorizing request:
 			environment: prod
@@ -723,7 +723,7 @@ func TestParseJSONWithOperations(t *testing.T) {
 	if len(oc.Operations) != 4 {
 		t.Fatalf("want 1 Operation")
 	}
-	if want := "quota-demo-98c34c322202a4f9e01aea733326a129"; oc.ID != want {
+	if want := "quota-demo-642201bfd9e8e098f70bd4cdc10cfaff8bc317576bde57fc23511618c4d7195f"; oc.ID != want {
 		t.Errorf("want OperationConfig.ID: '%s', got '%s'", want, oc.ID)
 	}
 	var op Operation
