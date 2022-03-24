@@ -15,7 +15,7 @@
 package product
 
 import (
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -111,7 +111,7 @@ func (oc *OperationConfig) UnmarshalJSON(data []byte) error {
 		return oc.Operations[i].Resource < oc.Operations[j].Resource
 	})
 
-	oc.ID = fmt.Sprintf("%s-%x", oc.APISource, md5hash(oc.Operations))
+	oc.ID = fmt.Sprintf("%s-%x", oc.APISource, hash(oc.Operations))
 
 	return nil
 }
@@ -391,11 +391,11 @@ func makeChildPath(resource string) []string {
 	return strings.Split(resource, "/")
 }
 
-// md5hash returns a md5 signature based on oc.APISource and oc.Operations
-func md5hash(os []Operation) [16]byte {
+// hash returns a hash signature based on oc.APISource and oc.Operations
+func hash(os []Operation) [32]byte {
 	data, err := json.Marshal(os)
-	if err != nil { // this causes md5.Sum(nil) to be returned
+	if err != nil { // this causes sum of nil to be returned
 		log.Errorf("unable to marshal operations, %#v", os)
 	}
-	return md5.Sum(data)
+	return sha256.Sum256(data)
 }
