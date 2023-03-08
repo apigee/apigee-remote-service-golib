@@ -40,10 +40,13 @@ type Manager interface {
 var ErrNoAuth = errors.New("missing authentication")
 
 // ErrBadAuth is an error because of incorrect auth
-var ErrBadAuth = errors.New("permission denied")
+var ErrBadAuth = key.ErrBadAuth
 
 // ErrInternalError is an error because of internal error
 var ErrInternalError = errors.New("internal error")
+
+// ErrMissingProductListClaim is an error when missing api_product_list claim
+var ErrMissingProductListClaim = errors.New("api_product_list claim is required")
 
 // NewManager constructs a new Manager for JWT functions.
 // Call Close() when done.
