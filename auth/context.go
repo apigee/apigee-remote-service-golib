@@ -31,20 +31,22 @@ const (
 	scopeKey           = "scope"
 	developerEmailKey  = "developer_email"
 	accessTokenKey     = "access_token"
+	customAttributeKey = "custom_attributes"
 )
 
 // A Context wraps all the various information that is needed to make requests
 // through the Apigee adapter.
 type Context struct {
 	context.Context
-	ClientID       string
-	AccessToken    string
-	Application    string
-	APIProducts    []string
-	Expires        time.Time
-	DeveloperEmail string
-	Scopes         []string
-	APIKey         string
+	ClientID         string
+	AccessToken      string
+	Application      string
+	APIProducts      []string
+	Expires          time.Time
+	DeveloperEmail   string
+	Scopes           []string
+	APIKey           string
+	CustomAttributes string
 }
 
 // if claims can't be processed, returns error and sets no fields
@@ -72,6 +74,11 @@ func (a *Context) setClaims(claims map[string]interface{}) error {
 	if _, ok := claims[applicationNameKey].(string); !ok {
 		return fmt.Errorf("unable to interpret %s: %v", applicationNameKey, claims[applicationNameKey])
 	}
+	var customattributes string
+	if customattributes, ok = claims[customAttributeKey].(string); !ok && claims[customAttributeKey] != nil { // nil is ok for backward compatibility
+		return fmt.Errorf("unable to interpret %s: %v", customAttributeKey, claims[customAttributeKey])
+	}
+
 	a.ClientID = claims[clientIDKey].(string)
 	a.Application = claims[applicationNameKey].(string)
 	a.APIProducts = products
@@ -79,6 +86,7 @@ func (a *Context) setClaims(claims map[string]interface{}) error {
 	a.Expires, _ = claims[developerEmailKey].(time.Time)
 	a.DeveloperEmail, _ = claims[developerEmailKey].(string)
 	a.AccessToken, _ = claims[accessTokenKey].(string)
+	a.CustomAttributes = customattributes
 
 	return nil
 }
