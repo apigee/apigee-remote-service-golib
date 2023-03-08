@@ -51,7 +51,7 @@ type Context struct {
 // claims map must not be written to: treat as const
 func (a *Context) setClaims(claims map[string]interface{}) error {
 	if claims[apiProductListKey] == nil {
-		return fmt.Errorf("api_product_list claim is required")
+		return ErrMissingProductListClaim
 	}
 
 	products, err := parseArrayOfStrings(claims[apiProductListKey])

@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/apigee/apigee-remote-service-golib/v2/auth/jwt"
+	"github.com/apigee/apigee-remote-service-golib/v2/auth/key"
 	"github.com/apigee/apigee-remote-service-golib/v2/authtest"
 	"github.com/apigee/apigee-remote-service-golib/v2/context"
 	"github.com/apigee/apigee-remote-service-golib/v2/log"
@@ -67,33 +68,33 @@ func TestAuthenticate(t *testing.T) {
 	goodAPIKey := "good"
 	badAPIKey := "bad"
 	errAPIKey := "error"
-	missingProductListError := "api_product_list claim is required"
 
 	for _, test := range []struct {
 		desc           string
 		apiKey         string
 		apiKeyClaimKey string
 		claims         map[string]interface{}
-		wantError      string
+		wantError      error
 	}{
-		{"with valid JWT", "", "", testJWTClaims, ""},
-		{"with invalid JWT", "", "", map[string]interface{}{"exp": "1"}, missingProductListError},
-		{"with valid API key", goodAPIKey, "", nil, ""},
-		{"with invalid API key", badAPIKey, "", nil, ErrBadAuth.Error()},
+		{"with valid JWT", "", "", testJWTClaims, nil},
+		{"with invalid JWT", "", "", map[string]interface{}{"exp": "1"}, ErrMissingProductListClaim},
+		{"with valid API key", goodAPIKey, "", nil, nil},
+		{"with empty API key", "", "", nil, ErrNoAuth},
+		{"with invalid API key", badAPIKey, "", nil, ErrBadAuth},
 		{"with valid claims API key", "", "goodkey", map[string]interface{}{
 			"exp":              "1",
 			"api_product_list": "[]",
 			"goodkey":          goodAPIKey,
-		}, ""},
+		}, nil},
 		{"with invalid claims API key", "", "badkey", map[string]interface{}{
 			"exp":     "1",
 			"somekey": goodAPIKey,
 			"badkey":  badAPIKey,
-		}, ErrBadAuth.Error()},
+		}, ErrBadAuth},
 		{"with missing claims API key", "", "missingkey", map[string]interface{}{
 			"exp": "1",
-		}, missingProductListError},
-		{"error verifying API key", errAPIKey, "", nil, ErrInternalError.Error()},
+		}, ErrMissingProductListClaim},
+		{"error verifying API key", errAPIKey, "", nil, ErrInternalError},
 	} {
 		t.Log(test.desc)
 
@@ -101,7 +102,7 @@ func TestAuthenticate(t *testing.T) {
 		tv := &testVerifier{
 			keyErrors: map[string]error{
 				goodAPIKey: nil,
-				badAPIKey:  ErrBadAuth,
+				badAPIKey:  key.ErrBadAuth,
 				errAPIKey:  ErrInternalError,
 			},
 		}
@@ -115,10 +116,10 @@ func TestAuthenticate(t *testing.T) {
 		ctx := authtest.NewContext("")
 		_, err := authMan.Authenticate(ctx, test.apiKey, test.claims, test.apiKeyClaimKey)
 		if err != nil {
-			if test.wantError != err.Error() {
-				t.Errorf("wanted error: %s, got: %s", test.wantError, err.Error())
+			if test.wantError != err {
+				t.Errorf("wanted error: %s, got: %s", test.wantError, err)
 			}
-		} else if test.wantError != "" {
+		} else if test.wantError != nil {
 			t.Errorf("wanted error, got none")
 		}
 	}
