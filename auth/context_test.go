@@ -34,6 +34,7 @@ func TestSetClaims(t *testing.T) {
 		applicationNameKey: "app",
 		scopeKey:           nil,
 		developerEmailKey:  "email",
+		customAttributeKey: "{\"tier\":\"standard\"}",
 	}
 	if err := c.setClaims(claims); err == nil {
 		t.Errorf("setClaims without client_id should get error")
@@ -77,6 +78,10 @@ func TestSetClaims(t *testing.T) {
 	claims[applicationNameKey] = 12
 	if err := c.setClaims(claims); err == nil {
 		t.Errorf("bad applicationName should error")
+	}
+	claims[customAttributeKey] = 12
+	if err := c.setClaims(claims); err == nil {
+		t.Errorf("bad custom attributes should error")
 	}
 }
 
