@@ -142,7 +142,8 @@ func (m *manager) Authenticate(ctx context.Context, apiKey string,
 	}
 
 	var internalError error
-	if authenticationError != nil && authenticationError != ErrBadAuth {
+
+	if authenticationError != nil && ErrBadAuth.Error() != authenticationError.Error() {
 		internalError = authenticationError
 		authenticationError = ErrInternalError
 	}
