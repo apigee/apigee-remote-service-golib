@@ -313,15 +313,15 @@ func (p *APIProduct) authorize(authContext *auth.Context, api, path, method stri
 			var valid bool
 			valid, hint = oc.isValidOperation(api, path, method, hints)
 			if valid {
-				// api is already defined outside this block as a string so ao is used here to avoid confusion
 				ao := AuthorizedOperation{
-					ID:            fmt.Sprintf("%s-%s-%s-%s", p.Name, env, authContext.Application, oc.ID),
+					ID:            fmt.Sprintf("%s-%s-%s-%s", p.Name, env, authContext.Application, oc.APISource),
 					QuotaLimit:    p.QuotaLimitInt,
 					QuotaInterval: p.QuotaIntervalInt,
 					QuotaTimeUnit: p.QuotaTimeUnit,
 				}
 				// OperationConfig quota is an override
 				if oc.Quota != nil && oc.Quota.LimitInt > 0 {
+					ao.ID = fmt.Sprintf("%s-%s-%s-%s", p.Name, env, authContext.Application, oc.ID)
 					ao.QuotaLimit = oc.Quota.LimitInt
 					ao.QuotaInterval = oc.Quota.IntervalInt
 					ao.QuotaTimeUnit = oc.Quota.TimeUnit
