@@ -80,6 +80,7 @@ func TestAuthorize(t *testing.T) {
 	}
 
 	testCases := []struct {
+		name        string
 		ctx         *auth.Context
 		productsMap map[string]*APIProduct
 		api         string
@@ -89,12 +90,14 @@ func TestAuthorize(t *testing.T) {
 		wantHints   string
 		wantAuthOp  *AuthorizedOperation
 	}{
-		{ // good
+		{
+			name: "good",
 			ctx: &auth.Context{
-				Context:     &fakeContext{org: "org", env: "prod"},
-				APIProducts: []string{"Name 1", "Name 2", "Name 3", "Invalid"},
-				Scopes:      []string{"scope1", "scope2"},
-				Application: "app",
+				Context:        &fakeContext{org: "org", env: "prod"},
+				APIProducts:    []string{"Name 1", "Name 2", "Name 3", "Invalid"},
+				Scopes:         []string{"scope1", "scope2"},
+				DeveloperEmail: "foo@google.com",
+				Application:    "app",
 			},
 			productsMap: productsMap,
 			api:         "shared.test",
@@ -117,12 +120,14 @@ func TestAuthorize(t *testing.T) {
 				not found
 				`,
 		},
-		{ // specific path
+		{
+			name: "specific path",
 			ctx: &auth.Context{
-				Context:     &fakeContext{org: "org", env: "prod"},
-				APIProducts: []string{"Name 1", "Name 2", "Name 3", "Invalid"},
-				Scopes:      []string{"scope1", "scope2"},
-				Application: "app",
+				Context:        &fakeContext{org: "org", env: "prod"},
+				APIProducts:    []string{"Name 1", "Name 2", "Name 3", "Invalid"},
+				Scopes:         []string{"scope1", "scope2"},
+				DeveloperEmail: "foo@google.com",
+				Application:    "app",
 			},
 			productsMap: productsMap,
 			api:         "shared.test",
@@ -145,12 +150,14 @@ func TestAuthorize(t *testing.T) {
 				not found
 				`,
 		},
-		{ // bad api
+		{
+			name: "bad api",
 			ctx: &auth.Context{
-				Context:     &fakeContext{org: "org", env: "prod"},
-				APIProducts: []string{"Name 1", "Name 2", "Name 3", "Invalid"},
-				Scopes:      []string{"scope1", "scope2"},
-				Application: "app",
+				Context:        &fakeContext{org: "org", env: "prod"},
+				APIProducts:    []string{"Name 1", "Name 2", "Name 3", "Invalid"},
+				Scopes:         []string{"scope1", "scope2"},
+				DeveloperEmail: "foo@google.com",
+				Application:    "app",
 			},
 			productsMap: productsMap,
 			api:         "api",
@@ -173,12 +180,13 @@ func TestAuthorize(t *testing.T) {
 				not found
 				`,
 		},
-		{ // specific scope
+		{name: "specific scope",
 			ctx: &auth.Context{
-				Context:     &fakeContext{org: "org", env: "prod"},
-				APIProducts: []string{"Name 1", "Name 2", "Name 3", "Invalid"},
-				Scopes:      []string{"scope2"},
-				Application: "app",
+				Context:        &fakeContext{org: "org", env: "prod"},
+				APIProducts:    []string{"Name 1", "Name 2", "Name 3", "Invalid"},
+				Scopes:         []string{"scope2"},
+				DeveloperEmail: "foo@google.com",
+				Application:    "app",
 			},
 			productsMap: productsMap,
 			api:         "shared.test",
@@ -186,7 +194,7 @@ func TestAuthorize(t *testing.T) {
 			method:      "GET",
 			wantAPIsLen: 2,
 			wantAuthOp: &AuthorizedOperation{
-				ID:         "Name 2-prod-app",
+				ID:         "Name 2-prod-foo@google.com-app",
 				QuotaLimit: productsMap["Name 2"].QuotaLimitInt,
 			},
 			wantHints: `Authorizing request:
@@ -205,12 +213,14 @@ func TestAuthorize(t *testing.T) {
 				not found
 				`,
 		},
-		{ // specifc product
+		{
+			name: "specific product",
 			ctx: &auth.Context{
-				Context:     &fakeContext{org: "org", env: "prod"},
-				APIProducts: []string{"Name 1"},
-				Scopes:      []string{"scope2"},
-				Application: "app",
+				Context:        &fakeContext{org: "org", env: "prod"},
+				APIProducts:    []string{"Name 1"},
+				Scopes:         []string{"scope2"},
+				DeveloperEmail: "foo@google.com",
+				Application:    "app",
 			},
 			productsMap: productsMap,
 			api:         "shared.test",
@@ -227,13 +237,15 @@ func TestAuthorize(t *testing.T) {
 				incorrect scopes: [scope1]
 			`,
 		},
-		{ // API key - no scopes required!
+		{
+			name: "API key post - no scopes required!",
 			ctx: &auth.Context{
-				Context:     &fakeContext{org: "org", env: "prod"},
-				APIProducts: []string{"Name 1", "Name 2", "Name 3"},
-				Scopes:      []string{},
-				Application: "app",
-				APIKey:      "x",
+				Context:        &fakeContext{org: "org", env: "prod"},
+				APIProducts:    []string{"Name 1", "Name 2", "Name 3"},
+				Scopes:         []string{},
+				DeveloperEmail: "foo@google.com",
+				Application:    "app",
+				APIKey:         "x",
 			},
 			productsMap: productsMap,
 			api:         "shared.test",
@@ -241,7 +253,7 @@ func TestAuthorize(t *testing.T) {
 			method:      "GET",
 			wantAPIsLen: 3,
 			wantAuthOp: &AuthorizedOperation{
-				ID:         "Name 1-prod-app",
+				ID:         "Name 1-prod-foo@google.com-app",
 				QuotaLimit: productsMap["Name 1"].QuotaLimitInt,
 			},
 			wantHints: `Authorizing request:
@@ -258,13 +270,15 @@ func TestAuthorize(t *testing.T) {
 					authorized
 				`,
 		},
-		{ // API key - no scopes required!
+		{
+			name: "API key get - no scopes required!",
 			ctx: &auth.Context{
-				Context:     &fakeContext{org: "org", env: "prod"},
-				APIProducts: []string{"Name 1", "Name 2", "Name 3"},
-				Scopes:      []string{},
-				Application: "app",
-				APIKey:      "x",
+				Context:        &fakeContext{org: "org", env: "prod"},
+				APIProducts:    []string{"Name 1", "Name 2", "Name 3"},
+				Scopes:         []string{},
+				DeveloperEmail: "foo@google.com",
+				Application:    "app",
+				APIKey:         "x",
 			},
 			productsMap: productsMap,
 			api:         "shared.test",
@@ -285,13 +299,15 @@ func TestAuthorize(t *testing.T) {
 					authorized
 				`,
 		},
-		{ // invalid environment
+		{
+			name: "invalid environment",
 			ctx: &auth.Context{
-				Context:     &fakeContext{org: "org", env: "test"},
-				APIProducts: []string{"Name 1", "Name 2", "Name 3"},
-				Scopes:      []string{},
-				Application: "app",
-				APIKey:      "x",
+				Context:        &fakeContext{org: "org", env: "test"},
+				APIProducts:    []string{"Name 1", "Name 2", "Name 3"},
+				Scopes:         []string{},
+				DeveloperEmail: "foo@google.com",
+				Application:    "app",
+				APIKey:         "x",
 			},
 			productsMap: productsMap,
 			api:         "shared.test",
@@ -314,19 +330,21 @@ func TestAuthorize(t *testing.T) {
 		},
 	}
 
-	for i, tc := range testCases {
-		apis, hints := authorize(tc.ctx, tc.productsMap, tc.api, tc.path, tc.method, true)
-		if len(apis) != tc.wantAPIsLen {
-			t.Errorf("test %d: number of apis wrong; want: %d, got: %d", i, tc.wantAPIsLen, len(apis))
-		} else if tc.wantAuthOp != nil {
-			got := apis[0]
-			if !reflect.DeepEqual(*tc.wantAuthOp, got) {
-				t.Errorf("test %d: \nwant: %v\n got: %v", i, tc.wantAuthOp, got)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			apis, hints := authorize(tc.ctx, tc.productsMap, tc.api, tc.path, tc.method, true)
+			if len(apis) != tc.wantAPIsLen {
+				t.Errorf("want api len: %d, got: %d", tc.wantAPIsLen, len(apis))
+			} else if tc.wantAuthOp != nil {
+				got := apis[0]
+				if !reflect.DeepEqual(*tc.wantAuthOp, got) {
+					t.Errorf("want AuthOp: %v\n got: %v", tc.wantAuthOp, got)
+				}
 			}
-		}
-		if noSymbols(tc.wantHints) != noSymbols(hints) {
-			t.Errorf("test %d: want: '%s', got: '%s'", i, tc.wantHints, hints)
-		}
+			if noSymbols(tc.wantHints) != noSymbols(hints) {
+				t.Errorf("want hints: '%s', got: '%s'", tc.wantHints, hints)
+			}
+		})
 	}
 }
 
@@ -443,17 +461,18 @@ func TestAuthorizeOperations(t *testing.T) {
 		{
 			name: "good",
 			ctx: &auth.Context{
-				Context:     &fakeContext{org: "org", env: "prod"},
-				APIProducts: []string{"Name 1", "Name 2", "Invalid"},
-				Scopes:      []string{"scope1", "scope2"},
-				Application: "app",
+				Context:        &fakeContext{org: "org", env: "prod"},
+				APIProducts:    []string{"Name 1", "Name 2", "Invalid"},
+				Scopes:         []string{"scope1", "scope2"},
+				DeveloperEmail: "foo@google.com",
+				Application:    "app",
 			},
 			productsMap: productsMap,
 			api:         "host",
 			path:        "/operation1",
 			method:      "GET",
 			wantAPIsLen: 1,
-			wantAPIID:   "Name 1-prod-app",
+			wantAPIID:   "Name 1-prod-foo@google.com-app",
 			wantQuota:   productQuota,
 			wantHints: `Authorizing request:
 			environment: prod
@@ -476,17 +495,18 @@ func TestAuthorizeOperations(t *testing.T) {
 		{
 			name: "quota override",
 			ctx: &auth.Context{
-				Context:     &fakeContext{org: "org", env: "prod"},
-				APIProducts: []string{"Name 1", "Name 2", "Invalid"},
-				Scopes:      []string{"scope1", "scope2"},
-				Application: "app",
+				Context:        &fakeContext{org: "org", env: "prod"},
+				APIProducts:    []string{"Name 1", "Name 2", "Invalid"},
+				Scopes:         []string{"scope1", "scope2"},
+				DeveloperEmail: "foo@google.com",
+				Application:    "app",
 			},
 			productsMap: productsMap,
 			api:         "host",
 			path:        "/operation2",
 			method:      "GET",
 			wantAPIsLen: 1,
-			wantAPIID:   "Name 2-prod-app-host-547dbfc99f0432d3dbc607784917b1bc",
+			wantAPIID:   "Name 2-prod-foo@google.com-app-host-547dbfc99f0432d3dbc607784917b1bc",
 			wantQuota:   productsMap["Name 2"].OperationGroup.OperationConfigs[0].Quota,
 			wantHints: `Authorizing request:
 			environment: prod
@@ -509,10 +529,11 @@ func TestAuthorizeOperations(t *testing.T) {
 		{
 			name: "no method",
 			ctx: &auth.Context{
-				Context:     &fakeContext{org: "org", env: "prod"},
-				APIProducts: []string{"Name 1", "Name 2", "Invalid"},
-				Scopes:      []string{"scope1", "scope2"},
-				Application: "app",
+				Context:        &fakeContext{org: "org", env: "prod"},
+				APIProducts:    []string{"Name 1", "Name 2", "Invalid"},
+				Scopes:         []string{"scope1", "scope2"},
+				DeveloperEmail: "foo@google.com",
+				Application:    "app",
 			},
 			productsMap: productsMap,
 			api:         "host",
@@ -540,17 +561,18 @@ func TestAuthorizeOperations(t *testing.T) {
 		{
 			name: "all methods allowed if none specified",
 			ctx: &auth.Context{
-				Context:     &fakeContext{org: "org", env: "prod"},
-				APIProducts: []string{"Name 1", "Name 2", "Invalid"},
-				Scopes:      []string{"scope1", "scope2"},
-				Application: "app",
+				Context:        &fakeContext{org: "org", env: "prod"},
+				APIProducts:    []string{"Name 1", "Name 2", "Invalid"},
+				Scopes:         []string{"scope1", "scope2"},
+				DeveloperEmail: "foo@google.com",
+				Application:    "app",
 			},
 			productsMap: productsMap,
 			api:         "host3",
 			path:        "/operation3",
 			method:      "POST",
 			wantAPIsLen: 1,
-			wantAPIID:   "Name 2-prod-app",
+			wantAPIID:   "Name 2-prod-foo@google.com-app",
 			wantQuota:   productQuota,
 			wantHints: `Authorizing request:
 			environment: prod
@@ -573,10 +595,11 @@ func TestAuthorizeOperations(t *testing.T) {
 		{
 			name: "no api",
 			ctx: &auth.Context{
-				Context:     &fakeContext{org: "org", env: "prod"},
-				APIProducts: []string{"Name 1", "Name 2", "Invalid"},
-				Scopes:      []string{"scope1", "scope2"},
-				Application: "app",
+				Context:        &fakeContext{org: "org", env: "prod"},
+				APIProducts:    []string{"Name 1", "Name 2", "Invalid"},
+				Scopes:         []string{"scope1", "scope2"},
+				DeveloperEmail: "foo@google.com",
+				Application:    "app",
 			},
 			productsMap: productsMap,
 			api:         "api",
