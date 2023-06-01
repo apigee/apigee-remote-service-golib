@@ -331,7 +331,13 @@ func TestAuthorize(t *testing.T) {
 }
 
 func TestAuthorizeOperations(t *testing.T) {
-
+	productQuota := &Quota{
+		TimeUnit:    "second",
+		Interval:    "2",
+		Limit:       "2",
+		IntervalInt: 2,
+		LimitInt:    2,
+	}
 	productsMap := map[string]*APIProduct{
 		"Name 1": {
 			Attributes: []Attribute{
@@ -342,9 +348,9 @@ func TestAuthorizeOperations(t *testing.T) {
 			Resources:     []string{"/"},
 			Scopes:        []string{"scope1"},
 			APIs:          []string{"service1.test", "shared.test"},
-			QuotaInterval: "2",
-			QuotaLimit:    "2",
-			QuotaTimeUnit: "second",
+			QuotaInterval: productQuota.Interval,
+			QuotaLimit:    productQuota.Limit,
+			QuotaTimeUnit: productQuota.TimeUnit,
 			OperationGroup: &OperationGroup{
 				OperationConfigType: "remoteservice",
 				OperationConfigs: []OperationConfig{
@@ -355,11 +361,6 @@ func TestAuthorizeOperations(t *testing.T) {
 								Resource: "/operation1",
 								Methods:  []string{"GET"},
 							},
-						},
-						Quota: &Quota{
-							Limit:    "1",
-							Interval: "1",
-							TimeUnit: "minute",
 						},
 					},
 				},
@@ -374,9 +375,9 @@ func TestAuthorizeOperations(t *testing.T) {
 			Resources:     []string{"/"},
 			Scopes:        []string{"scope1"},
 			APIs:          []string{"service1.test", "shared.test"},
-			QuotaInterval: "2",
-			QuotaLimit:    "2",
-			QuotaTimeUnit: "second",
+			QuotaInterval: productQuota.Interval,
+			QuotaLimit:    productQuota.Limit,
+			QuotaTimeUnit: productQuota.TimeUnit,
 			OperationGroup: &OperationGroup{
 				OperationConfigType: "remoteservice",
 				OperationConfigs: []OperationConfig{
@@ -387,6 +388,11 @@ func TestAuthorizeOperations(t *testing.T) {
 								Resource: "/operation2",
 								Methods:  []string{"GET"},
 							},
+						},
+						Quota: &Quota{
+							Limit:    "1",
+							Interval: "1",
+							TimeUnit: "minute",
 						},
 					},
 					{
@@ -422,6 +428,7 @@ func TestAuthorizeOperations(t *testing.T) {
 	}
 
 	testCases := []struct {
+		name        string
 		ctx         *auth.Context
 		productsMap map[string]*APIProduct
 		api         string
@@ -433,7 +440,8 @@ func TestAuthorizeOperations(t *testing.T) {
 		wantHints   string
 		wantAuthOp  *AuthorizedOperation
 	}{
-		{ // good
+		{
+			name: "good",
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "prod"},
 				APIProducts: []string{"Name 1", "Name 2", "Invalid"},
@@ -445,8 +453,8 @@ func TestAuthorizeOperations(t *testing.T) {
 			path:        "/operation1",
 			method:      "GET",
 			wantAPIsLen: 1,
-			wantAPIID:   "Name 1-prod-app-host-7c5532d6fca7a87312365219212de443",
-			wantQuota:   productsMap["Name 1"].OperationGroup.OperationConfigs[0].Quota,
+			wantAPIID:   "Name 1-prod-app",
+			wantQuota:   productQuota,
 			wantHints: `Authorizing request:
 			environment: prod
 			products: [Name 1 Name 2 Invalid]
@@ -465,7 +473,8 @@ func TestAuthorizeOperations(t *testing.T) {
 				not found
 				`,
 		},
-		{ // quota override
+		{
+			name: "quota override",
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "prod"},
 				APIProducts: []string{"Name 1", "Name 2", "Invalid"},
@@ -497,7 +506,8 @@ func TestAuthorizeOperations(t *testing.T) {
 				not found
 				`,
 		},
-		{ // no method
+		{
+			name: "no method",
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "prod"},
 				APIProducts: []string{"Name 1", "Name 2", "Invalid"},
@@ -527,7 +537,8 @@ func TestAuthorizeOperations(t *testing.T) {
 				not found
 				`,
 		},
-		{ // all methods allowed if none specified
+		{
+			name: "all methods allowed if none specified",
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "prod"},
 				APIProducts: []string{"Name 1", "Name 2", "Invalid"},
@@ -539,8 +550,8 @@ func TestAuthorizeOperations(t *testing.T) {
 			path:        "/operation3",
 			method:      "POST",
 			wantAPIsLen: 1,
-			wantAPIID:   "Name 2-prod-app-host-547dbfc99f0432d3dbc607784917b1bc",
-			wantQuota:   productsMap["Name 2"].OperationGroup.OperationConfigs[0].Quota,
+			wantAPIID:   "Name 2-prod-app",
+			wantQuota:   productQuota,
 			wantHints: `Authorizing request:
 			environment: prod
 			products: [Name 1 Name 2 Invalid]
@@ -559,7 +570,8 @@ func TestAuthorizeOperations(t *testing.T) {
 				not found
 				`,
 		},
-		{ // no api
+		{
+			name: "no api",
 			ctx: &auth.Context{
 				Context:     &fakeContext{org: "org", env: "prod"},
 				APIProducts: []string{"Name 1", "Name 2", "Invalid"},
@@ -591,27 +603,34 @@ func TestAuthorizeOperations(t *testing.T) {
 		},
 	}
 
-	for i, tc := range testCases {
-		apis, hints := authorize(tc.ctx, tc.productsMap, tc.api, tc.path, tc.method, true)
-		if len(apis) != tc.wantAPIsLen {
-			t.Errorf("test %d: number of apis wrong; want: %d, got: %d", i, tc.wantAPIsLen, len(apis))
-		} else if tc.wantQuota != nil {
-			if tc.wantAPIID != apis[0].ID {
-				t.Errorf("test %d: want: '%s', got: '%s'", i, tc.wantAPIID, apis[0].ID)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			apis, hints := authorize(tc.ctx, tc.productsMap, tc.api, tc.path, tc.method, true)
+			if len(apis) != tc.wantAPIsLen {
+				t.Errorf("number of apis wrong; want: %d, got: %d", tc.wantAPIsLen, len(apis))
+			} else if tc.wantAuthOp != nil {
+				got := apis[0]
+				if !reflect.DeepEqual(*tc.wantAuthOp, got) {
+					t.Errorf("authop want: %v\n got: %v", tc.wantAuthOp, got)
+				}
+			} else if tc.wantQuota != nil {
+				if tc.wantAPIID != apis[0].ID {
+					t.Errorf("want id: '%s', got: '%s'", tc.wantAPIID, apis[0].ID)
+				}
+				if tc.wantQuota.TimeUnit != apis[0].QuotaTimeUnit {
+					t.Errorf("want timeunit: '%s', got: '%s'", tc.wantQuota.TimeUnit, apis[0].QuotaTimeUnit)
+				}
+				if tc.wantQuota.IntervalInt != apis[0].QuotaInterval {
+					t.Errorf("want interval: '%d', got: '%d'", tc.wantQuota.IntervalInt, apis[0].QuotaInterval)
+				}
+				if tc.wantQuota.LimitInt != apis[0].QuotaLimit {
+					t.Errorf("want limit: '%d', got: '%d'", tc.wantQuota.LimitInt, apis[0].QuotaLimit)
+				}
 			}
-			if tc.wantQuota.TimeUnit != apis[0].QuotaTimeUnit {
-				t.Errorf("test %d: want: '%s', got: '%s'", i, tc.wantQuota.TimeUnit, apis[0].QuotaTimeUnit)
+			if noSymbols(tc.wantHints) != noSymbols(hints) {
+				t.Errorf("want hints: '%s', got: '%s'", tc.wantHints, hints)
 			}
-			if tc.wantQuota.IntervalInt != apis[0].QuotaInterval {
-				t.Errorf("test %d: want: '%d', got: '%d'", i, tc.wantQuota.IntervalInt, apis[0].QuotaInterval)
-			}
-			if tc.wantQuota.LimitInt != apis[0].QuotaLimit {
-				t.Errorf("test %d: want: '%d', got: '%d'", i, tc.wantQuota.LimitInt, apis[0].QuotaLimit)
-			}
-		}
-		if noSymbols(tc.wantHints) != noSymbols(hints) {
-			t.Errorf("test %d: want: '%s', got: '%s'", i, tc.wantHints, hints)
-		}
+		})
 	}
 }
 
