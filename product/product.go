@@ -314,14 +314,14 @@ func (p *APIProduct) authorize(authContext *auth.Context, api, path, method stri
 			valid, hint = oc.isValidOperation(api, path, method, hints)
 			if valid {
 				ao := AuthorizedOperation{
-					ID:            fmt.Sprintf("%s-%s-%s", p.Name, env, authContext.Application),
+					ID:            fmt.Sprintf("%s-%s-%s-%s", p.Name, env, authContext.DeveloperEmail, authContext.Application),
 					QuotaLimit:    p.QuotaLimitInt,
 					QuotaInterval: p.QuotaIntervalInt,
 					QuotaTimeUnit: p.QuotaTimeUnit,
 				}
 				// OperationConfig quota is an override
 				if oc.Quota != nil && oc.Quota.LimitInt > 0 {
-					ao.ID = fmt.Sprintf("%s-%s-%s-%s", p.Name, env, authContext.Application, oc.ID)
+					ao.ID = fmt.Sprintf("%s-%s-%s-%s-%s", p.Name, env, authContext.DeveloperEmail, authContext.Application, oc.ID)
 					ao.QuotaLimit = oc.Quota.LimitInt
 					ao.QuotaInterval = oc.Quota.IntervalInt
 					ao.QuotaTimeUnit = oc.Quota.TimeUnit
@@ -349,7 +349,7 @@ func (p *APIProduct) authorize(authContext *auth.Context, api, path, method stri
 	}
 
 	authorizedOps = append(authorizedOps, AuthorizedOperation{
-		ID:            fmt.Sprintf("%s-%s-%s", p.Name, env, authContext.Application),
+		ID:            fmt.Sprintf("%s-%s-%s-%s", p.Name, env, authContext.DeveloperEmail, authContext.Application),
 		QuotaLimit:    p.QuotaLimitInt,
 		QuotaInterval: p.QuotaIntervalInt,
 		QuotaTimeUnit: p.QuotaTimeUnit,
