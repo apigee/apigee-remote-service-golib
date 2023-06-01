@@ -314,7 +314,7 @@ func (p *APIProduct) authorize(authContext *auth.Context, api, path, method stri
 			valid, hint = oc.isValidOperation(api, path, method, hints)
 			if valid {
 				ao := AuthorizedOperation{
-					ID:            fmt.Sprintf("%s-%s-%s-%s", p.Name, env, authContext.Application, oc.APISource),
+					ID:            fmt.Sprintf("%s-%s-%s", p.Name, env, authContext.Application),
 					QuotaLimit:    p.QuotaLimitInt,
 					QuotaInterval: p.QuotaIntervalInt,
 					QuotaTimeUnit: p.QuotaTimeUnit,

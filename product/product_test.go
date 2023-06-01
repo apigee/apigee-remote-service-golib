@@ -453,7 +453,7 @@ func TestAuthorizeOperations(t *testing.T) {
 			path:        "/operation1",
 			method:      "GET",
 			wantAPIsLen: 1,
-			wantAPIID:   "Name 1-prod-app-host",
+			wantAPIID:   "Name 1-prod-app",
 			wantQuota:   productQuota,
 			wantHints: `Authorizing request:
 			environment: prod
@@ -550,7 +550,7 @@ func TestAuthorizeOperations(t *testing.T) {
 			path:        "/operation3",
 			method:      "POST",
 			wantAPIsLen: 1,
-			wantAPIID:   "Name 2-prod-app-host3",
+			wantAPIID:   "Name 2-prod-app",
 			wantQuota:   productQuota,
 			wantHints: `Authorizing request:
 			environment: prod
