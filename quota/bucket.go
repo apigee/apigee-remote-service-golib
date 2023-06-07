@@ -162,7 +162,11 @@ func (b *bucket) sync() error {
 	}
 	defer resp.Body.Close()
 
-	buf := bytes.NewBuffer(make([]byte, 0, resp.ContentLength))
+	bufLen := resp.ContentLength
+	if bufLen < bytes.MinRead {
+		bufLen = bytes.MinRead
+	}
+	buf := bytes.NewBuffer(make([]byte, 0, bufLen))
 	if _, err = buf.ReadFrom(resp.Body); err != nil {
 		return errors.Wrap(err, "read body")
 	}

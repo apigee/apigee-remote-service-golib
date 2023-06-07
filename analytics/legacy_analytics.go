@@ -64,7 +64,11 @@ func (oa *legacyAnalytics) SendRecords(authContext *auth.Context, records []Reco
 	}
 	defer resp.Body.Close()
 
-	buf := bytes.NewBuffer(make([]byte, 0, resp.ContentLength))
+	bufLen := resp.ContentLength
+	if bufLen < bytes.MinRead {
+		bufLen = bytes.MinRead
+	}
+	buf := bytes.NewBuffer(make([]byte, 0, bufLen))
 	_, err = buf.ReadFrom(resp.Body)
 	if err != nil {
 		return err
