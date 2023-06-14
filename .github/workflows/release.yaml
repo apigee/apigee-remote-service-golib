@@ -17,25 +17,22 @@ name: Release
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+*' # semver v1.0.0-beta.2
+      - "v[0-9]+.[0-9]+.[0-9]+*" # semver v1.0.0-beta.2
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      -
-        name: Checkout
-        uses: actions/checkout@v2
+      - name: Checkout
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      -
-        name: Set up Go
-        uses: actions/setup-go@v2
+      - name: Set up Go
+        uses: actions/setup-go@v4
         with:
-          go-version: 1.16
-      -
-        name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v2
+          go-version: "1.20"
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v4
         with:
           version: latest
           args: release --rm-dist
