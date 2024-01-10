@@ -146,6 +146,7 @@ func TestNeedToDelete(t *testing.T) {
 	cases := map[string]struct {
 		request *Request
 		checked time.Time
+		result  *Result
 		want    bool
 	}{
 		"empty": {
@@ -157,10 +158,34 @@ func TestNeedToDelete(t *testing.T) {
 			checked: now(),
 			want:    false,
 		},
-		"not recently checked": {
+		"not recently checked with empty result": {
 			request: &Request{},
 			checked: now().Add(-time.Hour),
 			want:    true,
+		},
+		"not recently checked with no quota allocated in result": {
+			request: &Request{},
+			checked: now().Add(-time.Hour),
+			result: &Result{
+				Allowed:    7,
+				Used:       0,
+				Exceeded:   0,
+				ExpiryTime: now().Unix(),
+				Timestamp:  now().Unix(),
+			},
+			want: true,
+		},
+		"not recently checked but quota has been allocated in result": {
+			request: &Request{},
+			checked: now().Add(-time.Hour),
+			result: &Result{
+				Allowed:    7,
+				Used:       7,
+				Exceeded:   1,
+				ExpiryTime: now().Unix(),
+				Timestamp:  now().Unix(),
+			},
+			want: false,
 		},
 		"has pending requests": {
 			request: &Request{Weight: 1},
@@ -176,6 +201,7 @@ func TestNeedToDelete(t *testing.T) {
 			deleteAfter: time.Minute,
 			request:     c.request,
 			checked:     c.checked,
+			result:      c.result,
 		}
 		if c.want != b.needToDelete() {
 			t.Errorf("want: %v got: %v", c.want, b.needToDelete())
