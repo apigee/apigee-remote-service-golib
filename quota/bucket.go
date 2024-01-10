@@ -205,7 +205,9 @@ func (b *bucket) sync() error {
 func (b *bucket) needToDelete() bool {
 	b.lock.RLock()
 	defer b.lock.RUnlock()
-	return b.request.Weight == 0 && b.now().After(b.checked.Add(b.deleteAfter))
+	// Do not delete an in-use bucket to avoid allowing requests when a new bucket is created and is not yet synced to the remote service.
+	inUse := b.result != nil && b.result.Used != 0
+	return !inUse && b.request.Weight == 0 && b.now().After(b.checked.Add(b.deleteAfter))
 }
 
 func (b *bucket) needToSync() bool {
