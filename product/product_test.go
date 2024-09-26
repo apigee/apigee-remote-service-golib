@@ -196,6 +196,7 @@ func TestAuthorize(t *testing.T) {
 			wantAuthOp: &AuthorizedOperation{
 				ID:         "Name 2-prod-foo@google.com-app",
 				QuotaLimit: productsMap["Name 2"].QuotaLimitInt,
+				APIProduct: "Name 2",
 			},
 			wantHints: `Authorizing request:
 			environment: prod
@@ -255,6 +256,7 @@ func TestAuthorize(t *testing.T) {
 			wantAuthOp: &AuthorizedOperation{
 				ID:         "Name 1-prod-foo@google.com-app",
 				QuotaLimit: productsMap["Name 1"].QuotaLimitInt,
+				APIProduct: "Name 1",
 			},
 			wantHints: `Authorizing request:
 			environment: prod
