@@ -318,6 +318,7 @@ func (p *APIProduct) authorize(authContext *auth.Context, api, path, method stri
 					QuotaLimit:    p.QuotaLimitInt,
 					QuotaInterval: p.QuotaIntervalInt,
 					QuotaTimeUnit: p.QuotaTimeUnit,
+					APIProduct:    p.Name,
 				}
 				// OperationConfig quota is an override
 				if oc.Quota != nil && oc.Quota.LimitInt > 0 {
@@ -353,6 +354,7 @@ func (p *APIProduct) authorize(authContext *auth.Context, api, path, method stri
 		QuotaLimit:    p.QuotaLimitInt,
 		QuotaInterval: p.QuotaIntervalInt,
 		QuotaTimeUnit: p.QuotaTimeUnit,
+		APIProduct:    p.Name,
 	})
 	hint = "    authorized\n"
 
