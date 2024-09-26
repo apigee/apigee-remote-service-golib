@@ -82,7 +82,6 @@ type AuthorizedOperation struct {
 	QuotaLimit    int64
 	QuotaInterval int64
 	QuotaTimeUnit string
-	APIProduct    string
 }
 
 // Authorize a request against API Products and its Operations

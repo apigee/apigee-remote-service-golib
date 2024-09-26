@@ -86,9 +86,13 @@ func (r Record) EnsureFields(authContext *auth.Context) Record {
 	r.ClientID = authContext.ClientID
 	r.Organization = authContext.Organization()
 	r.Environment = authContext.Environment()
-	r.GatewayFlowID = uuid.New().String()
-	r.APIProduct = authContext.AnalyticsProduct
 
+	r.GatewayFlowID = uuid.New().String()
+
+	// select arbitrary APIProduct
+	if len(authContext.APIProducts) > 0 {
+		r.APIProduct = authContext.APIProducts[0]
+	}
 	return r
 }
 
