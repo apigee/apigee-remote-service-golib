@@ -47,6 +47,7 @@ type Context struct {
 	Scopes           []string
 	APIKey           string
 	CustomAttributes string
+	AnalyticsProduct string // A single product to attatch to analytics records based on matched operations.
 }
 
 // if claims can't be processed, returns error and sets no fields

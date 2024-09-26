@@ -224,7 +224,6 @@ func TestPushAnalytics(t *testing.T) {
 					{
 						ClientReceivedStartTimestamp: ts * 1000,
 						ClientReceivedEndTimestamp:   ts * 1000,
-						APIProduct:                   "product",
 					},
 				},
 				dir: uploadDir,
@@ -257,6 +256,7 @@ func TestPushAnalytics(t *testing.T) {
 						ClientReceivedStartTimestamp: ts * 1000,
 						ClientReceivedEndTimestamp:   ts * 1000,
 						APIProxy:                     "proxy",
+						APIProduct:                   "product",
 					},
 					{
 						RecordType:                   "APIAnalytics",
@@ -280,6 +280,7 @@ func TestPushAnalytics(t *testing.T) {
 						ClientReceivedStartTimestamp: ts * 1000,
 						ClientReceivedEndTimestamp:   ts * 1000,
 						RequestURI:                   "request URI",
+						APIProduct:                   "product",
 					},
 				},
 				dir: uploadDir,
@@ -293,7 +294,10 @@ func TestPushAnalytics(t *testing.T) {
 	tc := authtest.NewContext(fs.URL())
 	tc.SetOrganization("hi")
 	tc.SetEnvironment("test")
-	authContext := &auth.Context{Context: tc}
+	authContext := &auth.Context{
+		Context:          tc,
+		AnalyticsProduct: "product",
+	}
 
 	if err := m.SendRecords(authContext, sendRecords[t1][0].records); err != nil {
 		t.Errorf("Error on SendRecords(): %s", err)
@@ -308,7 +312,10 @@ func TestPushAnalytics(t *testing.T) {
 	tc = authtest.NewContext(fs.URL())
 	tc.SetOrganization("otherorg")
 	tc.SetEnvironment("test")
-	authContext = &auth.Context{Context: tc}
+	authContext = &auth.Context{
+		Context:          tc,
+		AnalyticsProduct: "product",
+	}
 	if err := m.SendRecords(authContext, sendRecords[t2][0].records); err != nil {
 		t.Errorf("Error on SendRecords(): %s", err)
 	}
@@ -395,7 +402,6 @@ func TestPushAnalyticsMultipleRecords(t *testing.T) {
 				{
 					ClientReceivedStartTimestamp: ts * 1000,
 					ClientReceivedEndTimestamp:   ts * 1000,
-					APIProduct:                   "product",
 				},
 			},
 			dir: uploadDir,
@@ -424,6 +430,7 @@ func TestPushAnalyticsMultipleRecords(t *testing.T) {
 					ClientReceivedStartTimestamp: ts * 1000,
 					ClientReceivedEndTimestamp:   ts * 1000,
 					APIProxy:                     "proxy",
+					APIProduct:                   "product",
 				},
 				{
 					RecordType:                   "APIAnalytics",
@@ -440,6 +447,7 @@ func TestPushAnalyticsMultipleRecords(t *testing.T) {
 					ClientReceivedStartTimestamp: ts * 1000,
 					ClientReceivedEndTimestamp:   ts * 1000,
 					RequestURI:                   "request URI",
+					APIProduct:                   "product",
 				},
 			},
 			dir: uploadDir,
@@ -451,7 +459,10 @@ func TestPushAnalyticsMultipleRecords(t *testing.T) {
 	tc := authtest.NewContext(fs.URL())
 	tc.SetOrganization("hi")
 	tc.SetEnvironment("test")
-	authContext := &auth.Context{Context: tc}
+	authContext := &auth.Context{
+		Context:          tc,
+		AnalyticsProduct: "product",
+	}
 
 	if err := m.SendRecords(authContext, sendRecords[t1][0].records); err != nil {
 		t.Errorf("Error on SendRecords(): %s", err)
